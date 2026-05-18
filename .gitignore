@@ -1,0 +1,19 @@
+# Secrets
+application.properties
+application-*.properties
+.env
+
+# Java / Spring Boot
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# Node
+node_modules/
