@@ -1,0 +1,124 @@
+.vnpay-result-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top, rgba(238, 77, 45, 0.1), transparent 38%),
+    var(--bg, #f5f6f8);
+}
+
+.vnpay-result-card {
+  width: min(100%, 480px);
+  padding: 40px 32px;
+  text-align: center;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 20px;
+  box-shadow: 0 18px 50px rgba(17, 24, 39, 0.1);
+}
+
+.vnpay-result-icon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 38px;
+  font-weight: 800;
+}
+
+.vnpay-result-card.loading .vnpay-result-icon {
+  background: rgba(238, 77, 45, 0.1);
+}
+
+.vnpay-result-card.success .vnpay-result-icon {
+  color: #fff;
+  background: #16a34a;
+  box-shadow: 0 10px 24px rgba(22, 163, 74, 0.25);
+}
+
+.vnpay-result-card.error .vnpay-result-icon {
+  color: #fff;
+  background: #dc2626;
+  box-shadow: 0 10px 24px rgba(220, 38, 38, 0.22);
+}
+
+.vnpay-result-card h1 {
+  margin: 0 0 12px;
+  color: var(--text, #111827);
+  font-size: 24px;
+  line-height: 1.3;
+}
+
+.vnpay-result-card p {
+  margin: 0;
+  color: var(--text-3, #6b7280);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.vnpay-result-button {
+  min-height: 44px;
+  margin-top: 24px;
+  padding: 0 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: var(--primary, #ee4d2d);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.vnpay-result-button:hover {
+  color: #fff;
+  background: var(--primary-dark, #d73211);
+  transform: translateY(-1px);
+}
+
+.vnpay-spinner {
+  width: 34px;
+  height: 34px;
+  border: 4px solid rgba(238, 77, 45, 0.22);
+  border-top-color: var(--primary, #ee4d2d);
+  border-radius: 50%;
+  animation: vnpay-spin 0.8s linear infinite;
+}
+
+@keyframes vnpay-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 560px) {
+  .vnpay-result-page {
+    padding: 16px;
+  }
+
+  .vnpay-result-card {
+    padding: 32px 20px;
+    border-radius: 16px;
+  }
+
+  .vnpay-result-card h1 {
+    font-size: 21px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vnpay-spinner {
+    animation-duration: 1.6s;
+  }
+
+  .vnpay-result-button {
+    transition: none;
+  }
+}
