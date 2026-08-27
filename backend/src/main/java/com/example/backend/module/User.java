@@ -26,4 +26,6 @@ public class User {
     private Boolean active;
     private String providerId;
     private List<Address> addresses;
+    private Double lat;
+    private Double lng;
 }

@@ -1,7 +1,8 @@
 package com.example.backend.controller;
 
-import com.example.backend.dto.geo.PlaceDetail;
-import com.example.backend.dto.geo.PlaceSuggestion;
+
+import com.example.backend.DTO.place.PlaceDetail;
+import com.example.backend.DTO.place.PlaceSuggestion;
 import com.example.backend.service.GeoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
