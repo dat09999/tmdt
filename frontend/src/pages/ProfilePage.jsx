@@ -263,7 +263,7 @@ export default function ProfilePage() {
         lng: addrForm.lng,
         isDefault: addrForm.isDefault,
       };
-      console.log("Payload gửi lên:", JSON.stringify(payload, null, 2));
+      console.log("Payload gửi lên:", JSON.stringify(payload, null, 2));    
 
       const url = editingId
         ? `${API_BASE_URL}/api/users/${user.userId}/addresses/${editingId}`
