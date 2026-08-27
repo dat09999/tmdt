@@ -84,10 +84,10 @@ public class UserServiceImpl implements UserService {
         response.setFullName(user.getFullName());
         response.setEmail(user.getEmail());
         response.setPhone(user.getPhone());
-        response.setAddress(user.getAddress());
+        response.setAddress(user.getAddresses());
         response.setLat(user.getLat());
         response.setLng(user.getLng());
-        response.setActive(user.isActive());
+        response.setActive(user.getActive());
         return response;
     }
 }
