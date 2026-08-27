@@ -3,7 +3,7 @@ import { API_BASE_URL, authFetch } from "../utils/auth";
 import { useAuth } from "./Authcontext";
 import Header from "../components/Header";
 import "./ProfilePage.css";
-import "./AddressBookPage.css"; // Import CSS của AddressBook
+import "./AddressBookPage.css";
 
 const SIDEBAR_MENU = [
   { key: "info", label: "Thông tin cá nhân", icon: "👤" },
@@ -52,7 +52,6 @@ export default function ProfilePage() {
   const debounceRef = useRef(null);
   const suggestBoxRef = useRef(null);
 
-  // Fetch profile khi activeMenu === "info" hoặc lần đầu
   useEffect(() => {
     if (!user?.userId) {
       window.location.href = "/login";
@@ -63,7 +62,6 @@ export default function ProfilePage() {
     }
   }, [user?.userId, activeMenu]);
 
-  // Fetch address khi activeMenu === "address-book"
   useEffect(() => {
     if (!user?.userId) return;
     if (activeMenu === "address-book") {
@@ -71,7 +69,6 @@ export default function ProfilePage() {
     }
   }, [user?.userId, activeMenu]);
 
-  // Xử lý click outside cho dropdown gợi ý địa chỉ
   useEffect(() => {
     const closeOnOutsideClick = (e) => {
       if (suggestBoxRef.current && !suggestBoxRef.current.contains(e.target)) {
@@ -82,18 +79,20 @@ export default function ProfilePage() {
     return () => document.removeEventListener("mousedown", closeOnOutsideClick);
   }, []);
 
-  // --- Hàm cho profile ---
+  // --- Hàm Profile ---
   const fetchProfile = async () => {
     try {
       setLoading(true);
       setError("");
+      setMessage("");
       const data = await authFetch(`${API_BASE_URL}/api/users/${user.userId}`);
+      const userData = data.user || data.data || data;
       setForm({
-        fullName: data.fullName || "",
-        phone: data.phone || "",
+        fullName: userData.fullName || "",
+        phone: userData.phone || "",
       });
     } catch (err) {
-      setError(err.message || "Đã xảy ra lỗi trong hệ thống");
+      setError(err.message || "Đã xảy ra lỗi khi tải hồ sơ");
     } finally {
       setLoading(false);
     }
@@ -107,29 +106,35 @@ export default function ProfilePage() {
     try {
       setSaving(true);
       setError("");
+      setMessage("");
       const updated = await authFetch(`${API_BASE_URL}/api/users/${user.userId}`, {
         method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      setMessage("Cập nhật thông tin thành công");
+
+      setMessage("Cập nhật thông tin thành công!");
       setEditing(false);
+
       if (typeof setUser === "function") {
-        setUser((prev) => ({ ...prev, ...updated }));
+        const updatedData = updated.user || updated.data || updated;
+        setUser((prev) => ({ ...prev, ...updatedData }));
       }
     } catch (err) {
-      setError(err.message || "Cập nhật thất bại");
+      setError(err.message || "Cập nhật thông tin thất bại");
     } finally {
       setSaving(false);
     }
   };
 
-  // --- Hàm cho sổ địa chỉ ---
+  // --- Hàm Sổ Địa Chỉ ---
   const fetchAddresses = async () => {
     try {
       setAddrLoading(true);
       setAddrError("");
       const data = await authFetch(`${API_BASE_URL}/api/users/${user.userId}`);
-      setAddresses(data.addresses || []);
+      const addrList = data.addresses || data.data?.addresses || [];
+      setAddresses(addrList);
     } catch (err) {
       setAddrError(err.message || "Không tải được sổ địa chỉ");
     } finally {
@@ -164,7 +169,15 @@ export default function ProfilePage() {
   const handleAddressSearch = (e) => {
     const value = e.target.value;
     setAddressInput(value);
-    setAddrForm((prev) => ({ ...prev, detail: value, lat: null, lng: null, province: null, district: null, ward: null }));
+    setAddrForm((prev) => ({
+      ...prev,
+      detail: value,
+      lat: null,
+      lng: null,
+      province: null,
+      district: null,
+      ward: null,
+    }));
     setShowSuggestions(true);
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -176,8 +189,16 @@ export default function ProfilePage() {
     debounceRef.current = setTimeout(async () => {
       try {
         setSuggestLoading(true);
-        const data = await authFetch(`${API_BASE_URL}/api/geo/suggest?input=${encodeURIComponent(value.trim())}`);
-        setSuggestions(Array.isArray(data) ? data : []);
+        const data = await authFetch(
+          `${API_BASE_URL}/api/geo/suggest?input=${encodeURIComponent(value.trim())}`
+        );
+
+        // Bóc tách linh hoạt dữ liệu mảng từ Backend
+        const list = Array.isArray(data)
+          ? data
+          : data.predictions || data.data || data.items || [];
+
+        setSuggestions(list);
       } catch {
         setSuggestions([]);
       } finally {
@@ -188,14 +209,30 @@ export default function ProfilePage() {
 
   const handleSelectSuggestion = async (suggestion) => {
     try {
-      const detail = await authFetch(`${API_BASE_URL}/api/geo/resolve?placeId=${encodeURIComponent(suggestion.placeId)}`);
-      setAddrForm((prev) => ({
-        ...prev,
-        detail: detail.formattedAddress || suggestion.text,
-        lat: detail.lat ?? null,
-        lng: detail.lng ?? null,
-      }));
-      setAddressInput(detail.formattedAddress || suggestion.text);
+      const placeId = suggestion.placeId || suggestion.place_id;
+      const displayAddress =
+        suggestion.description ||
+        suggestion.text ||
+        suggestion.formattedAddress ||
+        addressInput;
+
+      if (placeId) {
+        const detail = await authFetch(
+          `${API_BASE_URL}/api/geo/resolve?placeId=${encodeURIComponent(placeId)}`
+        );
+        const finalAddress = detail.formattedAddress || detail.address || displayAddress;
+        
+        setAddrForm((prev) => ({
+          ...prev,
+          detail: finalAddress,
+          lat: detail.lat ?? null,
+          lng: detail.lng ?? null,
+        }));
+        setAddressInput(finalAddress);
+      } else {
+        setAddrForm((prev) => ({ ...prev, detail: displayAddress }));
+        setAddressInput(displayAddress);
+      }
     } catch (err) {
       setAddrError(err.message || "Không lấy được chi tiết địa chỉ");
     } finally {
@@ -233,10 +270,12 @@ export default function ProfilePage() {
 
       const data = await authFetch(url, {
         method: editingId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      setAddresses(data.addresses || []);
+      const updatedList = data.addresses || data.data?.addresses || data;
+      setAddresses(Array.isArray(updatedList) ? updatedList : []);
       setShowForm(false);
     } catch (err) {
       setAddrError(err.message || "Lưu địa chỉ thất bại");
@@ -248,16 +287,17 @@ export default function ProfilePage() {
   const handleDelete = async (addressId) => {
     if (!window.confirm("Xóa địa chỉ này?")) return;
     try {
-      const data = await authFetch(`${API_BASE_URL}/api/users/${user.userId}/addresses/${addressId}`, {
-        method: "DELETE",
-      });
-      setAddresses(data.addresses || []);
+      const data = await authFetch(
+        `${API_BASE_URL}/api/users/${user.userId}/addresses/${addressId}`,
+        { method: "DELETE" }
+      );
+      const updatedList = data.addresses || data.data?.addresses || data;
+      setAddresses(Array.isArray(updatedList) ? updatedList : []);
     } catch (err) {
       setAddrError(err.message || "Xóa địa chỉ thất bại");
     }
   };
 
-  // --- Render content ---
   const renderContent = () => {
     if (activeMenu === "info") {
       return (
@@ -318,7 +358,15 @@ export default function ProfilePage() {
                     </button>
                   </>
                 ) : (
-                  <button type="button" className="btn-primary" onClick={() => setEditing(true)}>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => {
+                      setMessage("");
+                      setError("");
+                      setEditing(true);
+                    }}
+                  >
                     Chỉnh sửa
                   </button>
                 )}
@@ -350,11 +398,17 @@ export default function ProfilePage() {
               {addresses.map((addr) => (
                 <div key={addr.id} className="address-item">
                   {addr.isDefault && <span className="address-badge">Mặc định</span>}
-                  <strong>{addr.fullName} · {addr.phone}</strong>
+                  <strong>
+                    {addr.fullName} · {addr.phone}
+                  </strong>
                   <p>{addr.detail}</p>
                   <div className="address-item-actions">
-                    <button type="button" onClick={() => openEditForm(addr)}>Sửa</button>
-                    <button type="button" onClick={() => handleDelete(addr.id)}>Xóa</button>
+                    <button type="button" onClick={() => openEditForm(addr)}>
+                      Sửa
+                    </button>
+                    <button type="button" onClick={() => handleDelete(addr.id)}>
+                      Xóa
+                    </button>
                   </div>
                 </div>
               ))}
@@ -368,15 +422,28 @@ export default function ProfilePage() {
 
                 <div className="profile-field">
                   <label>Họ tên người nhận</label>
-                  <input value={addrForm.fullName} onChange={handleAddrFieldChange("fullName")} required />
+                  <input
+                    value={addrForm.fullName}
+                    onChange={handleAddrFieldChange("fullName")}
+                    required
+                  />
                 </div>
 
                 <div className="profile-field">
                   <label>Số điện thoại</label>
-                  <input value={addrForm.phone} onChange={handleAddrFieldChange("phone")} required />
+                  <input
+                    value={addrForm.phone}
+                    onChange={handleAddrFieldChange("phone")}
+                    required
+                  />
                 </div>
 
-                <div className="profile-field" ref={suggestBoxRef} style={{ position: "relative" }}>
+                {/* Container gợi ý địa chỉ bổ sung z-index trực tiếp */}
+                <div
+                  className="profile-field"
+                  ref={suggestBoxRef}
+                  style={{ position: "relative", zIndex: 999 }}
+                >
                   <label>Địa chỉ</label>
                   <input
                     value={addressInput}
@@ -387,28 +454,85 @@ export default function ProfilePage() {
                     required
                   />
                   {showSuggestions && (
-                    <div className="address-suggest-box">
-                      {suggestLoading && <div className="address-suggest-item muted">Đang tìm...</div>}
-                      {!suggestLoading && suggestions.length === 0 && addressInput.trim() && (
-                        <div className="address-suggest-item muted">Không tìm thấy địa chỉ</div>
+                    <div
+                      className="address-suggest-box"
+                      style={{
+                        position: "absolute",
+                        top: "100%",
+                        left: 0,
+                        right: 0,
+                        background: "#fff",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                        borderRadius: "4px",
+                        maxHeight: "220px",
+                        overflowY: "auto",
+                        zIndex: 1000,
+                      }}
+                    >
+                      {suggestLoading && (
+                        <div className="address-suggest-item muted">Đang tìm...</div>
                       )}
-                      {!suggestLoading && suggestions.map((s) => (
-                        <button
-                          type="button"
-                          key={s.placeId}
-                          className="address-suggest-item"
-                          onClick={() => handleSelectSuggestion(s)}
-                        >
-                          <strong>{s.mainText}</strong>
-                          <span>{s.secondaryText}</span>
-                        </button>
-                      ))}
+                      {!suggestLoading &&
+                        suggestions.length === 0 &&
+                        addressInput.trim() && (
+                          <div className="address-suggest-item muted">
+                            Không tìm thấy địa chỉ
+                          </div>
+                        )}
+                      {!suggestLoading &&
+                        suggestions.map((s, index) => {
+                          const mainText =
+                            s.mainText ||
+                            s.structured_formatting?.main_text ||
+                            s.description ||
+                            s.text ||
+                            "";
+                          const subText =
+                            s.secondaryText ||
+                            s.structured_formatting?.secondary_text ||
+                            "";
+
+                          return (
+                            <button
+                              type="button"
+                              key={s.placeId || s.place_id || index}
+                              className="address-suggest-item"
+                              style={{
+                                width: "100%",
+                                textAlign: "left",
+                                padding: "8px 12px",
+                                border: "none",
+                                background: "none",
+                                cursor: "pointer",
+                                display: "block",
+                              }}
+                              onClick={() => handleSelectSuggestion(s)}
+                            >
+                              <strong>{mainText}</strong>
+                              {subText && (
+                                <span
+                                  style={{
+                                    display: "block",
+                                    fontSize: "0.85em",
+                                    color: "#666",
+                                  }}
+                                >
+                                  {subText}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
                     </div>
                   )}
                 </div>
 
                 <label className="address-default-check">
-                  <input type="checkbox" checked={addrForm.isDefault} onChange={handleAddrFieldChange("isDefault")} />
+                  <input
+                    type="checkbox"
+                    checked={addrForm.isDefault}
+                    onChange={handleAddrFieldChange("isDefault")}
+                  />
                   Đặt làm địa chỉ mặc định
                 </label>
 
@@ -416,7 +540,12 @@ export default function ProfilePage() {
                   <button type="submit" className="btn-primary" disabled={addrSaving}>
                     {addrSaving ? "Đang lưu..." : "Lưu địa chỉ"}
                   </button>
-                  <button type="button" className="btn-secondary" onClick={() => setShowForm(false)} disabled={addrSaving}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setShowForm(false)}
+                    disabled={addrSaving}
+                  >
                     Hủy
                   </button>
                 </div>
@@ -427,7 +556,6 @@ export default function ProfilePage() {
       );
     }
 
-    // Các menu khác
     return (
       <div className="profile-card">
         <h3>{SIDEBAR_MENU.find((m) => m.key === activeMenu)?.label}</h3>
@@ -436,7 +564,8 @@ export default function ProfilePage() {
     );
   };
 
-  const displayName = user?.fullName || user?.name || user?.email?.split("@")[0] || "Tài khoản";
+  const displayName =
+    user?.fullName || user?.name || user?.email?.split("@")[0] || "Tài khoản";
   const avatarLetter = displayName.charAt(0).toUpperCase();
 
   return (
@@ -456,7 +585,11 @@ export default function ProfilePage() {
               <button
                 key={item.key}
                 type="button"
-                className={activeMenu === item.key ? "profile-menu-item active" : "profile-menu-item"}
+                className={
+                  activeMenu === item.key
+                    ? "profile-menu-item active"
+                    : "profile-menu-item"
+                }
                 onClick={() => setActiveMenu(item.key)}
               >
                 <span className="profile-menu-icon">{item.icon}</span>
