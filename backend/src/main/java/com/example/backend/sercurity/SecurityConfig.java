@@ -98,7 +98,7 @@ public class SecurityConfig {
                 "http://localhost:5173",
                 "https://tmdt-lovat.vercel.app",
                 "https://tmdt-*.vercel.app",
-                "https://tmdt-production-0219.up.railway.app"
+                "https://tmdt-production-0219.up.railway.app/**"
         ));
 
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
