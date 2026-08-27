@@ -48,6 +48,7 @@ export default function ProfilePage() {
       setLoading(true);
       setError("");
       const data = await authFetch(`${API_BASE_URL}/api/users/${user.userId}`);
+      console.log("Fetched profile data:", data);
       setForm({
         fullName: data.fullName || "",
         phone: data.phone || "",
