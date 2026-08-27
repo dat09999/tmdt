@@ -1,0 +1,14 @@
+
+.address-book { max-width: 640px; margin: 0 auto; padding: 24px 20px 40px; }
+.address-book-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.address-empty { padding: 40px 0; text-align: center; color: var(--text-3); }
+.address-list { display: flex; flex-direction: column; gap: 12px; }
+.address-item { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; }
+.address-badge { position: absolute; top: 12px; right: 14px; background: var(--primary); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+.address-item p { color: var(--text-2); font-size: 13px; margin: 4px 0 8px; }
+.address-item-actions { display: flex; gap: 10px; }
+.address-item-actions button { font-size: 12px; background: none; border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px 10px; cursor: pointer; }
+
+.address-form-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.address-form { background: #fff; border-radius: var(--r); padding: 24px; width: 420px; max-width: 90vw; display: flex; flex-direction: column; gap: 14px; max-height: 90vh; overflow-y: auto; }
+.address-default-check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
