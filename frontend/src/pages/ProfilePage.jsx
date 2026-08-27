@@ -111,7 +111,7 @@ export default function ProfilePage() {
     try {
       setSaving(true);
       setError("");
-      const updated = await authFetch(`${API_BASE_URL}/users/${user.userId}`, {
+      const updated = await authFetch(`${API_BASE_URL}/api/users/${user.userId}`, {
         method: "PUT",
         body: JSON.stringify(form),
       });
