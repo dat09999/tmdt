@@ -34,6 +34,5 @@ public class RegisterRequest {
     )
     private String phone;
 
-    @Valid
-    private List<AddressRequest> addresses;
+
 }

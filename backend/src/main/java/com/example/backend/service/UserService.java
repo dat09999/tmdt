@@ -1,6 +1,7 @@
 package com.example.backend.service;
 
 
+import com.example.backend.DTO.user.AddressRequest;
 import com.example.backend.DTO.user.ChangePasswordRequest;
 import com.example.backend.DTO.user.UserResponse;
 import com.example.backend.DTO.user.UserUpdateRequest;
@@ -24,4 +25,7 @@ public interface UserService {
 
     // Vô hiệu hóa tài khoản (khác xóa cứng) — hữu ích cho admin/soft-delete sau này
     void deactivateUser(String userId);
+    UserResponse addAddress(String userId, AddressRequest request);
+    UserResponse updateAddress(String userId, String addressId, AddressRequest request);
+    UserResponse deleteAddress(String userId, String addressId);
 }

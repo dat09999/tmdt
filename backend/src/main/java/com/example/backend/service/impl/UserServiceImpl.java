@@ -1,15 +1,21 @@
 package com.example.backend.service.impl;
 
 
+import com.example.backend.DTO.user.AddressRequest;
 import com.example.backend.DTO.user.ChangePasswordRequest;
 import com.example.backend.DTO.user.UserResponse;
 import com.example.backend.DTO.user.UserUpdateRequest;
+import com.example.backend.Exception.NotFoundException;
+import com.example.backend.module.Address;
 import com.example.backend.module.User;
 import com.example.backend.repository.UserRepository;
 import com.example.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -37,9 +43,7 @@ public class UserServiceImpl implements UserService {
 
         user.setFullName(request.getFullName());
         user.setPhone(request.getPhone());
-        user.setAddresses(request.getAddress());
-        user.setLat(request.getLat());
-        user.setLng(request.getLng());
+
 
         User saved = userRepository.save(user);
         return toResponse(saved);
@@ -90,4 +94,81 @@ public class UserServiceImpl implements UserService {
         response.setActive(user.getActive());
         return response;
     }
+    @Override
+    public UserResponse addAddress(String userId, AddressRequest request) {
+        User user = findUserOrThrow(userId);
+
+        Address address = Address.builder()
+                .fullName(request.getFullName())
+                .phone(request.getPhone())
+                .province(request.getProvince())
+                .district(request.getDistrict())
+                .ward(request.getWard())
+                .detail(request.getDetail())
+                .lat(request.getLat())
+                .lng(request.getLng())
+                .isDefault(Boolean.TRUE.equals(request.getIsDefault()))
+                .build();
+
+        List<Address> addresses = user.getAddresses();
+        if (addresses == null) {
+            addresses = new ArrayList<>();
+        }
+
+        // nếu địa chỉ mới được đặt làm mặc định, bỏ mặc định ở các địa chỉ khác
+        if (Boolean.TRUE.equals(address.getIsDefault())) {
+            addresses.forEach(a -> a.setIsDefault(false));
+        }
+
+        addresses.add(address);
+        user.setAddresses(addresses);
+        userRepository.save(user);
+        return toResponse(user);
+    }
+
+    @Override
+    public UserResponse updateAddress(String userId, String addressId, AddressRequest request) {
+        User user = findUserOrThrow(userId);
+        List<Address> addresses = user.getAddresses();
+
+        if (addresses == null) {
+            throw new NotFoundException("Không tìm thấy địa chỉ");
+        }
+
+        boolean wantsDefault = Boolean.TRUE.equals(request.getIsDefault());
+
+        for (Address a : addresses) {
+            if (a.getId().equals(addressId)) {
+                a.setFullName(request.getFullName());
+                a.setPhone(request.getPhone());
+                a.setProvince(request.getProvince());
+                a.setDistrict(request.getDistrict());
+                a.setWard(request.getWard());
+                a.setDetail(request.getDetail());
+                a.setLat(request.getLat());
+                a.setLng(request.getLng());
+                a.setIsDefault(wantsDefault);
+            } else if (wantsDefault) {
+                a.setIsDefault(false);
+            }
+        }
+
+        userRepository.save(user);
+        return toResponse(user);
+    }
+
+    @Override
+    public UserResponse deleteAddress(String userId, String addressId) {
+        User user = findUserOrThrow(userId);
+        List<Address> addresses = user.getAddresses();
+
+        if (addresses != null) {
+            addresses.removeIf(a -> a.getId().equals(addressId));
+            user.setAddresses(addresses);
+            userRepository.save(user);
+        }
+
+        return toResponse(user);
+    }
+
 }

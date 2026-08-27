@@ -1,6 +1,7 @@
 package com.example.backend.controller;
 
 
+import com.example.backend.DTO.user.AddressRequest;
 import com.example.backend.DTO.user.ChangePasswordRequest;
 import com.example.backend.DTO.user.UserResponse;
 import com.example.backend.DTO.user.UserUpdateRequest;
@@ -51,7 +52,36 @@ public class UserController {
         userService.changePassword(userId, request);
         return ResponseEntity.ok().build();
     }
+    @PostMapping("/{userId}/addresses")
+    public ResponseEntity<UserResponse> addAddress(
+            @PathVariable String userId,
+            @RequestBody AddressRequest request,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        requireSelf(userId, principal);
+        return ResponseEntity.ok(userService.addAddress(userId, request));
+    }
 
+    @PutMapping("/{userId}/addresses/{addressId}")
+    public ResponseEntity<UserResponse> updateAddress(
+            @PathVariable String userId,
+            @PathVariable String addressId,
+            @RequestBody AddressRequest request,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        requireSelf(userId, principal);
+        return ResponseEntity.ok(userService.updateAddress(userId, addressId, request));
+    }
+
+    @DeleteMapping("/{userId}/addresses/{addressId}")
+    public ResponseEntity<UserResponse> deleteAddress(
+            @PathVariable String userId,
+            @PathVariable String addressId,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        requireSelf(userId, principal);
+        return ResponseEntity.ok(userService.deleteAddress(userId, addressId));
+    }
     private void requireSelf(String userId, UserPrincipal principal) {
         if (principal == null || !principal.getId().equals(userId)) {
             throw new UnauthorizedException("Không có quyền truy cập thông tin người dùng này");

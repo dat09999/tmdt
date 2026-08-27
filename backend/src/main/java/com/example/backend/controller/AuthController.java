@@ -90,13 +90,7 @@ public class AuthController {
             throw new EmailAlreadyExistsException("Email đã tồn tại");
         }
 
-        List<Address> addressList = null;
 
-        if (request.getAddresses() != null && !request.getAddresses().isEmpty()) {
-            addressList = request.getAddresses().stream()
-                    .map(this::toAddress)
-                    .toList();
-        }
 
         User user = User.builder()
                 .email(request.getEmail().trim())
@@ -107,7 +101,7 @@ public class AuthController {
                 .provider("LOCAL")
                 .providerId(null)
                 .active(true)
-                .addresses(addressList)
+
                 .build();
 
         User savedUser = userRepository.save(user);

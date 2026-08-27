@@ -11,7 +11,5 @@ import java.util.List;
 public class UserUpdateRequest {
     private String fullName;
     private String phone;
-    private List<Address> address;
-    private Double lat;
-    private Double lng;
+
 }
