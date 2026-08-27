@@ -17,6 +17,7 @@ import { useAuth } from "./pages/Authcontext";
 
 function resolvePage(path, isAuthenticated) {
   if (path === "/register") return <RegisterPage />;
+  if (path === "/profile") return isAuthenticated ? <ProfilePage /> : <LoginPage />;
   if (path === "/cart") return <CartPage />;
   if (path === "/wishlist") return <WishlistPage />;
   if (path.startsWith("/orders/")) return <OrderDetailPage />;

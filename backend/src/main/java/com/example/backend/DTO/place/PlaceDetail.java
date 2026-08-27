@@ -1,4 +1,4 @@
-package com.example.backend.dto.geo;
+package com.example.backend.DTO.place;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

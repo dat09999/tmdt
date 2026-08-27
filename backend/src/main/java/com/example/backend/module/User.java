@@ -20,7 +20,7 @@ public class User {
     private String password;
     private String fullName;
     private String phone;
-
+    private String url;
     private String role;      // USER, ADMIN
     private String provider;  // LOCAL, GOOGLE
     private Boolean active;
