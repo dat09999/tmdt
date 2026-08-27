@@ -1,5 +1,6 @@
 import LoginPage from "./pages/LoginPage";
 import OAuth2SuccessPage from "./pages/OAuth2SuccessPage";
+import ProfilePage from "./pages/ProfilePage";
 import RegisterPage from "./pages/register";
 import HomePage from "./pages/HomePage";
 import CartPage from "./pages/CartPage";
