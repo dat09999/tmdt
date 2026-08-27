@@ -5,7 +5,9 @@ import com.example.backend.DTO.place.PlaceSuggestion;
 import com.example.backend.Exception.BadRequestException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -16,6 +18,7 @@ import java.util.List;
 
 @Service
 @Slf4j
+
 public class GeoService {
 
     private final RestClient restClient;
@@ -24,14 +27,10 @@ public class GeoService {
     @Value("${gogoduk.api-key}")
     private String apiKey;
 
-    public GeoService(
-            @Value("${gogoduk.base-url:https://api.gogoduk.com}") String baseUrl,
-            ObjectMapper objectMapper
-    ) {
+    public GeoService(@Value("${gogoduk.base-url:https://api.gogoduk.com}") String baseUrl) {
         this.restClient = RestClient.builder().baseUrl(baseUrl).build();
-        this.objectMapper = objectMapper;
+        this.objectMapper = new ObjectMapper(); // Tự khởi tạo trực tiếp tại đây
     }
-
     public List<PlaceSuggestion> suggest(String input) {
         if (input == null || input.trim().length() < 2) {
             return Collections.emptyList(); // Tránh ném Exception 400 ra Frontend khi mới gõ 1 ký tự
