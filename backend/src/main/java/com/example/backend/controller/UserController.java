@@ -8,6 +8,7 @@ import com.example.backend.Exception.UnauthorizedException;
 import com.example.backend.service.UserService;
 import com.example.backend.service.impl.UserPrincipal;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
+@Slf4j
 public class UserController {
 
     private final UserService userService;
@@ -25,6 +27,7 @@ public class UserController {
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         requireSelf(userId, principal);
+        log.info("thông tin user ");
         return ResponseEntity.ok(userService.getUserById(userId));
     }
 
