@@ -1,7 +1,8 @@
 package com.example.backend.controller;
 
 
-import com.example.backend.DTO.user.AddressRequest;
+
+import com.example.backend.DTO.place.AddressRequest;
 import com.example.backend.DTO.user.ChangePasswordRequest;
 import com.example.backend.DTO.user.UserResponse;
 import com.example.backend.DTO.user.UserUpdateRequest;
