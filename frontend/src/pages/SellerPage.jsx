@@ -23,11 +23,15 @@ import {
   Clock,
   Truck,
   Settings,
+  XCircle,
+  Check,
+  Search,
 } from "lucide-react";
 
 export default function SellerPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard"); // "dashboard" | "products" | "orders" | "coupons" | "settings"
+  const [orderStatusFilter, setOrderStatusFilter] = useState("ALL"); // "ALL" | "PENDING" | "PROCESSING" | "SHIPPING" | "DELIVERED" | "CANCELLED"
   const [stats, setStats] = useState(null);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -142,7 +146,13 @@ export default function SellerPage() {
 
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     await sellerService.updateOrderStatus(shopId, orderId, newStatus);
-    showToast(`Đã chuyển trạng thái đơn hàng sang: ${newStatus}`);
+    const statusLabels = {
+      PROCESSING: "Đang Chuẩn Bị Hàng",
+      SHIPPING: "Đang Giao Cho Shipper",
+      DELIVERED: "Giao Hàng Thành Công",
+      CANCELLED: "Đã Hủy Đơn Hàng",
+    };
+    showToast(`Đã chuyển trạng thái đơn hàng sang: ${statusLabels[newStatus] || newStatus}`);
     await loadData();
   };
 
@@ -162,6 +172,40 @@ export default function SellerPage() {
     setCouponModalOpen(false);
     await loadData();
   };
+
+  // Filter orders by selected status tab
+  const filteredOrders = orders.filter((o) => {
+    const status = (o.orderStatus || "PENDING").toUpperCase();
+    if (orderStatusFilter === "ALL") return true;
+    if (orderStatusFilter === "PENDING") {
+      return status === "PENDING" || status === "UNPAID" || status === "WAITING_PAYMENT";
+    }
+    if (orderStatusFilter === "PROCESSING") {
+      return status === "PROCESSING" || status === "CONFIRMED";
+    }
+    if (orderStatusFilter === "SHIPPING") {
+      return status === "SHIPPING";
+    }
+    if (orderStatusFilter === "DELIVERED") {
+      return status === "DELIVERED" || status === "COMPLETED";
+    }
+    if (orderStatusFilter === "CANCELLED") {
+      return status === "CANCELLED";
+    }
+    return true;
+  });
+
+  const countPending = orders.filter((o) =>
+    ["PENDING", "UNPAID", "WAITING_PAYMENT"].includes((o.orderStatus || "").toUpperCase())
+  ).length;
+  const countProcessing = orders.filter((o) =>
+    ["PROCESSING", "CONFIRMED"].includes((o.orderStatus || "").toUpperCase())
+  ).length;
+  const countShipping = orders.filter((o) => (o.orderStatus || "").toUpperCase() === "SHIPPING").length;
+  const countDelivered = orders.filter((o) =>
+    ["DELIVERED", "COMPLETED"].includes((o.orderStatus || "").toUpperCase())
+  ).length;
+  const countCancelled = orders.filter((o) => (o.orderStatus || "").toUpperCase() === "CANCELLED").length;
 
   return (
     <div className="page-shell">
@@ -325,10 +369,10 @@ export default function SellerPage() {
                     Tổng Số Đơn Hàng
                   </div>
                   <div style={{ fontSize: "24px", fontWeight: "900", color: "var(--text)", marginTop: "6px" }}>
-                    {stats?.totalOrders || 320} đơn
+                    {orders.length || stats?.totalOrders || 320} đơn
                   </div>
                   <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
-                    14 đơn đang chờ xác nhận
+                    {countPending} đơn đang chờ xác nhận
                   </div>
                 </div>
 
@@ -368,7 +412,7 @@ export default function SellerPage() {
                 }}
               >
                 <h3 style={{ fontSize: "16px", fontWeight: "800", marginBottom: "16px" }}>
-                  Danh Sách Việc Cần Làm
+                  Danh Sách Việc Cần Làm (Bấm để xử lý ngay)
                 </h3>
                 <div
                   style={{
@@ -378,7 +422,10 @@ export default function SellerPage() {
                   }}
                 >
                   <div
-                    onClick={() => setActiveTab("orders")}
+                    onClick={() => {
+                      setOrderStatusFilter("PENDING");
+                      setActiveTab("orders");
+                    }}
                     style={{
                       padding: "16px",
                       backgroundColor: "var(--primary-light)",
@@ -386,14 +433,23 @@ export default function SellerPage() {
                       border: "1px solid var(--border-primary)",
                       textAlign: "center",
                       cursor: "pointer",
+                      transition: "transform 0.15s",
                     }}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.02)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                   >
-                    <strong style={{ fontSize: "22px", color: "var(--primary)", display: "block" }}>14</strong>
-                    <span style={{ fontSize: "12px", color: "var(--text)" }}>Chờ Xác Nhận</span>
+                    <strong style={{ fontSize: "24px", color: "var(--primary)", display: "block" }}>
+                      {countPending}
+                    </strong>
+                    <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Chờ Xác Nhận</span>
+                    <div style={{ fontSize: "11px", color: "var(--primary)", marginTop: "2px" }}>Bấm để duyệt đơn →</div>
                   </div>
 
                   <div
-                    onClick={() => setActiveTab("orders")}
+                    onClick={() => {
+                      setOrderStatusFilter("PROCESSING");
+                      setActiveTab("orders");
+                    }}
                     style={{
                       padding: "16px",
                       backgroundColor: "var(--surface-muted)",
@@ -401,10 +457,40 @@ export default function SellerPage() {
                       border: "1px solid var(--border)",
                       textAlign: "center",
                       cursor: "pointer",
+                      transition: "transform 0.15s",
                     }}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.02)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                   >
-                    <strong style={{ fontSize: "22px", color: "var(--info)", display: "block" }}>8</strong>
-                    <span style={{ fontSize: "12px", color: "var(--text)" }}>Chờ Lấy Hàng</span>
+                    <strong style={{ fontSize: "24px", color: "var(--info)", display: "block" }}>
+                      {countProcessing}
+                    </strong>
+                    <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Đang Chuẩn Bị</span>
+                    <div style={{ fontSize: "11px", color: "var(--info)", marginTop: "2px" }}>Bàn giao shipper →</div>
+                  </div>
+
+                  <div
+                    onClick={() => {
+                      setOrderStatusFilter("SHIPPING");
+                      setActiveTab("orders");
+                    }}
+                    style={{
+                      padding: "16px",
+                      backgroundColor: "#ecfdf5",
+                      borderRadius: "8px",
+                      border: "1px solid #a7f3d0",
+                      textAlign: "center",
+                      cursor: "pointer",
+                      transition: "transform 0.15s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.02)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    <strong style={{ fontSize: "24px", color: "#059669", display: "block" }}>
+                      {countShipping}
+                    </strong>
+                    <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Đang Giao Hàng</span>
+                    <div style={{ fontSize: "11px", color: "#059669", marginTop: "2px" }}>Theo dõi lộ trình →</div>
                   </div>
 
                   <div
@@ -416,25 +502,14 @@ export default function SellerPage() {
                       border: "1px solid #fed7aa",
                       textAlign: "center",
                       cursor: "pointer",
+                      transition: "transform 0.15s",
                     }}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.02)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                   >
-                    <strong style={{ fontSize: "22px", color: "#ea580c", display: "block" }}>2</strong>
-                    <span style={{ fontSize: "12px", color: "var(--text)" }}>Trả Hàng / Hoàn Tiền</span>
-                  </div>
-
-                  <div
-                    onClick={() => setActiveTab("products")}
-                    style={{
-                      padding: "16px",
-                      backgroundColor: "#fef2f2",
-                      borderRadius: "8px",
-                      border: "1px solid #fecaca",
-                      textAlign: "center",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <strong style={{ fontSize: "22px", color: "var(--error)", display: "block" }}>3</strong>
-                    <span style={{ fontSize: "12px", color: "var(--text)" }}>Sản Phẩm Hết Hàng</span>
+                    <strong style={{ fontSize: "24px", color: "#ea580c", display: "block" }}>2</strong>
+                    <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Trả Hàng / Hoàn Tiền</span>
+                    <div style={{ fontSize: "11px", color: "#ea580c", marginTop: "2px" }}>Xử lý khiếu nại →</div>
                   </div>
                 </div>
               </div>
@@ -484,181 +559,338 @@ export default function SellerPage() {
                 </Button>
               </div>
 
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-                  <thead>
-                    <tr style={{ backgroundColor: "var(--surface-muted)", textAlign: "left" }}>
-                      <th style={{ padding: "12px 16px" }}>Sản phẩm</th>
-                      <th style={{ padding: "12px 16px" }}>Giá bán</th>
-                      <th style={{ padding: "12px 16px" }}>Tồn kho</th>
-                      <th style={{ padding: "12px 16px" }}>Đã bán</th>
-                      <th style={{ padding: "12px 16px" }}>Trạng thái</th>
-                      <th style={{ padding: "12px 16px", textAlign: "right" }}>Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {products.map((p) => (
-                      <tr key={p.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-                        <td style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: "12px" }}>
-                          <img
-                            src={p.images?.[0]?.url || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100"}
-                            alt={p.name}
-                            style={{ width: "48px", height: "48px", borderRadius: "6px", objectFit: "cover" }}
-                          />
-                          <div>
-                            <div style={{ fontWeight: "600", maxWidth: "280px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {p.name}
-                            </div>
-                            <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
-                              ID: {p.id} • {p.categoryName || "Điện tử"}
-                            </div>
-                          </div>
-                        </td>
-                        <td style={{ padding: "12px 16px", fontWeight: "700", color: "var(--primary)" }}>
-                          {formatCurrency(p.basePrice)}
-                        </td>
-                        <td style={{ padding: "12px 16px" }}>
-                          {p.variants?.[0]?.stock || 50}
-                        </td>
-                        <td style={{ padding: "12px 16px" }}>{p.soldCount || 0}</td>
-                        <td style={{ padding: "12px 16px" }}>
-                          <span
-                            style={{
-                              backgroundColor: "var(--success-bg)",
-                              color: "var(--success-dark)",
-                              padding: "2px 8px",
-                              borderRadius: "99px",
-                              fontSize: "11px",
-                              fontWeight: "700",
-                            }}
-                          >
-                            Đang bán
-                          </span>
-                        </td>
-                        <td style={{ padding: "12px 16px", textAlign: "right" }}>
-                          <div style={{ display: "flex", justifyContent: "flex-end", gap: "6px" }}>
-                            <button
-                              onClick={() => {
-                                setEditingProduct(p);
-                                setProductForm({
-                                  name: p.name,
-                                  categoryId: p.categoryId || "dien-thoai",
-                                  basePrice: p.basePrice,
-                                  originalPrice: p.originalPrice || p.basePrice,
-                                  stock: p.variants?.[0]?.stock || 50,
-                                  description: p.description || "",
-                                  imageUrl: p.images?.[0]?.url || "",
-                                });
-                                setProductModalOpen(true);
-                              }}
-                              style={{ padding: "6px", color: "var(--text-secondary)" }}
-                              title="Chỉnh sửa"
-                            >
-                              <Edit2 size={15} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteProduct(p.id)}
-                              style={{ padding: "6px", color: "var(--error)" }}
-                              title="Xóa"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
-                        </td>
+              {products.length === 0 ? (
+                <EmptyState title="Shop chưa có sản phẩm nào" description="Hãy đăng bán sản phẩm đầu tiên của bạn!" />
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                    <thead>
+                      <tr style={{ backgroundColor: "var(--surface-muted)", textAlign: "left" }}>
+                        <th style={{ padding: "12px 16px" }}>Sản phẩm</th>
+                        <th style={{ padding: "12px 16px" }}>Giá bán</th>
+                        <th style={{ padding: "12px 16px" }}>Tồn kho</th>
+                        <th style={{ padding: "12px 16px" }}>Đã bán</th>
+                        <th style={{ padding: "12px 16px" }}>Trạng thái</th>
+                        <th style={{ padding: "12px 16px", textAlign: "right" }}>Thao tác</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {products.map((p) => (
+                        <tr key={p.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                          <td style={{ padding: "12px 16px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                              <img
+                                src={p.images?.[0]?.url || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100"}
+                                alt={p.name}
+                                style={{ width: "42px", height: "42px", borderRadius: "4px", objectFit: "cover" }}
+                              />
+                              <div>
+                                <strong style={{ color: "var(--text)" }}>{p.name}</strong>
+                                <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                                  Mã: {p.id}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: "12px 16px", fontWeight: "700", color: "var(--primary)" }}>
+                            {formatCurrency(p.basePrice)}
+                          </td>
+                          <td style={{ padding: "12px 16px" }}>{p.variants?.[0]?.stock || p.stock || 50}</td>
+                          <td style={{ padding: "12px 16px" }}>{p.soldCount || 0}</td>
+                          <td style={{ padding: "12px 16px" }}>
+                            <span
+                              style={{
+                                backgroundColor: "#d1fae5",
+                                color: "#065f46",
+                                padding: "2px 8px",
+                                borderRadius: "4px",
+                                fontSize: "11px",
+                                fontWeight: "700",
+                              }}
+                            >
+                              Đang bán
+                            </span>
+                          </td>
+                          <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                              <button
+                                onClick={() => {
+                                  setEditingProduct(p);
+                                  setProductForm({
+                                    name: p.name,
+                                    categoryId: p.categoryId || "dien-thoai",
+                                    basePrice: p.basePrice,
+                                    originalPrice: p.originalPrice || p.basePrice,
+                                    stock: p.variants?.[0]?.stock || 50,
+                                    description: p.description || "",
+                                    imageUrl: p.images?.[0]?.url || "",
+                                  });
+                                  setProductModalOpen(true);
+                                }}
+                                style={{ padding: "6px", color: "var(--text-secondary)" }}
+                                title="Chỉnh sửa"
+                              >
+                                <Edit2 size={15} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProduct(p.id)}
+                                style={{ padding: "6px", color: "var(--error)" }}
+                                title="Xóa"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
           {/* TAB 3: ORDERS MANAGER */}
           {activeTab === "orders" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {orders.map((o) => (
-                <div
-                  key={o.id}
-                  className="card"
-                  style={{
-                    padding: "20px",
-                    backgroundColor: "var(--surface)",
-                    borderRadius: "var(--r-lg)",
-                    border: "1px solid var(--border-light)",
-                  }}
-                >
-                  <div
+              {/* Order Status Sub-Tabs Filter */}
+              <div
+                className="card"
+                style={{
+                  display: "flex",
+                  backgroundColor: "var(--surface)",
+                  borderRadius: "var(--r-md)",
+                  border: "1px solid var(--border-light)",
+                  overflowX: "auto",
+                }}
+              >
+                {[
+                  { id: "ALL", label: `Tất Cả (${orders.length})` },
+                  { id: "PENDING", label: `Chờ Xác Nhận (${countPending})` },
+                  { id: "PROCESSING", label: `Đang Chuẩn Bị (${countProcessing})` },
+                  { id: "SHIPPING", label: `Đang Giao (${countShipping})` },
+                  { id: "DELIVERED", label: `Đã Giao (${countDelivered})` },
+                  { id: "CANCELLED", label: `Đã Hủy (${countCancelled})` },
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    onClick={() => setOrderStatusFilter(st.id)}
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      paddingBottom: "12px",
-                      borderBottom: "1px solid var(--border-light)",
-                      marginBottom: "12px",
+                      flex: 1,
+                      padding: "12px 14px",
+                      border: "none",
+                      borderBottom: orderStatusFilter === st.id ? "2.5px solid var(--primary)" : "2.5px solid transparent",
+                      backgroundColor: "transparent",
+                      color: orderStatusFilter === st.id ? "var(--primary)" : "var(--text)",
+                      fontWeight: orderStatusFilter === st.id ? "800" : "500",
+                      fontSize: "13px",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    <div>
-                      <strong style={{ fontSize: "14px" }}>Đơn #{o.orderCode || o.id}</strong>
-                      <span style={{ fontSize: "12px", color: "var(--text-secondary)", marginLeft: "8px" }}>
-                        Khách: {o.recipient?.name} ({o.recipient?.phone})
-                      </span>
-                    </div>
+                    {st.label}
+                  </button>
+                ))}
+              </div>
 
-                    <span
+              {filteredOrders.length === 0 ? (
+                <EmptyState
+                  title="Không có đơn hàng nào trong mục này"
+                  description="Các đơn hàng mới phát sinh sẽ xuất hiện tại đây để bạn xử lý."
+                />
+              ) : (
+                filteredOrders.map((o) => {
+                  const status = (o.orderStatus || "PENDING").toUpperCase();
+                  const buyerName = o.shippingAddress?.fullName || o.recipient?.name || o.buyerId || "Khách Hàng";
+                  const buyerPhone = o.shippingAddress?.phone || o.recipient?.phone || "0912 345 678";
+                  const buyerAddress = o.shippingAddress?.detail || o.recipient?.address || "Hồ Chí Minh";
+                  const total = o.totalAmount || o.subtotal || 0;
+
+                  return (
+                    <div
+                      key={o.id}
+                      className="card"
                       style={{
-                        padding: "3px 10px",
-                        borderRadius: "99px",
-                        fontSize: "12px",
-                        fontWeight: "700",
-                        backgroundColor: "var(--primary-light)",
-                        color: "var(--primary)",
+                        padding: "20px",
+                        backgroundColor: "var(--surface)",
+                        borderRadius: "var(--r-lg)",
+                        border: "1px solid var(--border-light)",
                       }}
                     >
-                      {o.orderStatus}
-                    </span>
-                  </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          paddingBottom: "12px",
+                          borderBottom: "1px solid var(--border-light)",
+                          marginBottom: "12px",
+                          flexWrap: "wrap",
+                          gap: "8px",
+                        }}
+                      >
+                        <div>
+                          <strong style={{ fontSize: "15px", color: "var(--text)" }}>
+                            Đơn #{o.orderCode || o.id}
+                          </strong>
+                          <span style={{ fontSize: "12px", color: "var(--text-secondary)", marginLeft: "10px" }}>
+                            Khách: <strong>{buyerName}</strong> ({buyerPhone})
+                          </span>
+                        </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "14px" }}>
-                    {(o.items || []).map((it, idx) => (
-                      <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}>
-                        <span>{it.productName} (x{it.quantity})</span>
-                        <strong>{formatCurrency(it.price * it.quantity)}</strong>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span
+                            style={{
+                              padding: "3px 10px",
+                              borderRadius: "99px",
+                              fontSize: "12px",
+                              fontWeight: "700",
+                              backgroundColor:
+                                status === "PENDING"
+                                  ? "var(--primary-light)"
+                                  : status === "PROCESSING"
+                                  ? "#e0f2fe"
+                                  : status === "SHIPPING"
+                                  ? "#ecfdf5"
+                                  : status === "DELIVERED"
+                                  ? "#dcfce7"
+                                  : "#fee2e2",
+                              color:
+                                status === "PENDING"
+                                  ? "var(--primary)"
+                                  : status === "PROCESSING"
+                                  ? "#0284c7"
+                                  : status === "SHIPPING"
+                                  ? "#059669"
+                                  : status === "DELIVERED"
+                                  ? "#16a34a"
+                                  : "#dc2626",
+                            }}
+                          >
+                            {status === "PENDING"
+                              ? "⏳ Chờ xác nhận"
+                              : status === "PROCESSING"
+                              ? "📦 Đang chuẩn bị"
+                              : status === "SHIPPING"
+                              ? "🚚 Đang giao hàng"
+                              : status === "DELIVERED"
+                              ? "✓ Giao thành công"
+                              : "✕ Đã hủy"}
+                          </span>
+                        </div>
                       </div>
-                    ))}
-                  </div>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      paddingTop: "12px",
-                      borderTop: "1px solid var(--border-light)",
-                    }}
-                  >
-                    <div style={{ fontSize: "13px" }}>
-                      Địa chỉ giao: <span style={{ color: "var(--text-secondary)" }}>{o.recipient?.address}</span>
-                    </div>
+                      {/* Items */}
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "14px" }}>
+                        {(o.items || []).map((it, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              fontSize: "13px",
+                              alignItems: "center",
+                            }}
+                          >
+                            <span>
+                              • {it.productName || it.productId} (x{it.quantity || 1})
+                            </span>
+                            <strong>{formatCurrency((it.unitPrice || it.price || 0) * (it.quantity || 1))}</strong>
+                          </div>
+                        ))}
+                      </div>
 
-                    <div style={{ display: "flex", gap: "8px" }}>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => handleUpdateOrderStatus(o.id, "PROCESSING")}
+                      {/* Footer Actions */}
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          paddingTop: "12px",
+                          borderTop: "1px solid var(--border-light)",
+                          flexWrap: "wrap",
+                          gap: "12px",
+                        }}
                       >
-                        Xác Nhận Đơn
-                      </Button>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => handleUpdateOrderStatus(o.id, "SHIPPING")}
-                      >
-                        Giao Cho Shipper
-                      </Button>
+                        <div style={{ fontSize: "13px" }}>
+                          <div>
+                            Địa chỉ giao: <span style={{ color: "var(--text-secondary)" }}>{buyerAddress}</span>
+                          </div>
+                          <div style={{ marginTop: "2px" }}>
+                            Tổng tiền: <strong style={{ color: "var(--primary)", fontSize: "14px" }}>{formatCurrency(total)}</strong>
+                          </div>
+                        </div>
+
+                        {/* Dynamic Action Buttons based on status */}
+                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                          {(status === "PENDING" || status === "UNPAID") && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleUpdateOrderStatus(o.id, "CANCELLED")}
+                              >
+                                Hủy Đơn
+                              </Button>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                icon={Check}
+                                onClick={() => handleUpdateOrderStatus(o.id, "PROCESSING")}
+                              >
+                                Xác Nhận Đơn Hàng
+                              </Button>
+                            </>
+                          )}
+
+                          {(status === "PROCESSING" || status === "CONFIRMED") && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleUpdateOrderStatus(o.id, "CANCELLED")}
+                              >
+                                Hủy Đơn
+                              </Button>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                icon={Truck}
+                                onClick={() => handleUpdateOrderStatus(o.id, "SHIPPING")}
+                              >
+                                Giao Cho Shipper
+                              </Button>
+                            </>
+                          )}
+
+                          {status === "SHIPPING" && (
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              icon={CheckCircle}
+                              onClick={() => handleUpdateOrderStatus(o.id, "DELIVERED")}
+                            >
+                              Hoàn Tất Giao Hàng
+                            </Button>
+                          )}
+
+                          {status === "DELIVERED" && (
+                            <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "700" }}>
+                              ✓ Đơn hàng đã hoàn tất
+                            </span>
+                          )}
+
+                          {status === "CANCELLED" && (
+                            <span style={{ fontSize: "12px", color: "var(--error)", fontWeight: "700" }}>
+                              Đơn đã bị hủy
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  );
+                })
+              )}
             </div>
           )}
 
@@ -679,45 +911,36 @@ export default function SellerPage() {
                   alignItems: "center",
                   justifyContent: "space-between",
                   marginBottom: "16px",
+                  paddingBottom: "12px",
+                  borderBottom: "1px solid var(--border-light)",
                 }}
               >
-                <strong style={{ fontSize: "16px" }}>Mã Khuyến Mãi Của Shop</strong>
+                <strong style={{ fontSize: "16px" }}>Mã Giảm Giá Của Shop ({coupons.length})</strong>
                 <Button variant="primary" size="sm" icon={Plus} onClick={() => setCouponModalOpen(true)}>
                   Tạo Voucher Mới
                 </Button>
               </div>
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                  gap: "14px",
-                }}
-              >
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
                 {coupons.map((c) => (
                   <div
                     key={c.id}
                     style={{
                       border: "1px dashed var(--primary)",
-                      borderRadius: "8px",
-                      padding: "16px",
                       backgroundColor: "var(--primary-light)",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
+                      borderRadius: "var(--r-md)",
+                      padding: "16px",
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <strong style={{ fontSize: "16px", color: "var(--primary)" }}>{c.code}</strong>
-                      <span style={{ fontSize: "11px", backgroundColor: "#fff", padding: "2px 6px", borderRadius: "4px" }}>
-                        Đã dùng: {c.usageCount || 0}
-                      </span>
+                      <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>HSD: {c.expiry}</span>
                     </div>
-                    <div style={{ fontSize: "13px", fontWeight: "700" }}>
-                      Giảm {formatCurrency(c.discount)}
+                    <div style={{ fontSize: "13px", fontWeight: "600", marginTop: "6px" }}>
+                      Giảm {formatCurrency(c.discountValue || c.discount)}
                     </div>
-                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-                      Đơn tối thiểu: {formatCurrency(c.minOrder)} • HSD: {c.expiry}
+                    <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                      Đơn tối thiểu: {formatCurrency(c.minOrderValue || c.minOrder || 0)}
                     </div>
                   </div>
                 ))}
@@ -730,57 +953,39 @@ export default function SellerPage() {
             <div
               className="card"
               style={{
-                padding: "24px",
+                padding: "28px",
                 backgroundColor: "var(--surface)",
                 borderRadius: "var(--r-lg)",
                 border: "1px solid var(--border-light)",
                 maxWidth: "600px",
               }}
             >
-              <h3 style={{ fontSize: "16px", fontWeight: "800", marginBottom: "16px" }}>
-                Cài Đặt Hồ Sơ Shop
-              </h3>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  showToast("Cập nhật thông tin shop thành công!");
-                }}
-                style={{ display: "flex", flexDirection: "column", gap: "14px" }}
-              >
+              <h3 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "16px" }}>Hồ Sơ Cửa Hàng</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                 <div>
                   <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-                    Tên Shop:
+                    Tên Gian Hàng
                   </label>
                   <input
                     type="text"
                     defaultValue="Apple Flagship Store"
-                    style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+                    style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "4px" }}
                   />
                 </div>
                 <div>
                   <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-                    Địa Chỉ Kho Hàng:
+                    Mô Tả Shop
                   </label>
-                  <input
-                    type="text"
-                    defaultValue="Kho Tân Bình, TP. Hồ Chí Minh"
-                    style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+                  <textarea
+                    rows={3}
+                    defaultValue="Chuyên cung cấp các sản phẩm Apple chính hãng VN/A, bảo hành toàn quốc 12 tháng."
+                    style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "4px" }}
                   />
                 </div>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-                    Giờ Làm Việc:
-                  </label>
-                  <input
-                    type="text"
-                    defaultValue="08:00 - 22:00 (Tất cả các ngày trong tuần)"
-                    style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
-                  />
-                </div>
-                <Button variant="primary" type="submit" style={{ marginTop: "8px" }}>
-                  Lưu Thay Đổi
+                <Button variant="primary" onClick={() => showToast("Đã lưu cài đặt gian hàng!")}>
+                  Lưu Cài Đặt
                 </Button>
-              </form>
+              </div>
             </div>
           )}
         </div>
@@ -792,75 +997,60 @@ export default function SellerPage() {
         onClose={() => setProductModalOpen(false)}
         title={editingProduct ? "Chỉnh Sửa Sản Phẩm" : "Thêm Sản Phẩm Mới"}
       >
-        <form onSubmit={handleSaveProduct} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <form onSubmit={handleSaveProduct} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-              Tên Sản Phẩm: <span style={{ color: "var(--error)" }}>*</span>
-            </label>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>Tên Sản Phẩm:</label>
             <input
               type="text"
               value={productForm.name}
               onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-              placeholder="VD: iPhone 15 Pro Max 256GB"
               style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
               required
             />
           </div>
-
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-                Giá Bán (₫): <span style={{ color: "var(--error)" }}>*</span>
-              </label>
+              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>Giá Bán (VNĐ):</label>
               <input
                 type="number"
                 value={productForm.basePrice}
                 onChange={(e) => setProductForm({ ...productForm, basePrice: e.target.value })}
-                placeholder="29990000"
                 style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
                 required
               />
             </div>
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-                Số Lượng Kho:
-              </label>
+              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>Số Lượng Kho:</label>
               <input
                 type="number"
                 value={productForm.stock}
                 onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
                 style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+                required
               />
             </div>
           </div>
-
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-              Link Ảnh Sản Phẩm (URL):
-            </label>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>URL Hình Ảnh:</label>
             <input
-              type="text"
+              type="url"
               value={productForm.imageUrl}
               onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
-              placeholder="https://..."
+              placeholder="https://images.unsplash.com/..."
               style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
             />
           </div>
-
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-              Mô Tả Sản Phẩm:
-            </label>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>Mô Tả Sản Phẩm:</label>
             <textarea
               rows={3}
               value={productForm.description}
               onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px", fontFamily: "inherit" }}
+              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
             />
           </div>
-
-          <Button variant="primary" type="submit" block style={{ marginTop: "8px" }}>
-            {editingProduct ? "Lưu Cập Nhật" : "Tạo Sản Phẩm"}
+          <Button variant="primary" type="submit" block style={{ marginTop: "6px" }}>
+            {editingProduct ? "Lưu Thay Đổi" : "Đăng Sản Phẩm"}
           </Button>
         </form>
       </Modal>
@@ -869,16 +1059,14 @@ export default function SellerPage() {
       <Modal
         isOpen={couponModalOpen}
         onClose={() => setCouponModalOpen(false)}
-        title="Tạo Mã Giảm Giá Mới"
+        title="Tạo Mã Giảm Giá Shop"
       >
-        <form onSubmit={handleSaveCoupon} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <form onSubmit={handleSaveCoupon} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-              Mã Voucher (Code):
-            </label>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>Mã Giảm Giá (Code):</label>
             <input
               type="text"
-              placeholder="VD: SHOP30K"
+              placeholder="VD: SHOP50K"
               value={couponForm.code}
               onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value })}
               style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px", textTransform: "uppercase" }}
@@ -886,12 +1074,10 @@ export default function SellerPage() {
             />
           </div>
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-              Mức Giảm (₫):
-            </label>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>Số Tiền Giảm (VNĐ):</label>
             <input
               type="number"
-              placeholder="VD: 30000"
+              placeholder="VD: 50000"
               value={couponForm.discount}
               onChange={(e) => setCouponForm({ ...couponForm, discount: e.target.value })}
               style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
@@ -899,19 +1085,17 @@ export default function SellerPage() {
             />
           </div>
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-              Đơn Hàng Tối Thiểu (₫):
-            </label>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>Đơn Hàng Tối Thiểu (VNĐ):</label>
             <input
               type="number"
-              placeholder="VD: 200000"
+              placeholder="VD: 300000"
               value={couponForm.minOrder}
               onChange={(e) => setCouponForm({ ...couponForm, minOrder: e.target.value })}
               style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
             />
           </div>
-          <Button variant="primary" type="submit" block>
-            Tạo Mã Voucher
+          <Button variant="primary" type="submit" block style={{ marginTop: "6px" }}>
+            Tạo Voucher
           </Button>
         </form>
       </Modal>

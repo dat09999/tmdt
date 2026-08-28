@@ -18,6 +18,69 @@ import {
   CheckCircle,
 } from "lucide-react";
 
+function buildOrderTimeline(order) {
+  if (!order) return [];
+  const status = (order.orderStatus || "PENDING").toUpperCase();
+  const isCancelled = status === "CANCELLED";
+
+  if (isCancelled) {
+    return [
+      {
+        title: "Đơn Hàng Đã Đặt",
+        time: order.createdAt ? formatDate(order.createdAt) : "Đã đặt",
+        done: true,
+        current: false,
+      },
+      {
+        title: "Đơn Hàng Đã Hủy",
+        time: order.updatedAt ? formatDate(order.updatedAt) : "Đã hủy",
+        done: true,
+        current: true,
+        isCancelled: true,
+      },
+    ];
+  }
+
+  const isStep1Done = true;
+  const isStep1Current = status === "PENDING" || status === "UNPAID" || status === "WAITING_PAYMENT";
+
+  const isStep2Done = ["CONFIRMED", "PROCESSING", "SHIPPING", "DELIVERED", "COMPLETED"].includes(status);
+  const isStep2Current = status === "CONFIRMED" || status === "PROCESSING";
+
+  const isStep3Done = ["SHIPPING", "DELIVERED", "COMPLETED"].includes(status);
+  const isStep3Current = status === "SHIPPING";
+
+  const isStep4Done = ["DELIVERED", "COMPLETED"].includes(status);
+  const isStep4Current = isStep4Done;
+
+  return [
+    {
+      title: "Đơn Hàng Đã Đặt",
+      time: order.createdAt ? formatDate(order.createdAt) : "Vừa xong",
+      done: isStep1Done,
+      current: isStep1Current,
+    },
+    {
+      title: "Chờ Shop Chuẩn Bị Hàng",
+      time: isStep2Done ? (order.updatedAt ? formatDate(order.updatedAt) : "Đã xác nhận") : "Đang chờ xác nhận",
+      done: isStep2Done,
+      current: isStep2Current,
+    },
+    {
+      title: "Đang Vận Chuyển",
+      time: order.shippedAt ? formatDate(order.shippedAt) : isStep3Done ? "Đang giao hàng" : "Chờ giao hàng",
+      done: isStep3Done,
+      current: isStep3Current,
+    },
+    {
+      title: "Giao Hàng Thành Công",
+      time: order.deliveredAt ? formatDate(order.deliveredAt) : isStep4Done ? "Đã nhận hàng" : "Dự kiến 2-3 ngày",
+      done: isStep4Done,
+      current: isStep4Current,
+    },
+  ];
+}
+
 export default function OrderDetailPage() {
   const orderId = window.location.pathname.split("/orders/")[1] || "ord-1001";
   const [order, setOrder] = useState(null);
@@ -43,9 +106,27 @@ export default function OrderDetailPage() {
   }
 
   const statusInfo = ORDER_STATUS[order.orderStatus] || {
-    label: order.orderStatus || "Đang xử lý",
+    label: order.orderStatus || "Chờ xác nhận",
     color: "var(--primary)",
   };
+
+  const recipientName =
+    order.shippingAddress?.fullName || order.recipient?.name || order.buyerId || "Người Nhận";
+  const recipientPhone =
+    order.shippingAddress?.phone || order.recipient?.phone || "0912 345 678";
+  const recipientAddress =
+    order.shippingAddress?.detail ||
+    order.recipient?.address ||
+    "Số 88 Đường Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh";
+
+  const totalAmount = order.totalAmount || order.subtotal || 0;
+  const shippingFee = order.shippingFee || 25000;
+  const itemsSubtotal = (order.items || []).reduce(
+    (sum, it) => sum + (it.unitPrice || it.price || 0) * (it.quantity || 1),
+    0
+  );
+
+  const timelineSteps = buildOrderTimeline(order);
 
   return (
     <div className="page-shell">
@@ -105,7 +186,7 @@ export default function OrderDetailPage() {
               marginBottom: "20px",
             }}
           >
-            <OrderTimeline timeline={order.timeline || []} />
+            <OrderTimeline timeline={timelineSteps} />
           </div>
 
           {/* Delivery Address & Shipping Carrier Card */}
@@ -139,10 +220,10 @@ export default function OrderDetailPage() {
                 <span>Địa Chỉ Nhận Hàng</span>
               </div>
               <div style={{ fontSize: "13px", lineHeight: "1.6" }}>
-                <strong>{order.recipient?.name || "Nguyễn Minh Khang"}</strong>
-                <div>{order.recipient?.phone || "0912 345 678"}</div>
+                <strong>{recipientName}</strong>
+                <div>{recipientPhone}</div>
                 <div style={{ color: "var(--text-secondary)" }}>
-                  {order.recipient?.address || "Số 88 Đường Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh"}
+                  {recipientAddress}
                 </div>
               </div>
             </div>
@@ -171,7 +252,9 @@ export default function OrderDetailPage() {
                   </div>
                 )}
                 <div style={{ color: "#059669", fontSize: "12px", marginTop: "4px" }}>
-                  ✓ Đã được bàn giao cho đối tác vận chuyển
+                  {order.orderStatus === "SHIPPING" || order.orderStatus === "DELIVERED"
+                    ? "✓ Đã được bàn giao cho đối tác vận chuyển"
+                    : "⏳ Chờ shop xác nhận và chuẩn bị hàng"}
                 </div>
               </div>
             </div>
@@ -234,13 +317,13 @@ export default function OrderDetailPage() {
                       Phân loại: {item.variantName || item.variantSku || "Mặc định"}
                     </div>
                     <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "2px" }}>
-                      Số lượng: x{item.quantity}
+                      Số lượng: x{item.quantity || 1}
                     </div>
                   </div>
 
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--primary)" }}>
-                      {formatCurrency((item.price || 0) * (item.quantity || 1))}
+                      {formatCurrency((item.unitPrice || item.price || 0) * (item.quantity || 1))}
                     </div>
                   </div>
                 </div>
@@ -248,74 +331,41 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          {/* Payment Breakdown & Actions */}
+          {/* Payment Breakdown Card */}
           <div
             className="card"
             style={{
-              padding: "24px",
+              padding: "20px 24px",
               backgroundColor: "var(--surface)",
               borderRadius: "var(--r-lg)",
               border: "1px solid var(--border-light)",
-              display: "flex",
-              flexDirection: "column",
-              gap: "14px",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-secondary)" }}>
-              <span>Tổng tiền hàng:</span>
-              <strong style={{ color: "var(--text)" }}>{formatCurrency(order.itemsSubtotal || order.totalAmount)}</strong>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-secondary)" }}>
-              <span>Phí vận chuyển:</span>
-              <strong style={{ color: "var(--text)" }}>{formatCurrency(order.shippingFee || 25000)}</strong>
-            </div>
-
-            {order.voucherDiscount > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#059669" }}>
-                <span>Giảm giá voucher:</span>
-                <span>-{formatCurrency(order.voucherDiscount)}</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "13px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-secondary)" }}>
+                <span>Tổng tiền hàng</span>
+                <strong>{formatCurrency(itemsSubtotal || totalAmount)}</strong>
               </div>
-            )}
-
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-secondary)" }}>
-              <span>Phương thức thanh toán:</span>
-              <strong>{order.paymentMethod === "VNPAY" ? "Cổng VNPAY (Đã thanh toán)" : "Thanh toán khi nhận hàng (COD)"}</strong>
-            </div>
-
-            <div style={{ height: "1px", backgroundColor: "var(--border-light)", margin: "4px 0" }} />
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontSize: "15px", fontWeight: "700" }}>Tổng số tiền:</span>
-              <strong style={{ fontSize: "24px", color: "var(--primary)", fontWeight: "900" }}>
-                {formatCurrency(order.totalAmount || 0)}
-              </strong>
-            </div>
-
-            {/* Actions bottom bar */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "12px",
-                marginTop: "16px",
-                paddingTop: "16px",
-                borderTop: "1px solid var(--border-light)",
-              }}
-            >
-              <Button
-                variant="outline"
-                icon={RotateCcw}
-                onClick={() => (window.location.href = `/refunds?orderId=${order.id}`)}
-              >
-                Yêu Cầu Trả Hàng / Hoàn Tiền
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => (window.location.href = "/products")}
-              >
-                Mua Lại
-              </Button>
+              <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-secondary)" }}>
+                <span>Phí vận chuyển</span>
+                <strong>{formatCurrency(shippingFee)}</strong>
+              </div>
+              {order.discountAmount > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", color: "#059669" }}>
+                  <span>Voucher giảm giá</span>
+                  <strong>-{formatCurrency(order.discountAmount)}</strong>
+                </div>
+              )}
+              <div style={{ height: "1px", backgroundColor: "var(--border-light)", margin: "4px 0" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <span style={{ fontSize: "15px", fontWeight: "700" }}>Tổng số tiền:</span>
+                <strong style={{ fontSize: "22px", color: "var(--primary)", fontWeight: "900" }}>
+                  {formatCurrency(totalAmount || itemsSubtotal + shippingFee)}
+                </strong>
+              </div>
+              <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                Phương thức thanh toán: <strong>{order.paymentMethod || order.payment?.method || "Thanh toán khi nhận hàng (COD)"}</strong>
+              </div>
             </div>
           </div>
         </div>
