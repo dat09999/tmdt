@@ -69,7 +69,8 @@ public class AuthController {
                 .httpOnly(true)
                 .secure(true) // localhost test HTTP thì để false, production HTTPS thì phải true
                 .path("/auth")
-                .sameSite("None") // nếu frontend/backend khác site thì thường phải là "None"
+                .sameSite("None")
+                .partitioned(true)// nếu frontend/backend khác site thì thường phải là "None"
                 .maxAge(7 * 24 * 60 * 60)
                 .build();
         log.info("dang nhap 1");

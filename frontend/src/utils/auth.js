@@ -3,8 +3,21 @@ export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   "http://localhost:8080";
 
+const PROFILE_STORAGE_KEY = "domix_user_profile";
+
+// Load cached non-sensitive user profile on startup (for smooth UI rendering)
+function getCachedProfile() {
+  try {
+    const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Access Token is STRICTLY IN-MEMORY ONLY (Never stored in localStorage/sessionStorage)
 let accessToken = null;
-let currentUser = null;
+let currentUser = getCachedProfile();
 
 const listeners = new Set();
 
@@ -19,15 +32,47 @@ export function onAuthChange(callback) {
   return () => listeners.delete(callback);
 }
 
-function setSession(data) {
-  accessToken = data?.accessToken || null;
-  currentUser = data || null;
+export function setSession(data) {
+  // 1. Token chỉ lưu trong RAM (In-Memory)
+  accessToken = data?.accessToken || data?.token || null;
+
+  // 2. Thông tin profile thông thường (Tên, email, role, avatar) lưu vào cache để UI mượt
+  const profileInfo =
+    data?.user ||
+    (data?.userId || data?.email
+      ? {
+          userId: data.userId,
+          email: data.email,
+          fullName: data.fullName || data.name,
+          phone: data.phone || data.phoneNumber,
+          role: data.role,
+          address: data.addresses || data.address || [],
+          active: data.active,
+        }
+      : currentUser) ||
+    null;
+
+  currentUser = profileInfo;
+
+  try {
+    if (currentUser) {
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem(PROFILE_STORAGE_KEY);
+    }
+  } catch {}
+
   notify();
 }
 
-function clearSession() {
+export function clearSession() {
   accessToken = null;
   currentUser = null;
+
+  try {
+    localStorage.removeItem(PROFILE_STORAGE_KEY);
+  } catch {}
+
   notify();
 }
 
@@ -40,9 +85,7 @@ export function getCurrentUser() {
 }
 
 export function getAuthHeader() {
-  return accessToken
-    ? { Authorization: `Bearer ${accessToken}` }
-    : {};
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 }
 
 async function parseResponse(response) {
@@ -61,6 +104,10 @@ async function parseResponse(response) {
   return data;
 }
 
+/**
+ * Đăng nhập cục bộ (Email & Password)
+ * Backend trả về Access Token trong body và tự động đặt HttpOnly Cookie (refreshToken)
+ */
 export async function loginLocal(email, password) {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: "POST",
@@ -68,13 +115,13 @@ export async function loginLocal(email, password) {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    credentials: "include",
+    credentials: "include", // Nhận và lưu HttpOnly Cookie từ backend
     body: JSON.stringify({ email: email.trim(), password }),
   });
 
   const data = await parseResponse(response);
 
-  if (!data?.accessToken) {
+  if (!data?.accessToken && !data?.token && !data?.userId) {
     throw new Error("Không nhận được access token từ server");
   }
 
@@ -89,6 +136,7 @@ export async function registerLocal(payload) {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
+    credentials: "include",
     body: JSON.stringify(payload),
   });
 
@@ -101,6 +149,10 @@ export function loginWithGoogle() {
 
 let refreshPromise = null;
 
+/**
+ * Làm mới Access Token thông qua HttpOnly Cookie refreshToken
+ * Được gọi tự động khi F5 / mở lại trang hoặc khi Access Token hết hạn
+ */
 export async function refreshAccessToken() {
   if (refreshPromise) {
     return refreshPromise;
@@ -110,7 +162,10 @@ export async function refreshAccessToken() {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
         method: "POST",
-        credentials: "include",
+        credentials: "include", // Tự động gửi kèm HttpOnly Cookie
+        headers: {
+          Accept: "application/json",
+        },
       });
 
       if (!response.ok) {
@@ -120,9 +175,9 @@ export async function refreshAccessToken() {
 
       const data = await parseResponse(response);
       setSession(data);
-      return data.accessToken;
-    } catch {
-      clearSession();
+      return data?.accessToken || data?.token || null;
+    } catch (err) {
+      // Khi offline / lỗi mạng: giữ profile hiển thị tạm nhưng không có token
       return null;
     } finally {
       refreshPromise = null;
@@ -132,28 +187,37 @@ export async function refreshAccessToken() {
   return refreshPromise;
 }
 
+/**
+ * Fetch wrapper bảo mật tự động gửi Bearer token và HttpOnly cookie
+ * Tự động silent-refresh token nếu nhận lỗi 401
+ */
 export async function authFetch(url, options = {}) {
   const isFormData = options.body instanceof FormData;
-  const doFetch = () =>
-    fetch(url, {
-      credentials: "include",
+  const doFetch = (tokenOverride) => {
+    const headers = {
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      Accept: "application/json",
+      ...(tokenOverride ? { Authorization: `Bearer ${tokenOverride}` } : getAuthHeader()),
+      ...(options.headers || {}),
+    };
+
+    return fetch(url, {
+      credentials: "include", // Luôn gửi kèm cookie
       ...options,
-      headers: {
-        ...(isFormData ? {} : { "Content-Type": "application/json" }),
-        Accept: "application/json",
-        ...getAuthHeader(),
-        ...(options.headers || {}),
-      },
+      headers,
     });
+  };
 
   let response = await doFetch();
 
+  // Nếu Access Token hết hạn (401), tự động refresh và retry 1 lần
   if (response.status === 401) {
     const newToken = await refreshAccessToken();
 
     if (newToken) {
-      response = await doFetch();
+      response = await doFetch(newToken);
     } else {
+      clearSession();
       window.location.href = "/login";
       throw new Error("Phiên đăng nhập đã hết hạn");
     }
@@ -162,6 +226,9 @@ export async function authFetch(url, options = {}) {
   return parseResponse(response);
 }
 
+/**
+ * Đăng xuất: Yêu cầu backend xóa HttpOnly cookie và xóa sạch token trong RAM + profile cache
+ */
 export async function logout() {
   clearSession();
 
@@ -171,7 +238,7 @@ export async function logout() {
       credentials: "include",
     });
   } catch {
-    // Phiên phía client vẫn được xóa nếu backend tạm thời không phản hồi.
+    // Phiên client đã được xóa sạch
   }
 }
 
