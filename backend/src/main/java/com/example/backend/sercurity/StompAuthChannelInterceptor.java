@@ -53,7 +53,13 @@
 
                     UserPrincipal principal = new UserPrincipal(user);
                     Principal authToken = new UsernamePasswordAuthenticationToken(
-                            principal, null, principal.getAuthorities());
+                            principal, null, principal.getAuthorities()
+                    ) {
+                        @Override
+                        public String getName() {
+                            return principal.getId();
+                        }
+                    };
 
                     accessor.setUser(authToken);
                     log.info("WebSocket CONNECT thành công: userId={}", principal.getId());

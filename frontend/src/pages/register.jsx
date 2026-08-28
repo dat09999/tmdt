@@ -39,7 +39,7 @@ export default function RegisterPage() {
       await registerLocal({
         fullName: formData.fullName,
         email: formData.email,
-        phoneNumber: formData.phoneNumber,
+        phone: formData.phoneNumber,
         password: formData.password,
       });
 

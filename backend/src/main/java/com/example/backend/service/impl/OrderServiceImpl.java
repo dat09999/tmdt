@@ -321,6 +321,7 @@ public class OrderServiceImpl implements OrderService {
                 .transactionCode(null)
                 .paidAt(null)
                 .build();
+        String initialStatus = "COD".equalsIgnoreCase(paymentMethodNormalized) ? "PROCESSING" : "PENDING";
 
         Order order = Order.builder()
                 .buyerId(buyerId)
@@ -332,7 +333,7 @@ public class OrderServiceImpl implements OrderService {
                 .shippingFee(SHIPPING_FEE)
                 .discountAmount(discountAmount)
                 .totalAmount(totalAmount)
-                .orderStatus("PENDING")
+                .orderStatus(initialStatus)
                 .couponCode(coupon == null ? null : coupon.getCode())
                 .note(note)
                 .payment(payment)
@@ -622,10 +623,14 @@ public class OrderServiceImpl implements OrderService {
                 .set("payment.status", "PAID")
                 .set("payment.transactionCode", requireText(transactionCode, "transactionCode không được để trống"))
                 .set("payment.paidAt", now)
-                .set("orderStatus", "COMPLETED")
+                .set("orderStatus", "PROCESSING") // ✅ ĐÚNG: Chuyển sang PROCESSING (Người bán đang chuẩn bị hàng)
                 .set("updatedAt", now)
                 .push("statusLogs", OrderStatusLog.builder()
-                        .status("COMPLETED").note("Thanh toán thành công").updatedBy("SYSTEM").timestamp(now).build());
+                        .status("PROCESSING")
+                        .note("Thanh toán thành công qua VNPay, đơn hàng đang được người bán chuẩn bị")
+                        .updatedBy("SYSTEM")
+                        .timestamp(now)
+                        .build());
 
         // FIX #1: chỉ áp dụng nếu order VẪN đang PENDING -> webhook gọi trùng lần 2 sẽ
         // không khớp điều kiện (order đã COMPLETED), findAndModify trả về null, không xử lý lại.

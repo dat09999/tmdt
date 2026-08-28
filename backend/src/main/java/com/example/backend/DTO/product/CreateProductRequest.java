@@ -1,6 +1,7 @@
 package com.example.backend.DTO.product;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
@@ -30,5 +31,6 @@ public class CreateProductRequest {
     private Long basePrice;
 
     private List<ProductImageRequest> images;
+    @NotEmpty(message = "Sản phẩm phải có ít nhất một phân loại/biến thể")
     private List<ProductVariantRequest> variants;
 }
