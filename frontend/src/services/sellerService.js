@@ -6,55 +6,80 @@ import { MOCK_ORDERS } from "../mocks/mockOrders";
 export const sellerService = {
   // GET /shops/owner/{ownerId}
   async getShopByOwnerId(ownerId) {
+    if (!ownerId) return null;
     return safeFetch(
       async () => {
         return await authFetch(`${API_BASE_URL}/shops/owner/${ownerId}`);
       },
-      {
-        id: "shop-apple-official",
-        shopName: "Apple Flagship Store",
-        ownerId,
-        rating: 4.9,
-      }
+      null
+    );
+  },
+
+  // POST /shops - Body: CreateShopRequest
+  async createShop(shopData) {
+    return safeFetch(
+      async () => {
+        return await authFetch(`${API_BASE_URL}/shops`, {
+          method: "POST",
+          body: JSON.stringify(shopData),
+        });
+      },
+      { id: `shop-${Date.now()}`, ...shopData }
     );
   },
 
   // GET /shops/{shopId}/statistics
   async getDashboardStats(shopId) {
+    if (!shopId) {
+      return {
+        totalRevenue: 0,
+        totalOrders: 0,
+        pendingOrders: 0,
+        outOfStockProducts: 0,
+        totalProducts: 0,
+        rating: 5.0,
+        responseRate: "100%",
+      };
+    }
     return safeFetch(
       async () => {
         const res = await authFetch(`${API_BASE_URL}/shops/${shopId}/statistics`);
         return {
-          totalRevenue: res?.revenue || 128450000,
-          totalOrders: res?.orderCount || 320,
-          pendingOrders: 14,
-          outOfStockProducts: 3,
-          totalProducts: res?.productCount || 48,
-          rating: res?.averageRating || 4.9,
+          totalRevenue: res?.revenue ?? 0,
+          totalOrders: res?.orderCount ?? 0,
+          pendingOrders: res?.pendingCount ?? 0,
+          outOfStockProducts: res?.outOfStockCount ?? 0,
+          totalProducts: res?.productCount ?? 0,
+          rating: res?.averageRating ?? 5.0,
           responseRate: "99%",
         };
       },
       {
-        totalRevenue: 128450000,
-        totalOrders: 320,
-        pendingOrders: 14,
-        outOfStockProducts: 3,
-        totalProducts: 48,
-        rating: 4.9,
-        responseRate: "99%",
+        totalRevenue: 0,
+        totalOrders: 0,
+        pendingOrders: 0,
+        outOfStockProducts: 0,
+        totalProducts: 0,
+        rating: 5.0,
+        responseRate: "100%",
       }
     );
   },
 
-  // GET /products/shop/{shopId}
+  // GET /products?shopId={shopId}
   async getProducts(shopId) {
     return safeFetch(
       async () => {
-        const res = await fetch(`${API_BASE_URL}/products/shop/${shopId}`);
-        if (!res.ok) throw new Error("Fetch shop products failed");
-        return await res.json();
+        const url = shopId
+          ? `${API_BASE_URL}/products?shopId=${encodeURIComponent(shopId)}`
+          : `${API_BASE_URL}/products`;
+        const res = await authFetch(url);
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.content)) return res.content;
+        if (res && Array.isArray(res.products)) return res.products;
+        return [];
       },
-      MOCK_PRODUCTS
+      []
     );
   },
 
@@ -98,12 +123,13 @@ export const sellerService = {
 
   // GET /orders/shop/{shopId}
   async getOrders(shopId) {
+    if (!shopId) return [];
     return safeFetch(
       async () => {
         const res = await authFetch(`${API_BASE_URL}/orders/shop/${shopId}`);
         return Array.isArray(res) ? res : [];
       },
-      MOCK_ORDERS
+      []
     );
   },
 
@@ -132,16 +158,13 @@ export const sellerService = {
 
   // GET /coupons/shop/{shopId}
   async getCoupons(shopId) {
+    if (!shopId) return [];
     return safeFetch(
       async () => {
-        const res = await fetch(`${API_BASE_URL}/coupons/shop/${shopId}`);
-        if (!res.ok) throw new Error("Fetch coupons failed");
-        return await res.json();
+        const res = await authFetch(`${API_BASE_URL}/coupons/shop/${shopId}`);
+        return Array.isArray(res) ? res : [];
       },
-      [
-        { id: "c-1", code: "SHOP50K", discountValue: 50000, discountType: "FIXED", minOrderValue: 300000, expiry: "2026-12-31", usedCount: 45 },
-        { id: "c-2", code: "FREESHIP", discountValue: 25000, discountType: "FIXED", minOrderValue: 150000, expiry: "2026-12-31", usedCount: 120 },
-      ]
+      []
     );
   },
 
@@ -154,28 +177,7 @@ export const sellerService = {
           body: JSON.stringify({ shopId, ...couponData }),
         });
       },
-      { id: `c-${Date.now()}`, ...couponData, usedCount: 0 }
+      { id: `c-${Date.now()}`, ...couponData }
     );
-  },
-
-  // PATCH /coupons/{couponId}/deactivate
-  async deactivateCoupon(couponId) {
-    return safeFetch(async () => {
-      return await authFetch(`${API_BASE_URL}/coupons/${couponId}/deactivate`, {
-        method: "PATCH",
-      });
-    }, null);
-  },
-
-  // POST /shops & PUT /shops/{shopId}
-  async saveShopInfo(shopId, shopData) {
-    const method = shopId ? "PUT" : "POST";
-    const url = shopId ? `${API_BASE_URL}/shops/${shopId}` : `${API_BASE_URL}/shops`;
-    return safeFetch(async () => {
-      return await authFetch(url, {
-        method,
-        body: JSON.stringify(shopData),
-      });
-    }, shopData);
   },
 };
