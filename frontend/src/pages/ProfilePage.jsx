@@ -5,6 +5,7 @@ import Footer from "../components/layout/Footer";
 import MobileNav from "../components/layout/MobileNav";
 import Button from "../components/common/Button";
 import Modal from "../components/common/Modal";
+import AddressAutocomplete from "../components/common/AddressAutocomplete";
 import { useAuth } from "./Authcontext";
 import { userService } from "../services/userService";
 import { couponService } from "../services/couponService";
@@ -26,7 +27,11 @@ import {
 
 export default function ProfilePage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState("profile"); // "profile" | "addresses" | "password" | "vouchers"
+  const [activeTab, setActiveTab] = useState(() => {
+    const p = window.location.pathname;
+    if (p === "/addresses" || p === "/address-book") return "addresses";
+    return "profile";
+  });
   const [toastMessage, setToastMessage] = useState("");
 
   // Profile Form state
@@ -923,13 +928,19 @@ export default function ProfilePage() {
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-              Địa Chỉ Chi Tiết (Số nhà, đường, phường, quận, tỉnh/thành):
+              Địa Chỉ Chi Tiết (Có gợi ý tìm kiếm bản đồ):
             </label>
-            <textarea
-              rows={3}
+            <AddressAutocomplete
               value={addressForm.address}
-              onChange={(e) => setAddressForm({ ...addressForm, address: e.target.value })}
-              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+              onChange={(val) => setAddressForm({ ...addressForm, address: val })}
+              onPlaceSelect={(place) => {
+                setAddressForm((prev) => ({
+                  ...prev,
+                  address: place.formattedAddress || place.detail,
+                  lat: place.lat,
+                  lng: place.lng,
+                }));
+              }}
               required
             />
           </div>

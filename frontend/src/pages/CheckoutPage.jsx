@@ -5,7 +5,9 @@ import Footer from "../components/layout/Footer";
 import MobileNav from "../components/layout/MobileNav";
 import Button from "../components/common/Button";
 import Modal from "../components/common/Modal";
+import AddressAutocomplete from "../components/common/AddressAutocomplete";
 import { orderService } from "../services/orderService";
+import { userService } from "../services/userService";
 import { useAuth } from "./Authcontext";
 import { formatCurrency } from "../utils/formatters";
 import { PAYMENT_METHODS, SHIPPING_PROVIDERS } from "../utils/constants";
@@ -17,6 +19,7 @@ import {
   ShieldCheck,
   ChevronRight,
   AlertCircle,
+  Plus,
 } from "lucide-react";
 
 export default function CheckoutPage() {
@@ -29,13 +32,68 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Address state
+  // Saved Addresses state
   const [addressModalOpen, setAddressModalOpen] = useState(false);
-  const [recipient, setRecipient] = useState({
-    name: user?.fullName || "Nguyễn Minh Khang",
-    phone: "0912 345 678",
-    address: "Số 88 Đường Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh",
+  const [addresses, setAddresses] = useState([
+    {
+      id: "addr-1",
+      name: user?.fullName || "Nguyễn Minh Khang",
+      phone: "0912 345 678",
+      address: "Số 88 Đường Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh",
+      isDefault: true,
+      type: "Nhà Riêng",
+    },
+    {
+      id: "addr-2",
+      name: (user?.fullName || "Nguyễn Minh Khang") + " (Văn Phòng)",
+      phone: "0912 345 678",
+      address: "Tòa nhà Bitexco, Số 2 Hải Triều, Bến Nghé, Quận 1, TP. Hồ Chí Minh",
+      isDefault: false,
+      type: "Văn Phòng",
+    },
+  ]);
+  const [selectedAddressId, setSelectedAddressId] = useState("addr-1");
+  const [tempSelectedId, setTempSelectedId] = useState("addr-1");
+
+  // New Address form inside checkout modal
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [newAddrForm, setNewAddrForm] = useState({
+    name: user?.fullName || "",
+    phone: "",
+    address: "",
+    type: "Nhà Riêng",
+    lat: null,
+    lng: null,
+    isDefault: false,
   });
+
+  // Fetch real addresses of user from API
+  useEffect(() => {
+    if (!user?.userId) return;
+    userService.getUserProfile(user.userId).then((profile) => {
+      if (profile && Array.isArray(profile.address) && profile.address.length > 0) {
+        const mapped = profile.address.map((a, idx) => ({
+          id: a.id || `addr-${idx}`,
+          name: a.fullName || profile.fullName || "Người Nhận",
+          phone: a.phone || profile.phone || "0912 345 678",
+          address: a.detail || `${a.ward || ""}, ${a.district || ""}, ${a.province || ""}`.trim(),
+          isDefault: !!a.isDefault,
+          lat: a.lat,
+          lng: a.lng,
+          type: "Nhà Riêng",
+        }));
+        setAddresses(mapped);
+        const defaultAddr = mapped.find((a) => a.isDefault) || mapped[0];
+        if (defaultAddr) {
+          setSelectedAddressId(defaultAddr.id);
+          setTempSelectedId(defaultAddr.id);
+        }
+      }
+    });
+  }, [user?.userId]);
+
+  const currentAddress =
+    addresses.find((a) => a.id === selectedAddressId) || addresses[0];
 
   useEffect(() => {
     try {
@@ -73,15 +131,15 @@ export default function CheckoutPage() {
       const orderPayload = {
         buyerId: user?.userId || "guest",
         shippingAddress: {
-          fullName: recipient.name,
-          phone: recipient.phone,
-          detail: recipient.address,
-          province: recipient.province || "",
-          district: recipient.district || "",
-          ward: recipient.ward || "",
-          lat: recipient.lat || null,
-          lng: recipient.lng || null,
-          isDefault: true,
+          fullName: currentAddress?.name || "Người Nhận",
+          phone: currentAddress?.phone || "0912345678",
+          detail: currentAddress?.address || "",
+          province: currentAddress?.province || "",
+          district: currentAddress?.district || "",
+          ward: currentAddress?.ward || "",
+          lat: currentAddress?.lat || null,
+          lng: currentAddress?.lng || null,
+          isDefault: !!currentAddress?.isDefault,
         },
         selectedItems: items.map((item) => ({
           productId: item.productId,
@@ -193,9 +251,38 @@ export default function CheckoutPage() {
                 </div>
 
                 <div style={{ fontSize: "14px", lineHeight: "1.6" }}>
-                  <strong>{recipient.name}</strong> ({recipient.phone})
-                  <div style={{ color: "var(--text-secondary)", marginTop: "2px" }}>
-                    {recipient.address}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <strong>{currentAddress?.name}</strong>
+                    <span style={{ color: "var(--text-tertiary)" }}>|</span>
+                    <span style={{ color: "var(--text)" }}>{currentAddress?.phone}</span>
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        padding: "1px 6px",
+                        borderRadius: "3px",
+                        backgroundColor: "var(--surface-muted)",
+                        border: "1px solid var(--border)",
+                      }}
+                    >
+                      {currentAddress?.type || "Nhà Riêng"}
+                    </span>
+                    {currentAddress?.isDefault && (
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          backgroundColor: "var(--primary)",
+                          color: "#fff",
+                          padding: "1px 6px",
+                          borderRadius: "3px",
+                          fontWeight: "700",
+                        }}
+                      >
+                        Mặc định
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ color: "var(--text-secondary)", marginTop: "4px" }}>
+                    {currentAddress?.address}
                   </div>
                 </div>
               </div>
@@ -456,49 +543,352 @@ export default function CheckoutPage() {
         </div>
       </main>
 
-      {/* Change Address Modal */}
+      {/* Change Address Modal - Shopee Style */}
       <Modal
         isOpen={addressModalOpen}
-        onClose={() => setAddressModalOpen(false)}
-        title="Địa Chỉ Nhận Hàng"
+        onClose={() => {
+          setAddressModalOpen(false);
+          setIsAddingNew(false);
+          setTempSelectedId(selectedAddressId);
+        }}
+        title="Địa Chỉ Của Tôi"
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <div>
-            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-              Họ và Tên Người Nhận
-            </label>
-            <input
-              type="text"
-              value={recipient.name}
-              onChange={(e) => setRecipient({ ...recipient, name: e.target.value })}
-              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-              Số Điện Thoại
-            </label>
-            <input
-              type="text"
-              value={recipient.phone}
-              onChange={(e) => setRecipient({ ...recipient, phone: e.target.value })}
-              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-              Địa Chỉ Chi Tiết
-            </label>
-            <textarea
-              rows={3}
-              value={recipient.address}
-              onChange={(e) => setRecipient({ ...recipient, address: e.target.value })}
-              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
-            />
-          </div>
-          <Button variant="primary" block onClick={() => setAddressModalOpen(false)}>
-            Xác Nhận Địa Chỉ
-          </Button>
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          {!isAddingNew ? (
+            <>
+              {/* Address List */}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                  maxHeight: "360px",
+                  overflowY: "auto",
+                }}
+              >
+                {addresses.map((addr) => {
+                  const isSelected = tempSelectedId === addr.id;
+                  return (
+                    <div
+                      key={addr.id}
+                      onClick={() => setTempSelectedId(addr.id)}
+                      style={{
+                        padding: "14px",
+                        borderRadius: "var(--r-md)",
+                        border: isSelected
+                          ? "1.5px solid var(--primary)"
+                          : "1px solid var(--border)",
+                        backgroundColor: isSelected
+                          ? "var(--primary-subtle)"
+                          : "var(--surface)",
+                        cursor: "pointer",
+                        display: "flex",
+                        gap: "12px",
+                        alignItems: "flex-start",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="selectedAddress"
+                        checked={isSelected}
+                        onChange={() => setTempSelectedId(addr.id)}
+                        style={{ marginTop: "4px", accentColor: "var(--primary)" }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            marginBottom: "4px",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <strong style={{ fontSize: "14px" }}>{addr.name}</strong>
+                          <span style={{ color: "var(--text-tertiary)" }}>|</span>
+                          <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                            {addr.phone}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              padding: "1px 6px",
+                              borderRadius: "3px",
+                              backgroundColor: "var(--surface-muted)",
+                              border: "1px solid var(--border)",
+                            }}
+                          >
+                            {addr.type || "Nhà Riêng"}
+                          </span>
+                          {addr.isDefault && (
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                backgroundColor: "var(--primary)",
+                                color: "#fff",
+                                padding: "1px 6px",
+                                borderRadius: "3px",
+                                fontWeight: "700",
+                              }}
+                            >
+                              Mặc định
+                            </span>
+                          )}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: "13px",
+                            color: "var(--text-secondary)",
+                            lineHeight: "1.4",
+                          }}
+                        >
+                          {addr.address}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add New Address Button */}
+              <button
+                type="button"
+                onClick={() => setIsAddingNew(true)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  padding: "10px",
+                  border: "1px dashed var(--primary)",
+                  borderRadius: "var(--r-sm)",
+                  color: "var(--primary)",
+                  backgroundColor: "var(--primary-light)",
+                  fontWeight: "700",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                <Plus size={16} />
+                <span>Thêm Địa Chỉ Mới</span>
+              </button>
+
+              {/* Modal Actions */}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "10px",
+                  marginTop: "8px",
+                  paddingTop: "12px",
+                  borderTop: "1px solid var(--border-light)",
+                }}
+              >
+                <Button
+                  variant="outline"
+                  size="md"
+                  onClick={() => {
+                    setAddressModalOpen(false);
+                    setTempSelectedId(selectedAddressId);
+                  }}
+                >
+                  Hủy
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => {
+                    setSelectedAddressId(tempSelectedId);
+                    setAddressModalOpen(false);
+                  }}
+                >
+                  Xác Nhận
+                </Button>
+              </div>
+            </>
+          ) : (
+            /* Inline Add New Address Form */
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newAddrForm.name || !newAddrForm.phone || !newAddrForm.address) {
+                  return;
+                }
+                const newId = `addr-${Date.now()}`;
+                const newAddrItem = {
+                  id: newId,
+                  name: newAddrForm.name,
+                  phone: newAddrForm.phone,
+                  address: newAddrForm.address,
+                  type: newAddrForm.type,
+                  lat: newAddrForm.lat,
+                  lng: newAddrForm.lng,
+                  isDefault: newAddrForm.isDefault || addresses.length === 0,
+                };
+
+                // Call backend API if user logged in
+                if (user?.userId) {
+                  await userService.addAddress(user.userId, {
+                    fullName: newAddrForm.name,
+                    phone: newAddrForm.phone,
+                    detail: newAddrForm.address,
+                    lat: newAddrForm.lat,
+                    lng: newAddrForm.lng,
+                    isDefault: !!newAddrForm.isDefault,
+                  });
+                }
+
+                setAddresses([newAddrItem, ...addresses]);
+                setSelectedAddressId(newId);
+                setTempSelectedId(newId);
+                setIsAddingNew(false);
+                setNewAddrForm({
+                  name: user?.fullName || "",
+                  phone: "",
+                  address: "",
+                  type: "Nhà Riêng",
+                  lat: null,
+                  lng: null,
+                  isDefault: false,
+                });
+              }}
+              style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+            >
+              <div>
+                <label
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    display: "block",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Họ và Tên Người Nhận
+                </label>
+                <input
+                  type="text"
+                  value={newAddrForm.name}
+                  onChange={(e) =>
+                    setNewAddrForm({ ...newAddrForm, name: e.target.value })
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "4px",
+                  }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    display: "block",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Số Điện Thoại
+                </label>
+                <input
+                  type="tel"
+                  value={newAddrForm.phone}
+                  onChange={(e) =>
+                    setNewAddrForm({ ...newAddrForm, phone: e.target.value })
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "4px",
+                  }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    display: "block",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Địa Chỉ Chi Tiết (Tìm kiếm & gợi ý bản đồ)
+                </label>
+                <AddressAutocomplete
+                  value={newAddrForm.address}
+                  onChange={(val) =>
+                    setNewAddrForm((prev) => ({ ...prev, address: val }))
+                  }
+                  onPlaceSelect={(place) => {
+                    setNewAddrForm((prev) => ({
+                      ...prev,
+                      address: place.formattedAddress || place.detail,
+                      lat: place.lat,
+                      lng: place.lng,
+                    }));
+                  }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    display: "block",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Loại Địa Chỉ
+                </label>
+                <select
+                  value={newAddrForm.type}
+                  onChange={(e) =>
+                    setNewAddrForm({ ...newAddrForm, type: e.target.value })
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "4px",
+                    backgroundColor: "#fff",
+                  }}
+                >
+                  <option value="Nhà Riêng">Nhà Riêng</option>
+                  <option value="Văn Phòng">Văn Phòng / Công Ty</option>
+                </select>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "10px",
+                  marginTop: "8px",
+                }}
+              >
+                <Button
+                  variant="outline"
+                  size="md"
+                  type="button"
+                  onClick={() => setIsAddingNew(false)}
+                >
+                  Quay Lại
+                </Button>
+                <Button variant="primary" size="md" type="submit">
+                  Lưu & Chọn Địa Chỉ
+                </Button>
+              </div>
+            </form>
+          )}
         </div>
       </Modal>
 

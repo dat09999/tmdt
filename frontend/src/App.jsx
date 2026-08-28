@@ -23,7 +23,7 @@ function resolvePage(path, isAuthenticated) {
   if (path === "/login") return <LoginPage />;
   if (path === "/oauth2/success") return <OAuth2SuccessPage />;
   
-  if (path === "/profile") return isAuthenticated ? <ProfilePage /> : <LoginPage />;
+  if (path === "/profile" || path === "/addresses" || path === "/address-book") return isAuthenticated ? <ProfilePage /> : <LoginPage />;
   if (path === "/cart") return <CartPage />;
   if (path === "/checkout") return <CheckoutPage />;
   if (path === "/payment/vnpay-result") return <VnpayResultPage />;
