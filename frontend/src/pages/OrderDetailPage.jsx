@@ -1,225 +1,328 @@
-import { useEffect, useState } from "react";
-import { API_BASE_URL, authFetch } from "../utils/auth";
-import { useAuth } from "./Authcontext";
-import Header from "../components/Header";
-import "./OrderDetailPage.css";
-
-// Chỉ đơn ở trạng thái này mới được đánh giá.
-// Đổi thành "COMPLETED" ở đây nếu backend của bạn dùng đúng chuỗi đó
-// thay vì "DELIVERED".
-const REVIEWABLE_STATUS = "COMPLETED";
+import React, { useState, useEffect } from "react";
+import Header from "../components/layout/Header";
+import SubNav from "../components/layout/SubNav";
+import Footer from "../components/layout/Footer";
+import MobileNav from "../components/layout/MobileNav";
+import OrderTimeline from "../components/order/OrderTimeline";
+import Button from "../components/common/Button";
+import { orderService } from "../services/orderService";
+import { formatCurrency, formatDate } from "../utils/formatters";
+import { ORDER_STATUS } from "../utils/constants";
+import {
+  MapPin,
+  Truck,
+  CreditCard,
+  RotateCcw,
+  ArrowLeft,
+  Store,
+  CheckCircle,
+} from "lucide-react";
 
 export default function OrderDetailPage() {
-  const { user } = useAuth();
+  const orderId = window.location.pathname.split("/orders/")[1] || "ord-1001";
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
-
-  const [openReviewKey, setOpenReviewKey] = useState(null);
-  const [reviewDrafts, setReviewDrafts] = useState({});
-  const [submittedKeys, setSubmittedKeys] = useState(new Set());
-  const [submittingKey, setSubmittingKey] = useState(null);
 
   useEffect(() => {
-    if (!user?.userId) {
-      window.location.href = "/login";
-      return;
-    }
-    const orderId = window.location.pathname.split("/")[2];
-    fetchOrder(orderId);
-  }, []);
+    orderService
+      .getOrderById(orderId)
+      .then((data) => setOrder(data))
+      .catch((err) => console.error("Load order detail failed:", err))
+      .finally(() => setLoading(false));
+  }, [orderId]);
 
-  const fetchOrder = async (orderId) => {
-    try {
-      setLoading(true);
-      const data = await authFetch(`${API_BASE_URL}/orders/${orderId}`);
-      setOrder(data);
-    } catch (err) {
-      setMessage(err.message || "Không tải được chi tiết đơn hàng");
-    } finally {
-      setLoading(false);
-    }
+  if (loading || !order) {
+    return (
+      <div className="page-shell">
+        <Header />
+        <div className="container" style={{ padding: "40px 16px" }}>
+          <div className="skeleton" style={{ width: "100%", height: "400px", borderRadius: "12px" }} />
+        </div>
+      </div>
+    );
+  }
+
+  const statusInfo = ORDER_STATUS[order.orderStatus] || {
+    label: order.orderStatus || "Đang xử lý",
+    color: "var(--primary)",
   };
-
-  const handleBack = () => {
-    window.location.href = "/orders";
-  };
-
-  const itemKey = (item) => `${item.productId}-${item.variantSku || ""}`;
-
-  const getDraft = (key) => reviewDrafts[key] || { rating: 5, comment: "" };
-
-  const setDraft = (key, patch) => {
-    setReviewDrafts((prev) => ({
-      ...prev,
-      [key]: { ...getDraft(key), ...patch },
-    }));
-  };
-
-  const handleSubmitReview = async (item) => {
-    const key = itemKey(item);
-    const draft = getDraft(key);
-
-    try {
-      setSubmittingKey(key);
-      await authFetch(`${API_BASE_URL}/reviews`, {
-        method: "POST",
-        body: JSON.stringify({
-          productId: item.productId,
-          orderId: order.id || order._id,
-          variantSku: item.variantSku,
-          rating: draft.rating,
-          comment: draft.comment,
-        }),
-      });
-
-      setSubmittedKeys((prev) => new Set(prev).add(key));
-      setOpenReviewKey(null);
-      setMessage("Đã gửi đánh giá, cảm ơn bạn!");
-    } catch (err) {
-      setMessage(err.message || "Không gửi được đánh giá.");
-    } finally {
-      setSubmittingKey(null);
-    }
-  };
-
-  const canReview = order?.orderStatus === REVIEWABLE_STATUS;
-  
 
   return (
-    <div className="order-detail-page">
+    <div className="page-shell">
       <Header />
-      <header className="order-detail-header">
-        <div>
-          <h1>Chi tiết đơn hàng</h1>
-          <p>{user?.email || "Khách"}</p>
-        </div>
-        <div className="order-detail-actions">
-          <button className="btn-secondary" onClick={handleBack}>
-            Quay lại đơn hàng
-          </button>
-        </div>
-      </header>
+      <SubNav />
 
-      {message && <div className="order-detail-message">{message}</div>}
+      <main className="page-content">
+        <div className="container" style={{ maxWidth: "960px" }}>
+          {/* Back button & Title */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: "16px",
+            }}
+          >
+            <a
+              href="/orders"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                fontSize: "14px",
+                fontWeight: "600",
+                color: "var(--text-secondary)",
+              }}
+            >
+              <ArrowLeft size={16} />
+              <span>Trở Lại Danh Sách Đơn Hàng</span>
+            </a>
 
-      {loading ? (
-        <div className="order-detail-empty">Đang tải chi tiết đơn hàng...</div>
-      ) : !order ? (
-        <div className="order-detail-empty">Không tìm thấy đơn hàng.</div>
-      ) : (
-        <div className="order-detail-card">
-          <section className="order-detail-summary">
-            <h2>Thông tin đơn hàng</h2>
-            <p><strong>Mã đơn:</strong> {order.orderCode || order.id}</p>
-            <p><strong>Trạng thái:</strong> {order.orderStatus || "Chưa rõ"}</p>
-            <p><strong>Ngày:</strong> {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : "-"}</p>
-            <p><strong>Phương thức:</strong> {order.paymentMethod || "Không xác định"}</p>
-            <p><strong>Tổng:</strong> {(order.totalAmount || 0).toLocaleString()} đ</p>
-          </section>
+            <div style={{ fontSize: "14px", color: "var(--text-secondary)" }}>
+              <span>MÃ ĐƠN HÀNG: </span>
+              <strong style={{ color: "var(--text)" }}>#{order.orderCode || order.id}</strong>
+              <span style={{ margin: "0 8px" }}>|</span>
+              <span
+                style={{
+                  color: statusInfo.color,
+                  fontWeight: "700",
+                  textTransform: "uppercase",
+                }}
+              >
+                {statusInfo.label}
+              </span>
+            </div>
+          </div>
 
-          <section className="order-detail-section">
-            <h2>Vận chuyển</h2>
-            <p><strong>Hãng:</strong> {order.shippingProvider || "Chưa bàn giao vận chuyển"}</p>
-            <p><strong>Mã vận đơn:</strong> {order.trackingCode || "-"}</p>
-            <p><strong>Phí vận chuyển:</strong> {(order.shippingFee || 0).toLocaleString("vi-VN")} ₫</p>
-            {order.shippedAt && <p><strong>Thời gian bàn giao:</strong> {new Date(order.shippedAt).toLocaleString("vi-VN")}</p>}
-            {order.deliveredAt && <p><strong>Thời gian giao thành công:</strong> {new Date(order.deliveredAt).toLocaleString("vi-VN")}</p>}
-          </section>
+          {/* Timeline Card */}
+          <div
+            className="card"
+            style={{
+              padding: "24px",
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--r-lg)",
+              border: "1px solid var(--border-light)",
+              marginBottom: "20px",
+            }}
+          >
+            <OrderTimeline timeline={order.timeline || []} />
+          </div>
 
-          <section className="order-detail-section">
-            <h2>Địa chỉ nhận hàng</h2>
-            <p>{order.shippingAddress?.fullName || "-"}</p>
-            <p>{order.shippingAddress?.phone || "-"}</p>
-            <p>{order.shippingAddress?.detail || "-"}</p>
-            <p>
-              {order.shippingAddress?.ward || ""}, {order.shippingAddress?.district || ""}, {order.shippingAddress?.province || ""}
-            </p>
-          </section>
+          {/* Delivery Address & Shipping Carrier Card */}
+          <div
+            className="card"
+            style={{
+              padding: "20px 24px",
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--r-lg)",
+              border: "1px solid var(--border-light)",
+              marginBottom: "20px",
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "24px",
+            }}
+          >
+            {/* Recipient info */}
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontWeight: "700",
+                  fontSize: "14px",
+                  color: "var(--text)",
+                  marginBottom: "10px",
+                }}
+              >
+                <MapPin size={16} color="var(--primary)" />
+                <span>Địa Chỉ Nhận Hàng</span>
+              </div>
+              <div style={{ fontSize: "13px", lineHeight: "1.6" }}>
+                <strong>{order.recipient?.name || "Nguyễn Minh Khang"}</strong>
+                <div>{order.recipient?.phone || "0912 345 678"}</div>
+                <div style={{ color: "var(--text-secondary)" }}>
+                  {order.recipient?.address || "Số 88 Đường Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh"}
+                </div>
+              </div>
+            </div>
 
-          <section className="order-detail-section">
-            <h2>Sản phẩm</h2>
-            {order.items?.map((item, index) => {
-              const key = itemKey(item);
-              const isOpen = openReviewKey === key;
-              const isSubmitted = submittedKeys.has(key);
-              const draft = getDraft(key);
+            {/* Carrier info */}
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontWeight: "700",
+                  fontSize: "14px",
+                  color: "var(--text)",
+                  marginBottom: "10px",
+                }}
+              >
+                <Truck size={16} color="var(--primary)" />
+                <span>Thông Tin Vận Chuyển</span>
+              </div>
+              <div style={{ fontSize: "13px", lineHeight: "1.6" }}>
+                <div>Đơn vị vận chuyển: <strong>{order.shippingProvider || "Giao Hàng Nhanh"}</strong></div>
+                {order.trackingCode && (
+                  <div style={{ color: "var(--text-secondary)" }}>
+                    Mã vận đơn: <strong style={{ color: "var(--primary)" }}>{order.trackingCode}</strong>
+                  </div>
+                )}
+                <div style={{ color: "#059669", fontSize: "12px", marginTop: "4px" }}>
+                  ✓ Đã được bàn giao cho đối tác vận chuyển
+                </div>
+              </div>
+            </div>
+          </div>
 
-              return (
-                <div key={`${key}-${index}`} className="order-detail-item">
-                  <div className="order-detail-item-row">
-                    <div>
-                      <strong>{item.productName || item.productId}</strong>
-                      <p>SKU: {item.variantSku || "-"}</p>
-                      <p>Số lượng: {item.quantity}</p>
+          {/* Product Items Table */}
+          <div
+            className="card"
+            style={{
+              padding: "20px 24px",
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--r-lg)",
+              border: "1px solid var(--border-light)",
+              marginBottom: "20px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                paddingBottom: "14px",
+                borderBottom: "1px solid var(--border-light)",
+                marginBottom: "16px",
+              }}
+            >
+              <Store size={16} color="var(--primary)" />
+              <strong style={{ fontSize: "15px" }}>{order.shop?.name || "Cửa Hàng DoMix Mall"}</strong>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {(order.items || []).map((item, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "14px",
+                    paddingBottom: idx === order.items.length - 1 ? 0 : "14px",
+                    borderBottom: idx === order.items.length - 1 ? "none" : "1px solid var(--border-light)",
+                  }}
+                >
+                  <img
+                    src={item.image || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=140"}
+                    alt={item.productName}
+                    style={{
+                      width: "70px",
+                      height: "70px",
+                      borderRadius: "6px",
+                      objectFit: "cover",
+                      border: "1px solid var(--border)",
+                    }}
+                  />
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "14px", fontWeight: "600", color: "var(--text)" }}>
+                      {item.productName || item.productId}
                     </div>
-                    <div className="order-detail-item-right">
-                      <div>{(item.price || 0).toLocaleString()} đ</div>
-
-                      {canReview && (
-                        isSubmitted ? (
-                          <span className="order-review-done">Đã đánh giá</span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn-secondary order-review-btn"
-                            onClick={() => setOpenReviewKey(isOpen ? null : key)}
-                          >
-                            {isOpen ? "Đóng" : "Đánh giá"}
-                          </button>
-                        )
-                      )}
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "3px" }}>
+                      Phân loại: {item.variantName || item.variantSku || "Mặc định"}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "2px" }}>
+                      Số lượng: x{item.quantity}
                     </div>
                   </div>
 
-                  {isOpen && !isSubmitted && (
-                    <div className="order-review-form">
-                      <div className="review-star-picker">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <button
-                            type="button"
-                            key={star}
-                            className={star <= draft.rating ? "star active" : "star"}
-                            onClick={() => setDraft(key, { rating: star })}
-                            aria-label={`${star} sao`}
-                          >
-                            ★
-                          </button>
-                        ))}
-                      </div>
-
-                      <textarea
-                        rows={3}
-                        placeholder="Chia sẻ cảm nhận của bạn về sản phẩm..."
-                        value={draft.comment}
-                        onChange={(e) => setDraft(key, { comment: e.target.value })}
-                      />
-
-                      <div className="order-review-actions">
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          disabled={submittingKey === key}
-                          onClick={() => handleSubmitReview(item)}
-                        >
-                          {submittingKey === key ? "Đang gửi..." : "Gửi đánh giá"}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          onClick={() => setOpenReviewKey(null)}
-                        >
-                          Huỷ
-                        </button>
-                      </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--primary)" }}>
+                      {formatCurrency((item.price || 0) * (item.quantity || 1))}
                     </div>
-                  )}
+                  </div>
                 </div>
-              );
-            })}
-          </section>
+              ))}
+            </div>
+          </div>
+
+          {/* Payment Breakdown & Actions */}
+          <div
+            className="card"
+            style={{
+              padding: "24px",
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--r-lg)",
+              border: "1px solid var(--border-light)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-secondary)" }}>
+              <span>Tổng tiền hàng:</span>
+              <strong style={{ color: "var(--text)" }}>{formatCurrency(order.itemsSubtotal || order.totalAmount)}</strong>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-secondary)" }}>
+              <span>Phí vận chuyển:</span>
+              <strong style={{ color: "var(--text)" }}>{formatCurrency(order.shippingFee || 25000)}</strong>
+            </div>
+
+            {order.voucherDiscount > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "#059669" }}>
+                <span>Giảm giá voucher:</span>
+                <span>-{formatCurrency(order.voucherDiscount)}</span>
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", color: "var(--text-secondary)" }}>
+              <span>Phương thức thanh toán:</span>
+              <strong>{order.paymentMethod === "VNPAY" ? "Cổng VNPAY (Đã thanh toán)" : "Thanh toán khi nhận hàng (COD)"}</strong>
+            </div>
+
+            <div style={{ height: "1px", backgroundColor: "var(--border-light)", margin: "4px 0" }} />
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <span style={{ fontSize: "15px", fontWeight: "700" }}>Tổng số tiền:</span>
+              <strong style={{ fontSize: "24px", color: "var(--primary)", fontWeight: "900" }}>
+                {formatCurrency(order.totalAmount || 0)}
+              </strong>
+            </div>
+
+            {/* Actions bottom bar */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "12px",
+                marginTop: "16px",
+                paddingTop: "16px",
+                borderTop: "1px solid var(--border-light)",
+              }}
+            >
+              <Button
+                variant="outline"
+                icon={RotateCcw}
+                onClick={() => (window.location.href = `/refunds?orderId=${order.id}`)}
+              >
+                Yêu Cầu Trả Hàng / Hoàn Tiền
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => (window.location.href = "/products")}
+              >
+                Mua Lại
+              </Button>
+            </div>
+          </div>
         </div>
-      )}
+      </main>
+
+      <Footer />
+      <MobileNav />
     </div>
   );
 }

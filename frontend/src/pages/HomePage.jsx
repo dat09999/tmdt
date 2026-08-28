@@ -1,150 +1,465 @@
-import { useEffect, useState } from "react";
-import { API_BASE_URL, authFetch } from "../utils/auth";
-import { useAuth } from "./Authcontext";
-import Header from "../components/Header";
-import "./HomePage.css";
+import React, { useEffect, useState } from "react";
+import Header from "../components/layout/Header";
+import SubNav from "../components/layout/SubNav";
+import Footer from "../components/layout/Footer";
+import MobileNav from "../components/layout/MobileNav";
+import ProductGrid from "../components/product/ProductGrid";
+import { productService } from "../services/productService";
+import { Flame, Sparkles, ChevronRight, Zap, ShieldCheck, Truck, Headphones } from "lucide-react";
+import { formatCurrency } from "../utils/formatters";
 
 export default function HomePage() {
-  const { user } = useAuth();
-  const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [flashSaleProducts, setFlashSaleProducts] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("all"); // "all" | "bestseller" | "newest" | "discount"
+
+  // Countdown timer for Flash Sale
+  const [timeLeft, setTimeLeft] = useState({ hours: 4, minutes: 28, seconds: 45 });
 
   useEffect(() => {
-    if (!user?.userId) { window.location.href = "/login"; return; }
-    fetchCategories();
-    fetchProducts();
-  }, [selectedCategory]);
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
+        if (prev.minutes > 0) return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
+        if (prev.hours > 0) return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
+        return { hours: 0, minutes: 0, seconds: 0 };
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  const fetchCategories = async () => {
-    try {
-      setCategoryLoading(true);
-      const response = await fetch(`${API_BASE_URL}/categories`);
-      const data = await response.json();
-      if (response.ok) setCategories(data);
-    } finally { setCategoryLoading(false); }
+  useEffect(() => {
+    const loadHomeData = async () => {
+      try {
+        setLoading(true);
+        const [cats, flash, prods] = await Promise.all([
+          productService.getCategories(),
+          productService.getFlashSaleProducts(),
+          productService.getProducts(),
+        ]);
+        setCategories(cats || []);
+        setFlashSaleProducts(flash || []);
+        setProducts(prods || []);
+      } catch (err) {
+        console.error("Failed to load home page data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadHomeData();
+  }, []);
+
+  const getFilteredProducts = () => {
+    if (activeTab === "bestseller") {
+      return [...products].sort((a, b) => (b.soldCount || 0) - (a.soldCount || 0));
+    }
+    if (activeTab === "discount") {
+      return [...products].sort((a, b) => (b.discountPercent || 0) - (a.discountPercent || 0));
+    }
+    return products;
   };
-
-  const fetchProducts = async () => {
-    try {
-      setLoading(true);
-      let url = `${API_BASE_URL}/products`;
-      if (search.trim()) url = `${API_BASE_URL}/products/search?keyword=${encodeURIComponent(search.trim())}`;
-      else if (selectedCategory) url = `${API_BASE_URL}/products/category/${encodeURIComponent(selectedCategory)}`;
-      const data = await authFetch(url);
-      setProducts(Array.isArray(data) ? data : []);
-    } catch (error) {
-      setMessage(error.message || "Không tải được sản phẩm");
-    } finally { setLoading(false); }
-  };
-
-  const handleSearch = async (e) => { e.preventDefault(); await fetchProducts(); };
 
   return (
     <div className="page-shell">
-      <Header>
-        <form className="topbar-search" onSubmit={handleSearch}>
-          <input
-            type="text"
-            placeholder="Tìm kiếm sản phẩm..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <button type="submit">Tìm kiếm</button>
-        </form>
-      </Header>
+      <Header />
+      <SubNav activeTab="home" />
 
-      {/* BANNER */}
-      <div className="home-banner">
-        <div className="home-banner-text">
-          <h2>Flash Sale hôm nay — Giảm đến 50%! 🔥</h2>
-          <p>Hàng chính hãng, giao nhanh toàn quốc, hoàn tiền 100%</p>
-        </div>
-        <button className="btn-primary" onClick={() => window.location.href = "/"}>Xem ngay</button>
-      </div>
-
-      {/* TOOLBAR */}
-      <div className="home-toolbar">
-        <div className="category-row">
-          <button className={!selectedCategory ? "category-chip active" : "category-chip"} onClick={() => setSelectedCategory("")}>Tất cả</button>
-          {categoryLoading ? <span style={{fontSize:12,color:"var(--text-3)"}}>Đang tải...</span> : categories.map((cat) => (
-            <button
-              key={cat.id || cat._id || cat.name}
-              className={selectedCategory === (cat.id ?? cat._id) ? "category-chip active" : "category-chip"}
-              onClick={() => setSelectedCategory(cat.id ?? cat._id)}
+      <main className="page-content">
+        <div className="container">
+          {/* Hero Banner Section */}
+          <section style={{ marginBottom: "24px" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "2fr 1fr",
+                gap: "12px",
+              }}
             >
-              {cat.name}
-            </button>
-          ))}
-        </div>
-      </div>
+              {/* Main Banner */}
+              <div
+                className="card"
+                style={{
+                  background: "linear-gradient(135deg, #ee4d2d 0%, #ff7a00 100%)",
+                  color: "#fff",
+                  padding: "36px 32px",
+                  borderRadius: "var(--r-lg)",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  position: "relative",
+                  overflow: "hidden",
+                  minHeight: "230px",
+                }}
+              >
+                <div style={{ position: "relative", zIndex: 2, maxWidth: "440px" }}>
+                  <span
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.25)",
+                      padding: "4px 10px",
+                      borderRadius: "99px",
+                      fontSize: "12px",
+                      fontWeight: "800",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    SIÊU ĐẠI TIỆC 9.9
+                  </span>
+                  <h1
+                    style={{
+                      fontSize: "28px",
+                      fontWeight: "900",
+                      lineHeight: "1.2",
+                      marginTop: "12px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    Flash Sale Công Nghệ & Thời Trang Giảm Đến 50% 🔥
+                  </h1>
+                  <p style={{ fontSize: "14px", opacity: 0.95, marginBottom: "18px" }}>
+                    Voucher Freeship 0Đ • Giảm thêm 100K cho đơn đầu tiên
+                  </p>
+                  <a
+                    href="/products"
+                    className="btn"
+                    style={{
+                      backgroundColor: "var(--accent-gold)",
+                      color: "#78350f",
+                      fontWeight: "800",
+                      padding: "10px 22px",
+                      borderRadius: "var(--r-sm)",
+                      display: "inline-flex",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                    }}
+                  >
+                    Săn Deal Ngay
+                  </a>
+                </div>
 
-      {/* FLASH MSG */}
-      {message && <div className="home-message">{message}</div>}
+                {/* Decorative circles */}
+                <div
+                  style={{
+                    position: "absolute",
+                    right: "-40px",
+                    bottom: "-40px",
+                    width: "220px",
+                    height: "220px",
+                    borderRadius: "50%",
+                    backgroundColor: "rgba(255,255,255,0.12)",
+                    pointerEvents: "none",
+                  }}
+                />
+              </div>
 
-      {/* PRODUCT SECTION */}
-      <div className="product-section">
-        <div className="section-title">Sản phẩm nổi bật</div>
+              {/* Side Banners (Promo Highlights) */}
+              <div
+                className="hide-mobile"
+                style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+              >
+                <div
+                  className="card"
+                  style={{
+                    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                    color: "#fff",
+                    padding: "20px",
+                    borderRadius: "var(--r-lg)",
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                  }}
+                >
+                  <span style={{ fontSize: "11px", fontWeight: "700", opacity: 0.9 }}>
+                    MIỄN PHÍ VẬN CHUYỂN
+                  </span>
+                  <h3 style={{ fontSize: "17px", fontWeight: "800", marginTop: "4px" }}>
+                    Freeship Xtra Toàn Quốc
+                  </h3>
+                  <span style={{ fontSize: "12px", opacity: 0.9, marginTop: "4px" }}>
+                    Áp dụng cho mọi đơn từ 50K
+                  </span>
+                </div>
 
-        {loading ? (
-          <div className="loading-grid">
-            {Array.from({length: 10}).map((_,i) => (
-              <div key={i} className="skeleton-card">
-                <div className="skeleton skeleton-img" />
-                <div className="skeleton-body">
-                  <div className="skeleton skeleton-line" style={{width:"90%"}} />
-                  <div className="skeleton skeleton-line" style={{width:"60%"}} />
-                  <div className="skeleton skeleton-line" style={{width:"40%"}} />
+                <div
+                  className="card"
+                  style={{
+                    background: "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)",
+                    color: "#fff",
+                    padding: "20px",
+                    borderRadius: "var(--r-lg)",
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                  }}
+                >
+                  <span style={{ fontSize: "11px", fontWeight: "700", opacity: 0.9 }}>
+                    HÀNG CHÍNH HÃNG
+                  </span>
+                  <h3 style={{ fontSize: "17px", fontWeight: "800", marginTop: "4px" }}>
+                    DoMix Mall 100% Auth
+                  </h3>
+                  <span style={{ fontSize: "12px", opacity: 0.9, marginTop: "4px" }}>
+                    Hoàn tiền gấp 2 lần nếu giả
+                  </span>
                 </div>
               </div>
-            ))}
-          </div>
-        ) : products.length === 0 ? (
-          <div className="empty-state"><p>Không tìm thấy sản phẩm nào.</p></div>
-        ) : (
-          <div className="product-grid">
-            {products.map((product) => {
-              const variantPrices = (product.variants || [])
-                .filter(item => item?.active !== false)
-                .map(item => Number(item.discountPrice ?? item.price))
-                .filter(Number.isFinite);
-              const minPrice = variantPrices.length ? Math.min(...variantPrices) : Number(product.basePrice);
-              const maxPrice = variantPrices.length ? Math.max(...variantPrices) : Number(product.basePrice);
-              const priceLabel = Number.isFinite(minPrice)
-                ? minPrice === maxPrice
-                  ? `${minPrice.toLocaleString()}đ`
-                  : `${minPrice.toLocaleString()}đ - ${maxPrice.toLocaleString()}đ`
-                : "Liên hệ";
-              const imageUrl = product.images?.find(img => img.isMain)?.url || product.images?.[0]?.url || "https://via.placeholder.com/300x300?text=No+Image";
-              return (
-                <article
-                  key={product.id}
-                  className="product-card"
-                  onClick={() => window.location.href = `/product/${product.id}`}
+            </div>
+          </section>
+
+          {/* Categories Section */}
+          <section style={{ marginBottom: "28px" }}>
+            <div
+              className="card"
+              style={{
+                padding: "20px",
+                backgroundColor: "var(--surface)",
+                borderRadius: "var(--r-lg)",
+                border: "1px solid var(--border-light)",
+              }}
+            >
+              <div className="section-header" style={{ marginBottom: "16px" }}>
+                <h2 className="section-title">DANH MỤC NGÀNH HÀNG</h2>
+                <a href="/products" className="section-action">
+                  <span>Xem tất cả</span>
+                  <ChevronRight size={14} />
+                </a>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))",
+                  gap: "10px",
+                }}
+              >
+                {categories.map((cat) => (
+                  <a
+                    key={cat.id}
+                    href={`/products?category=${encodeURIComponent(cat.id)}`}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      textAlign: "center",
+                      padding: "14px 8px",
+                      borderRadius: "var(--r-md)",
+                      backgroundColor: "var(--surface-muted)",
+                      border: "1px solid var(--border-light)",
+                      transition: "all 0.2s ease",
+                      cursor: "pointer",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = "var(--primary-light)";
+                      e.currentTarget.style.borderColor = "var(--border-primary)";
+                      e.currentTarget.style.transform = "translateY(-2px)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = "var(--surface-muted)";
+                      e.currentTarget.style.borderColor = "var(--border-light)";
+                      e.currentTarget.style.transform = "translateY(0)";
+                    }}
+                  >
+                    <span style={{ fontSize: "30px", marginBottom: "8px" }}>{cat.icon || "📦"}</span>
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: "600",
+                        color: "var(--text)",
+                        lineHeight: "1.3",
+                        height: "32px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {cat.name}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Flash Sale Section */}
+          {flashSaleProducts.length > 0 && (
+            <section id="flash-sale" style={{ marginBottom: "28px" }}>
+              <div
+                className="card"
+                style={{
+                  backgroundColor: "var(--surface)",
+                  borderRadius: "var(--r-lg)",
+                  border: "1px solid var(--border-light)",
+                  overflow: "hidden",
+                  padding: "18px 20px",
+                }}
+              >
+                {/* Flash Sale Header with Timer */}
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    paddingBottom: "14px",
+                    borderBottom: "1px solid var(--border-light)",
+                    marginBottom: "16px",
+                  }}
                 >
-                  <div className="product-image">
-                    <img src={imageUrl} alt={product.name} loading="lazy" />
-                    {product.soldCount > 0 && <span className="product-sold-badge">Đã bán {product.soldCount}</span>}
-                  </div>
-                  <div className="product-body">
-                    <strong>{product.name}</strong>
-                    <div className="product-price">{priceLabel}</div>
-                    <div className="product-meta-row">
-                      {product.rating ? (
-                        <span className="product-rating"><span>★</span> {product.rating.toFixed(1)}</span>
-                      ) : <span />}
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Flame size={24} color="var(--primary)" fill="var(--primary)" />
+                      <span
+                        style={{
+                          fontSize: "20px",
+                          fontWeight: "900",
+                          color: "var(--primary)",
+                          letterSpacing: "-0.5px",
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        FLASH SALE
+                      </span>
+                    </div>
+
+                    {/* Countdown Boxes */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <span
+                        style={{
+                          backgroundColor: "#111827",
+                          color: "#fff",
+                          fontWeight: "800",
+                          fontSize: "13px",
+                          padding: "3px 6px",
+                          borderRadius: "4px",
+                          minWidth: "26px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {String(timeLeft.hours).padStart(2, "0")}
+                      </span>
+                      <span style={{ fontWeight: "800", color: "#111827" }}>:</span>
+                      <span
+                        style={{
+                          backgroundColor: "#111827",
+                          color: "#fff",
+                          fontWeight: "800",
+                          fontSize: "13px",
+                          padding: "3px 6px",
+                          borderRadius: "4px",
+                          minWidth: "26px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {String(timeLeft.minutes).padStart(2, "0")}
+                      </span>
+                      <span style={{ fontWeight: "800", color: "#111827" }}>:</span>
+                      <span
+                        style={{
+                          backgroundColor: "#111827",
+                          color: "#fff",
+                          fontWeight: "800",
+                          fontSize: "13px",
+                          padding: "3px 6px",
+                          borderRadius: "4px",
+                          minWidth: "26px",
+                          textAlign: "center",
+                        }}
+                      >
+                        {String(timeLeft.seconds).padStart(2, "0")}
+                      </span>
                     </div>
                   </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </div>
+
+                  <a href="/products" className="section-action">
+                    <span>Xem tất cả Deal Sốc</span>
+                    <ChevronRight size={14} />
+                  </a>
+                </div>
+
+                {/* Flash Sale Grid */}
+                <ProductGrid products={flashSaleProducts} loading={loading} />
+              </div>
+            </section>
+          )}
+
+          {/* Daily Recommendations Tabs & Product Grid */}
+          <section style={{ marginBottom: "32px" }}>
+            <div
+              style={{
+                position: "sticky",
+                top: "var(--topbar-h)",
+                zIndex: 10,
+                backgroundColor: "var(--bg)",
+                padding: "8px 0 14px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  borderBottom: "2px solid var(--border-light)",
+                  backgroundColor: "var(--surface)",
+                  borderRadius: "var(--r-md)",
+                  padding: "6px",
+                  boxShadow: "var(--shadow-sm)",
+                  overflowX: "auto",
+                }}
+              >
+                {[
+                  { id: "all", label: "🌟 Gợi Ý Cho Bạn" },
+                  { id: "bestseller", label: "🔥 Bán Chạy Nhất" },
+                  { id: "discount", label: "⚡ Giảm Giá Sâu" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    style={{
+                      flex: 1,
+                      padding: "10px 16px",
+                      borderRadius: "var(--r-sm)",
+                      backgroundColor: activeTab === tab.id ? "var(--primary)" : "transparent",
+                      color: activeTab === tab.id ? "#fff" : "var(--text)",
+                      fontWeight: "700",
+                      fontSize: "14px",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginTop: "16px" }}>
+              <ProductGrid products={getFilteredProducts()} loading={loading} />
+            </div>
+
+            {/* View More Button */}
+            <div style={{ textAlign: "center", marginTop: "32px" }}>
+              <a
+                href="/products"
+                className="btn btn-outline btn-lg"
+                style={{
+                  minWidth: "240px",
+                  borderRadius: "var(--r-md)",
+                  borderWidth: "1.5px",
+                  fontWeight: "700",
+                }}
+              >
+                Xem Thêm Nhiều Sản Phẩm Hơn
+              </a>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <Footer />
+      <MobileNav />
     </div>
   );
 }

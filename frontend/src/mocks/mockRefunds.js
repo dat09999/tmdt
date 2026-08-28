@@ -1,0 +1,50 @@
+export const MOCK_REFUNDS = [
+  {
+    id: "ref-501",
+    refundCode: "REF-2026-00192",
+    orderId: "ord-1002",
+    orderCode: "DOMIX240801811",
+    createdAt: "2026-08-22T08:30:00Z",
+    productName: "Áo Thun Nam Cổ Tròn Cotton Compact Cao Cấp Chống Nhăn",
+    variantSku: "TSHIRT-BLK-L",
+    price: 189000,
+    quantity: 1,
+    refundAmount: 189000,
+    reason: "Sản phẩm bị lỗi đường chỉ may ở cổ áo",
+    solution: "REFUND_ONLY", // or RETURN_AND_REFUND
+    status: "PROCESSING", // PENDING, PROCESSING, APPROVED, REJECTED, COMPLETED
+    statusLabel: "Shop đang xem xét",
+    images: [
+      "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=300&auto=format&fit=crop&q=80",
+    ],
+    timeline: [
+      { title: "Gửi yêu cầu hoàn tiền", time: "22/08/2026 08:30", done: true },
+      { title: "Người bán đang kiểm tra bằng chứng", time: "22/08/2026 10:00", done: true, current: true },
+      { title: "Chấp thuận hoàn tiền", time: "Đang chờ", done: false },
+      { title: "Tiền hoàn về tài khoản", time: "Đang chờ", done: false },
+    ],
+  },
+  {
+    id: "ref-502",
+    refundCode: "REF-2026-00105",
+    orderId: "ord-998",
+    orderCode: "DOMIX240801210",
+    createdAt: "2026-08-10T11:00:00Z",
+    productName: "Tai Nghe Chống Ồn Không Dây Sony WH-1000XM5",
+    variantSku: "SONY-XM5-BLK",
+    price: 6990000,
+    quantity: 1,
+    refundAmount: 6990000,
+    reason: "Giao sai màu sản phẩm (đặt Bạc giao Đen)",
+    solution: "RETURN_AND_REFUND",
+    status: "COMPLETED",
+    statusLabel: "Hoàn tiền thành công",
+    images: [],
+    timeline: [
+      { title: "Gửi yêu cầu hoàn tiền", time: "10/08/2026 11:00", done: true },
+      { title: "Shop đồng ý yêu cầu", time: "10/08/2026 15:30", done: true },
+      { title: "Đã nhận lại hàng trả", time: "12/08/2026 09:00", done: true },
+      { title: "Đã hoàn 6.990.000₫ về ví VNPAY", time: "12/08/2026 09:30", done: true, current: true },
+    ],
+  },
+];

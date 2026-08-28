@@ -1,110 +1,172 @@
-import { useEffect, useState } from "react";
-import { API_BASE_URL, authFetch } from "../utils/auth";
+import React, { useState, useEffect } from "react";
+import Header from "../components/layout/Header";
+import SubNav from "../components/layout/SubNav";
+import Footer from "../components/layout/Footer";
+import MobileNav from "../components/layout/MobileNav";
+import OrderCard from "../components/order/OrderCard";
+import Skeleton from "../components/common/Skeleton";
+import EmptyState from "../components/common/EmptyState";
+import { orderService } from "../services/orderService";
 import { useAuth } from "./Authcontext";
-import Header from "../components/Header";
-import "./OrdersPage.css";
-
-const STATUS_MAP = {
-  PENDING:    { label: "Chờ xác nhận", cls: "status-pending" },
-  PROCESSING: { label: "Đang xử lý",   cls: "status-processing" },
-  SHIPPING:   { label: "Đang giao",    cls: "status-shipping" },
-  DELIVERED:  { label: "Đã giao",      cls: "status-delivered" },
-  CANCELLED:  { label: "Đã huỷ",       cls: "status-cancelled" },
-};
+import { Package, Search } from "lucide-react";
 
 export default function OrdersPage() {
   const { user } = useAuth();
   const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState(() => {
-    const value = sessionStorage.getItem("orderSuccessMessage") || "";
-    sessionStorage.removeItem("orderSuccessMessage");
-    return value;
-  });
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("ALL");
-  useEffect(() => {
-    if (!user?.userId) { window.location.href = "/login"; return; }
-    (async () => {
-      try {
-        setLoading(true);
-        const data = await authFetch(`${API_BASE_URL}/orders/buyer/${user.userId}`);
-        setOrders(Array.isArray(data) ? data : []);
-      } catch (err) { setMessage(err.message || "Không tải được đơn hàng"); }
-      finally { setLoading(false); }
-    })();
-  }, []);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const tabs = [
-    { id:"ALL", label:"Tất cả" },
-    { id:"PENDING", label:"Chờ xác nhận" },
-    { id:"PROCESSING", label:"Đang xử lý" },
-    { id:"SHIPPING", label:"Đang giao" },
-    { id:"DELIVERED", label:"Đã giao" },
-    { id:"CANCELLED", label:"Đã huỷ" },
+    { id: "ALL", label: "Tất cả" },
+    { id: "PENDING", label: "Chờ xác nhận" },
+    { id: "PROCESSING", label: "Đang chuẩn bị hàng" },
+    { id: "SHIPPING", label: "Đang giao" },
+    { id: "DELIVERED", label: "Đã giao" },
+    { id: "CANCELLED", label: "Đã hủy" },
   ];
 
-  const filtered = activeTab === "ALL" ? orders : orders.filter(o => (o.orderStatus||"").toUpperCase() === activeTab);
+  const fetchOrders = async () => {
+    try {
+      setLoading(true);
+      const data = await orderService.getBuyerOrders(user?.userId);
+      setOrders(data || []);
+    } catch (err) {
+      console.error("Fetch orders failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, [user?.userId]);
+
+  const handleCancelOrder = async (orderId) => {
+    if (window.confirm("Bạn có chắc chắn muốn hủy đơn hàng này?")) {
+      await orderService.cancelOrder(orderId, "Khách hàng hủy");
+      await fetchOrders();
+    }
+  };
+
+  const filteredOrders = orders.filter((o) => {
+    const matchesTab =
+      activeTab === "ALL" || (o.orderStatus || "").toUpperCase() === activeTab;
+    const matchesSearch =
+      !searchTerm.trim() ||
+      (o.orderCode || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (o.items || []).some((item) =>
+        (item.productName || "").toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    return matchesTab && matchesSearch;
+  });
 
   return (
-    <div className="orders-page">
+    <div className="page-shell">
       <Header />
+      <SubNav activeTab="orders" />
 
-      <div className="orders-body">
-        {message && <div className="orders-message">{message}</div>}
-
-        <div className="orders-tabs">
-          {tabs.map(t => (
-            <button key={t.id} className={`orders-tab${activeTab===t.id?" active":""}`} onClick={() => setActiveTab(t.id)}>{t.label}</button>
-          ))}
-        </div>
-
-        {loading ? (
-          <div className="orders-empty">Đang tải đơn hàng...</div>
-        ) : filtered.length === 0 ? (
-          <div className="orders-empty">Chưa có đơn hàng nào.</div>
-        ) : (
-          <div className="orders-list">
-            {filtered.map((order) => {
-              const statusKey = (order.orderStatus||"").toUpperCase();
-              const status = STATUS_MAP[statusKey] || { label: order.orderStatus||"Không rõ", cls:"status-default" };
-              return (
-                <div key={order.id} className="order-card">
-                  <div className="order-card-head">
-                    <div>
-                      <div className="order-card-id"><span>Mã đơn:</span>#{order.orderCode || order.id}</div>
-                      <div className="order-card-date">{order.createdAt ? new Date(order.createdAt).toLocaleDateString("vi-VN") : "—"}</div>
-                    </div>
-                    <span className={`order-status-chip ${status.cls}`}>{status.label}</span>
-                  </div>
-
-                  <div className="order-items-preview">
-                    {(order.items||[]).slice(0,3).map((item, idx) => (
-                      <div key={idx} className="order-item">
-                        <img src={item.image || "https://via.placeholder.com/56"} alt={item.productName||item.productId} />
-                        <div className="order-item-info">
-                          <div className="order-item-name">{item.productName || item.productId}</div>
-                          <div className="order-item-sku">Phân loại: {item.variantSku||"—"}</div>
-                          <div className="order-item-qty">x{item.quantity}</div>
-                        </div>
-                        <div className="order-item-price">{(item.price||0).toLocaleString()}đ</div>
-                      </div>
-                    ))}
-                    {(order.items||[]).length > 3 && <div className="order-more-items">+{order.items.length - 3} sản phẩm khác</div>}
-                  </div>
-
-                  <div className="order-card-foot">
-                    <div className="order-total">Thành tiền: <strong>{(order.totalAmount||0).toLocaleString()}đ</strong></div>
-                    <div className="order-foot-actions">
-                      {statusKey === "DELIVERED" && <button className="btn-secondary">Đánh giá</button>}
-                      <button className="btn-primary" onClick={() => window.location.href = `/orders/${order.id||order.orderCode}`}>Xem chi tiết</button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+      <main className="page-content">
+        <div className="container" style={{ maxWidth: "1000px" }}>
+          {/* Status Tabs Header */}
+          <div
+            className="card"
+            style={{
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--r-md)",
+              border: "1px solid var(--border-light)",
+              marginBottom: "16px",
+              overflowX: "auto",
+              scrollbarWidth: "none",
+            }}
+          >
+            <div style={{ display: "flex", minWidth: "600px" }}>
+              {tabs.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    style={{
+                      flex: 1,
+                      padding: "14px 12px",
+                      border: "none",
+                      borderBottom: isActive ? "3px solid var(--primary)" : "3px solid transparent",
+                      backgroundColor: "transparent",
+                      color: isActive ? "var(--primary)" : "var(--text)",
+                      fontWeight: isActive ? "700" : "500",
+                      fontSize: "14px",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Search box for orders */}
+          <div
+            className="card"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "10px 16px",
+              backgroundColor: "var(--surface-muted)",
+              borderRadius: "var(--r-md)",
+              border: "1px solid var(--border-light)",
+              marginBottom: "16px",
+            }}
+          >
+            <Search size={18} color="var(--text-tertiary)" />
+            <input
+              type="text"
+              placeholder="Tìm kiếm theo Tên Shop, ID Đơn Hàng hoặc Tên Sản Phẩm..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                flex: 1,
+                border: "none",
+                background: "transparent",
+                outline: "none",
+                fontSize: "13px",
+              }}
+            />
+          </div>
+
+          {/* Orders List Content */}
+          {loading ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <Skeleton count={3} height="180px" />
+            </div>
+          ) : filteredOrders.length === 0 ? (
+            <EmptyState
+              icon={Package}
+              title="Chưa có đơn hàng nào"
+              description="Bạn chưa có đơn hàng nào ở trạng thái này. Hãy dạo quanh mua sắm ngay nhé!"
+              actionText="Khám phá sản phẩm ngay"
+              onAction={() => (window.location.href = "/products")}
+            />
+          ) : (
+            <div>
+              {filteredOrders.map((order) => (
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  onCancelOrder={handleCancelOrder}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      <Footer />
+      <MobileNav />
     </div>
   );
 }

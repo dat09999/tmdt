@@ -1,0 +1,83 @@
+/* Design Tokens: Shopee/Tiki Red-Orange Vietnamese E-Commerce Palette */
+:root {
+  /* Brand Primary Colors */
+  --primary:        #ee4d2d;
+  --primary-hover:  #ff5722;
+  --primary-dark:   #d73211;
+  --primary-light:  #fff5f1;
+  --primary-mid:    #ffd8cc;
+  --primary-subtle: #fffaf8;
+
+  /* Accent & Deal Colors */
+  --accent:         #ffaa00;
+  --accent-gold:    #ffd100;
+  --accent-orange:  #ff7a00;
+  --accent-red:     #ff3b30;
+
+  /* Functional / Status Colors */
+  --success:        #00bfa5;
+  --success-bg:     #e6fcf5;
+  --success-dark:   #00897b;
+  --warning:        #f5a623;
+  --warning-bg:     #fff9db;
+  --warning-dark:   #d97706;
+  --error:          #e53935;
+  --error-bg:       #ffebee;
+  --error-dark:     #c62828;
+  --info:           #1a73e8;
+  --info-bg:        #e8f0fe;
+  --info-dark:      #1557b0;
+
+  /* Neutral Backgrounds & Surfaces */
+  --bg:             #f5f5fa;
+  --bg-page:        #f0f2f5;
+  --surface:        #ffffff;
+  --surface-hover:  #fafafa;
+  --surface-active: #f0f0f0;
+  --surface-muted:  #f8f9fa;
+  
+  /* Borders */
+  --border-light:   #f0f0f0;
+  --border:         #e5e7eb;
+  --border-strong:  #d1d5db;
+  --border-primary: #ffb8a6;
+
+  /* Typography Colors */
+  --text:           #212529;
+  --text-muted:     #495057;
+  --text-secondary: #6c757d;
+  --text-tertiary:  #adb5bd;
+  --text-subtle:    #ced4da;
+  --text-white:     #ffffff;
+
+  /* Font */
+  --font-family:    'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Radius */
+  --r-xs:           3px;
+  --r-sm:           6px;
+  --r-md:           10px;
+  --r-lg:           14px;
+  --r-xl:           20px;
+  --r-full:         9999px;
+
+  /* Shadows (Soft & Modern) */
+  --shadow-xs:      0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm:      0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md:      0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg:      0 8px 28px rgba(0, 0, 0, 0.12);
+  --shadow-primary: 0 4px 14px rgba(238, 77, 45, 0.28);
+  --shadow-card:    0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.03);
+
+  /* Spacing / Layout Heights */
+  --topbar-h:       68px;
+  --topbar-mobile-h:56px;
+  --subnav-h:       42px;
+  --bottomnav-h:    58px;
+  --max-width:      1240px;
+
+  /* Transitions */
+  --trans-fast:     0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --trans-normal:   0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --trans-spring:   0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}

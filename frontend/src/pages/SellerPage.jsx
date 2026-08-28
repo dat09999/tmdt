@@ -1,1166 +1,923 @@
-import { useEffect, useState,useRef} from "react";
-import { API_BASE_URL, authFetch } from "../utils/auth";
+import React, { useState, useEffect } from "react";
+import Header from "../components/layout/Header";
+import Footer from "../components/layout/Footer";
+import SubNav from "../components/layout/SubNav";
+import MobileNav from "../components/layout/MobileNav";
+import Button from "../components/common/Button";
+import Modal from "../components/common/Modal";
+import EmptyState from "../components/common/EmptyState";
+import { sellerService } from "../services/sellerService";
 import { useAuth } from "./Authcontext";
-import Header from "../components/Header";
-import "./SellerPage.css";
-
-const emptyShop = { shopName: "", description: "", phone: "", email: "" };
-const emptyProductInfo = { name: "", categoryId: "", description: "" };
-const emptyVariant = { sku: "", color: "", size: "", price: "", discountPrice: "", stock: "", active: true };
-const emptyCoupon = { code: "", discountType: "PERCENT", discountValue: "", minOrderValue: "", maxDiscountAmount: "", usageLimit: "" };
-
-const ORDER_LABEL = {
-  PENDING: "Chờ xác nhận",
-  CONFIRMED: "Đã xác nhận",
-  PROCESSING: "Đang xử lý",
-  SHIPPING: "Đang giao",
-  DELIVERED: "Đã giao",
-  CANCELED: "Đã huỷ",
-  CANCELLED: "Đã huỷ",
-};
-
-const NEXT_STATUS = {
-  PENDING: [["CONFIRMED", "Xác nhận đơn"]],
-  CONFIRMED: [["PROCESSING", "Bắt đầu xử lý"]],
-  PROCESSING: [],
-  SHIPPING: [["DELIVERED", "Đánh dấu đã giao"]],
-};
-
-const REFUND_LABEL = { PENDING: "Chờ xử lý", APPROVED: "Đã duyệt", REJECTED: "Đã từ chối" };
-
-const NAV_GROUPS = [
-  { items: [["OVERVIEW", "Tổng quan"]] },
-  { label: "Bán hàng", items: [["ORDERS", "Đơn hàng"], ["REFUNDS", "Hoàn tiền"]] },
-  { label: "Sản phẩm", items: [["PRODUCTS", "Sản phẩm"], ["REVIEWS", "Đánh giá"]] },
-  { label: "Marketing", items: [["COUPONS", "Mã giảm giá"]] },
-  { label: "Tài chính", items: [["REVENUE", "Doanh thu"]] },
-  { label: "Khác", items: [["CHAT", "Tin nhắn"], ["SETTINGS", "Cài đặt shop"]] },
-];
-
-async function uploadFile(url, file) {
-  const formData = new FormData();
-  formData.append("file", file);
-  return authFetch(url, {
-    method: "POST",
-    body: formData,
-  });
-}
+import { formatCurrency, formatDate } from "../utils/formatters";
+import {
+  Store,
+  Package,
+  ShoppingBag,
+  Ticket,
+  TrendingUp,
+  AlertCircle,
+  Plus,
+  Edit2,
+  Trash2,
+  CheckCircle,
+  Clock,
+  Truck,
+  Settings,
+} from "lucide-react";
 
 export default function SellerPage() {
   const { user } = useAuth();
-  const [shop, setShop] = useState(null);
+  const [activeTab, setActiveTab] = useState("dashboard"); // "dashboard" | "products" | "orders" | "coupons" | "settings"
+  const [stats, setStats] = useState(null);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [coupons, setCoupons] = useState([]);
-  const [refunds, setRefunds] = useState([]);
-
-  const [shopForm, setShopForm] = useState(emptyShop);
-  const [productInfo, setProductInfo] = useState(emptyProductInfo);
-  const [variants, setVariants] = useState([{ ...emptyVariant }]);
-  const [couponForm, setCouponForm] = useState(emptyCoupon);
-  const [editingProduct, setEditingProduct] = useState(null);
-
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [uploadingMedia, setUploadingMedia] = useState(false);
-  const [tab, setTab] = useState("OVERVIEW");
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [toastMessage, setToastMessage] = useState("");
 
-  const [reviews, setReviews] = useState([]);
-  const [reviewsLoading, setReviewsLoading] = useState(false);
-  const [reviewsLoaded, setReviewsLoaded] = useState(false);
+  // Product Add/Edit Modal
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [productForm, setProductForm] = useState({
+    name: "",
+    categoryId: "dien-thoai",
+    basePrice: "",
+    originalPrice: "",
+    stock: 50,
+    description: "",
+    imageUrl: "",
+  });
 
-  const [openGroups, setOpenGroups] = useState(() => new Set(NAV_GROUPS.map((_, i) => i)));
+  // Coupon Modal
+  const [couponModalOpen, setCouponModalOpen] = useState(false);
+  const [couponForm, setCouponForm] = useState({
+    code: "",
+    discount: "",
+    minOrder: "",
+    expiry: "2026-12-31",
+  });
 
-  const toggleGroup = (gi) => {
-    setOpenGroups((current) => {
-      const next = new Set(current);
-      if (next.has(gi)) next.delete(gi); else next.add(gi);
-      return next;
-    });
-  };
+  const shopId = user?.shopId || "shop-apple-official";
 
-  const loadDashboard = async (shopData) => {
-    const [productData, orderData, couponData, refundData] = await Promise.all([
-      authFetch(`${API_BASE_URL}/products/shop/${shopData.id}`),
-      authFetch(`${API_BASE_URL}/orders/shop/${shopData.id}`),
-      authFetch(`${API_BASE_URL}/coupons/shop/${shopData.id}`).catch(() => []),
-      authFetch(`${API_BASE_URL}/refunds/shop/${shopData.id}`).catch(() => []),
-    ]);
-    setProducts(Array.isArray(productData) ? productData : []);
-    setOrders(Array.isArray(orderData) ? orderData : []);
-    setCoupons(Array.isArray(couponData) ? couponData : []);
-    setRefunds(Array.isArray(refundData) ? refundData : []);
-  };
-
-  useEffect(() => {
-    if (!user?.userId) { window.location.href = "/login"; return; }
-    (async () => {
-      try {
-        const [ownShop, categoryData] = await Promise.all([
-          authFetch(`${API_BASE_URL}/shops/owner/${user.userId}`).catch(() => null),
-          fetch(`${API_BASE_URL}/categories`).then((r) => r.ok ? r.json() : []),
-        ]);
-        setCategories(Array.isArray(categoryData) ? categoryData : []);
-        if (ownShop) {
-          setShop(ownShop);
-          setShopForm({
-            shopName: ownShop.shopName || "",
-            description: ownShop.description || "",
-            phone: ownShop.phone || "",
-            email: ownShop.email || "",
-          });
-          await loadDashboard(ownShop);
-        }
-      } catch (e) {
-        setError(e.message || "Không thể tải kênh người bán.");
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [user?.userId]);
-
-  const pendingOrders = orders.filter((o) => ["PENDING", "CONFIRMED", "PROCESSING"].includes(o.orderStatus));
-  const deliveredOrders = orders.filter((o) => o.orderStatus === "DELIVERED");
-  const revenue = deliveredOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
-  const lowStock = products.filter((p) => (p.variants || []).some((v) => (v.stock ?? 0) <= 10));
-  const filteredOrders = tab === "ORDERS" ? orders : pendingOrders.slice(0, 5);
-
-  const clearAlerts = () => { setError(""); setMessage(""); };
-
-  // ===== Shop =====
-  const saveShop = async (event) => {
-    event.preventDefault(); setSaving(true); clearAlerts();
+  const loadData = async () => {
     try {
-      const body = { ...shopForm, ownerId: String(user.userId) };
-      const data = shop
-        ? await authFetch(`${API_BASE_URL}/shops/${shop.id}`, { method: "PUT", body: JSON.stringify(body) })
-        : await authFetch(`${API_BASE_URL}/shops`, { method: "POST", body: JSON.stringify(body) });
-      setShop(data);
-      setMessage("Đã lưu thông tin shop.");
-      if (!shop) await loadDashboard(data);
-    } catch (e) {
-      setError(e.message || "Không thể lưu shop.");
+      setLoading(true);
+      const [sData, pData, oData, cData] = await Promise.all([
+        sellerService.getDashboardStats(shopId),
+        sellerService.getProducts(shopId),
+        sellerService.getOrders(shopId),
+        sellerService.getCoupons(shopId),
+      ]);
+      setStats(sData);
+      setProducts(pData || []);
+      setOrders(oData || []);
+      setCoupons(cData || []);
+    } catch (err) {
+      console.error("Load seller data failed:", err);
     } finally {
-      setSaving(false);
-    }
-  };
-
-  const toggleShopStatus = async () => {
-    const nextStatus = shop.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    try {
-      const updated = await authFetch(`${API_BASE_URL}/shops/${shop.id}/status?status=${nextStatus}`, { method: "PATCH" });
-      setShop(updated);
-      setMessage(`Đã chuyển shop sang trạng thái ${nextStatus === "ACTIVE" ? "hoạt động" : "tạm ngưng"}.`);
-    } catch (e) {
-      setError(e.message || "Không thể đổi trạng thái shop.");
-    }
-  };
-
-  // ===== Sản phẩm: thông tin + biến thể =====
-  const openEditProduct = (product) => {
-    setEditingProduct(product);
-    setProductInfo({
-      name: product.name || "",
-      categoryId: product.categoryId || "",
-      description: product.description || "",
-    });
-    setVariants(
-      product.variants?.length
-        ? product.variants.map((v) => ({
-            sku: v.sku || "",
-            color: v.color || "",
-            size: v.size || "",
-            price: v.price ?? "",
-            discountPrice: v.discountPrice ?? "",
-            stock: v.stock ?? "",
-            active: v.active !== false,
-          }))
-        : [{ ...emptyVariant }]
-    );
-    setTab("PRODUCTS");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const cancelEditProduct = () => {
-    setEditingProduct(null);
-    setProductInfo(emptyProductInfo);
-    setVariants([{ ...emptyVariant }]);
-  };
-
-  const updateVariantField = (index, field, value) => {
-    setVariants((current) => current.map((v, i) => i === index ? { ...v, [field]: value } : v));
-  };
-
-  const addVariantRow = () => setVariants((current) => [...current, { ...emptyVariant }]);
-
-  const removeVariantRow = (index) => {
-    setVariants((current) => current.length > 1 ? current.filter((_, i) => i !== index) : current);
-  };
-
-  const saveProduct = async (event) => {
-    event.preventDefault(); setSaving(true); clearAlerts();
-    try {
-      const cleanVariants = variants.map((v, i) => ({
-        sku: v.sku.trim() || `SHOP-${Date.now()}-${i}`,
-        color: v.color.trim() || undefined,
-        size: v.size.trim() || undefined,
-        price: Number(v.price) || 0,
-        discountPrice: v.discountPrice ? Number(v.discountPrice) : undefined,
-        stock: Number(v.stock) || 0,
-        active: v.active,
-      }));
-
-      if (cleanVariants.some((v) => !Number.isFinite(v.price) || v.price < 0 || !Number.isFinite(v.stock) || v.stock < 0)) {
-        throw new Error("Giá và tồn kho của biến thể phải là số không âm.");
-      }
-      if (cleanVariants.some((v) => v.discountPrice !== undefined && (!Number.isFinite(v.discountPrice) || v.discountPrice < 0 || v.discountPrice > v.price))) {
-        throw new Error("Giá khuyến mãi phải từ 0 đến giá bán của biến thể.");
-      }
-
-      const basePrice = Math.min(...cleanVariants.map((v) => v.price));
-
-      const body = {
-        shopId: shop.id,
-        categoryId: productInfo.categoryId,
-        name: productInfo.name,
-        description: productInfo.description,
-        basePrice,
-        variants: cleanVariants,
-      };
-
-      if (editingProduct) {
-        const updated = await authFetch(`${API_BASE_URL}/products/${editingProduct.id}`, { method: "PUT", body: JSON.stringify(body) });
-        setProducts((current) => current.map((p) => p.id === updated.id ? updated : p));
-        setEditingProduct(updated);
-        setMessage("Đã cập nhật sản phẩm.");
-      } else {
-        const created = await authFetch(`${API_BASE_URL}/products`, { method: "POST", body: JSON.stringify(body) });
-        setProducts((current) => [created, ...current]);
-        setEditingProduct(created);
-        setMessage("Đã tạo sản phẩm. Giờ bạn có thể thêm ảnh/video ở khối bên dưới.");
-      }
-    } catch (e) {
-      setError(e.message || "Không thể lưu sản phẩm.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteProduct = async (product) => {
-    if (!window.confirm(`Xoá sản phẩm "${product.name}"? Hành động này không thể hoàn tác.`)) return;
-    try {
-      await authFetch(`${API_BASE_URL}/products/${product.id}`, { method: "DELETE" });
-      setProducts((current) => current.filter((p) => p.id !== product.id));
-      setMessage("Đã xoá sản phẩm.");
-      if (editingProduct?.id === product.id) cancelEditProduct();
-    } catch (e) {
-      setError(e.message || "Không thể xoá sản phẩm.");
-    }
-  };
-
-  // ===== Cập nhật ảnh & video sản phẩm =====
-  const handleUploadMedia = async (mediaItems) => {
-    if (!editingProduct || !mediaItems.length) return;
-    clearAlerts();
-    setUploadingMedia(true);
-    try {
-      for (const { file, mediaType, isMain } of mediaItems) {
-        const url = `${API_BASE_URL}/api/links/PRODUCT/${editingProduct.id}/${mediaType}/${isMain}`;
-        await uploadFile(url, file);
-      }
-      const refreshed = await authFetch(`${API_BASE_URL}/products/${editingProduct.id}`);
-      setEditingProduct(refreshed);
-      setProducts((current) => current.map((p) => p.id === refreshed.id ? refreshed : p));
-      setMessage("Đã cập nhật ảnh và video sản phẩm.");
-      return true;
-    } catch (e) {
-      setError(e.message || "Không thể tải lên.");
-      return false;
-    } finally {
-      setUploadingMedia(false);
-    }
-  };
-
-  const handleDeleteMedia = async (mediaType, mediaUrl) => {
-    if (!editingProduct) return;
-    try {
-      const url = `${API_BASE_URL}/api/links/PRODUCT/${editingProduct.id}/${mediaType}?url=${encodeURIComponent(mediaUrl)}`;
-      await authFetch(url, { method: "DELETE" });
-      const refreshed = await authFetch(`${API_BASE_URL}/products/${editingProduct.id}`);
-      setEditingProduct(refreshed);
-      setProducts((current) => current.map((p) => p.id === refreshed.id ? refreshed : p));
-      setMessage("Đã xoá.");
-    } catch (e) {
-      setError(e.message || "Không thể xoá.");
-    }
-  };
-
-  // ===== Đơn hàng =====
-  const updateOrderStatus = async (order, status) => {
-    try {
-      const updated = await authFetch(`${API_BASE_URL}/orders/${order.id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ status, updatedBy: "SELLER", note: "Cập nhật từ kênh người bán" }),
-      });
-      setOrders((current) => current.map((item) => item.id === updated.id ? updated : item));
-      setMessage("Đã cập nhật trạng thái đơn hàng.");
-    } catch (e) {
-      setError(e.message || "Không thể cập nhật đơn hàng.");
-    }
-  };
-
-  const startShipping = async (order, shippingProvider, trackingCode) => {
-    clearAlerts();
-    try {
-      const updated = await authFetch(`${API_BASE_URL}/orders/${order.id}/shipping`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          shippingProvider,
-          trackingCode,
-          note: `Mã vận đơn ${trackingCode}`,
-        }),
-      });
-      setOrders((current) => current.map((item) => item.id === updated.id ? updated : item));
-      setMessage("Đã bàn giao đơn cho vận chuyển.");
-    } catch (e) {
-      setError(e.message || "Không thể cập nhật vận chuyển.");
-    }
-  };
-
-  const cancelOrder = async (order) => {
-    const reason = window.prompt("Lý do huỷ đơn (hiển thị cho khách hàng):");
-    if (reason === null) return;
-    try {
-      const updated = await authFetch(`${API_BASE_URL}/orders/${order.id}/cancel`, {
-        method: "PATCH",
-        body: JSON.stringify({ canceledBy: "SELLER", reason: reason || "Người bán huỷ đơn" }),
-      });
-      setOrders((current) => current.map((item) => item.id === updated.id ? updated : item));
-      setMessage("Đã huỷ đơn hàng.");
-    } catch (e) {
-      setError(e.message || "Không thể huỷ đơn hàng.");
-    }
-  };
-
-  // ===== Mã giảm giá =====
-  const saveCoupon = async (event) => {
-    event.preventDefault(); setSaving(true); clearAlerts();
-    try {
-      const body = {
-        shopId: shop.id,
-        scope: "SHOP",
-        code: couponForm.code.trim().toUpperCase(),
-        discountType: couponForm.discountType,
-        discountValue: Number(couponForm.discountValue),
-        minOrderValue: couponForm.minOrderValue ? Number(couponForm.minOrderValue) : 0,
-        maxDiscountAmount: couponForm.maxDiscountAmount ? Number(couponForm.maxDiscountAmount) : undefined,
-        usageLimit: couponForm.usageLimit ? Number(couponForm.usageLimit) : undefined,
-      };
-      const created = await authFetch(`${API_BASE_URL}/coupons`, { method: "POST", body: JSON.stringify(body) });
-      setCoupons((current) => [created, ...current]);
-      setCouponForm(emptyCoupon);
-      setMessage("Đã tạo mã giảm giá.");
-    } catch (e) {
-      setError(e.message || "Không thể tạo mã giảm giá.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deactivateCoupon = async (coupon) => {
-    try {
-      const updated = await authFetch(`${API_BASE_URL}/coupons/${coupon.id}/deactivate`, { method: "PATCH" });
-      setCoupons((current) => current.map((c) => c.id === updated.id ? updated : c));
-      setMessage("Đã tắt mã giảm giá.");
-    } catch (e) {
-      setError(e.message || "Không thể tắt mã giảm giá.");
-    }
-  };
-
-  // ===== Hoàn tiền =====
-  const processRefund = async (refund, status) => {
-    const adminNote = status === "REJECTED" ? window.prompt("Lý do từ chối:") : "";
-    if (status === "REJECTED" && adminNote === null) return;
-    try {
-      const params = new URLSearchParams({ status, resolvedBy: String(user.userId) });
-      if (adminNote) params.append("adminNote", adminNote);
-      const updated = await authFetch(`${API_BASE_URL}/refunds/${refund.id}/process?${params.toString()}`, { method: "PATCH" });
-      setRefunds((current) => current.map((r) => r.id === updated.id ? updated : r));
-      setMessage(status === "APPROVED" ? "Đã duyệt yêu cầu hoàn tiền." : "Đã từ chối yêu cầu hoàn tiền.");
-    } catch (e) {
-      setError(e.message || "Không thể xử lý yêu cầu hoàn tiền.");
-    }
-  };
-
-  // ===== Đánh giá =====
-  const loadReviews = async () => {
-    if (reviewsLoaded || !products.length) return;
-    setReviewsLoading(true);
-    try {
-      const results = await Promise.all(
-        products.map((p) =>
-          authFetch(`${API_BASE_URL}/reviews/product/${p.id}?page=0&size=50`)
-            .then((res) => (res?.content || []).map((r) => ({ ...r, productId: p.id, productName: p.name })))
-            .catch(() => [])
-        )
-      );
-      const all = results.flat().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      setReviews(all);
-      setReviewsLoaded(true);
-    } catch (e) {
-      setError(e.message || "Không thể tải đánh giá.");
-    } finally {
-      setReviewsLoading(false);
-    }
-  };
-
-  const replyReview = async (review, content) => {
-    try {
-      const updated = await authFetch(`${API_BASE_URL}/reviews/${review.id}/reply`, {
-        method: "POST",
-        body: JSON.stringify({ content }),
-      });
-      setReviews((current) => current.map((r) => r.id === updated.id ? { ...updated, productId: r.productId, productName: r.productName } : r));
-      setMessage("Đã gửi phản hồi.");
-    } catch (e) {
-      setError(e.message || "Không thể gửi phản hồi.");
-    }
-  };
-
-  const handleTabChange = (id) => {
-    setTab(id);
-    if (id === "REVIEWS") loadReviews();
-  };
-
-  if (loading) {
-    return <div className="seller-page"><Header /><p className="seller-loading">Đang tải kênh người bán...</p></div>;
-  }
-
-  if (!shop) {
-    return (
-      <div className="seller-page page-shell">
-        <Header />
-        <main className="seller-body seller-body-standalone">
-          <h1>Mở shop trên DoMix</h1>
-          <form className="seller-card seller-form card" onSubmit={saveShop}>
-            <label>Tên shop
-              <input required value={shopForm.shopName} onChange={(e) => setShopForm({ ...shopForm, shopName: e.target.value })} />
-            </label>
-            <label>Số điện thoại
-              <input value={shopForm.phone} onChange={(e) => setShopForm({ ...shopForm, phone: e.target.value })} />
-            </label>
-            <label>Email
-              <input type="email" value={shopForm.email} onChange={(e) => setShopForm({ ...shopForm, email: e.target.value })} />
-            </label>
-            <label className="wide">Giới thiệu
-              <textarea value={shopForm.description} onChange={(e) => setShopForm({ ...shopForm, description: e.target.value })} />
-            </label>
-            <button className="btn-primary wide" disabled={saving}>{saving ? "Đang lưu..." : "Đăng ký shop"}</button>
-          </form>
-        </main>
-      </div>
-    );
-  }
-
-  return (
-    <div className="seller-page page-shell">
-      <Header />
-
-      <div className="seller-top">
-        <div className="seller-head">
-          <div>
-            <small>KÊNH NGƯỜI BÁN</small>
-            <h1>{shop.shopName}</h1>
-          </div>
-          <a className="btn-secondary" href={`/shop/${shop.id}`}>Xem shop</a>
-        </div>
-        {error && <div className="seller-alert error">{error}</div>}
-        {message && <div className="seller-alert ok">{message}</div>}
-      </div>
-
-      <div className="seller-shell">
-        <aside className="seller-sidebar">
-          <nav className="seller-nav">
-            {NAV_GROUPS.map((group, gi) => {
-              const isOpen = openGroups.has(gi);
-              return (
-                <div className={`seller-nav-group${group.label ? " has-label" : ""}`} key={gi}>
-                  {group.label && (
-                    <button
-                      type="button"
-                      className="seller-nav-group-toggle"
-                      onClick={() => toggleGroup(gi)}
-                      aria-expanded={isOpen}
-                    >
-                      <span>{group.label}</span>
-                      <span className={`seller-nav-chevron${isOpen ? " open" : ""}`}>▾</span>
-                    </button>
-                  )}
-                  {(!group.label || isOpen) && (
-                    <div className="seller-nav-items">
-                      {group.items.map(([id, label]) => (
-                        <button
-                          key={id}
-                          className={`seller-nav-item${tab === id ? " active" : ""}`}
-                          onClick={() => handleTabChange(id)}
-                        >
-                          {label}
-                          {id === "REFUNDS" && refunds.some((r) => r.status === "PENDING") && (
-                            <span className="seller-tab-badge">{refunds.filter((r) => r.status === "PENDING").length}</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </nav>
-        </aside>
-
-        <main className="seller-body">
-          {tab === "OVERVIEW" && (
-            <>
-              <section className="seller-revenue-grid">
-                <article className="seller-revenue-card">
-                  <span>Doanh thu (đơn đã giao)</span>
-                  <strong>{revenue.toLocaleString("vi-VN")} ₫</strong>
-                  <small>{deliveredOrders.length} đơn hoàn thành</small>
-                </article>
-                <article className="seller-revenue-card">
-                  <span>Đơn cần xử lý</span>
-                  <strong>{pendingOrders.length}</strong>
-                  <small>Chờ xác nhận / đang xử lý</small>
-                </article>
-                <article className="seller-revenue-card">
-                  <span>Tồn kho thấp</span>
-                  <strong>{lowStock.length}</strong>
-                  <small>Có biến thể ≤ 10 sản phẩm</small>
-                </article>
-                <article className="seller-revenue-card">
-                  <span>Đánh giá shop</span>
-                  <strong>{Number(shop.rating || 0).toFixed(1)} ★</strong>
-                  <small>{shop.totalReviews || 0} lượt đánh giá</small>
-                </article>
-              </section>
-              <OrderList orders={filteredOrders} compact onUpdate={updateOrderStatus} onCancel={cancelOrder} onStartShipping={startShipping} />
-              <section className="seller-card card">
-                <h2>Cảnh báo tồn kho thấp</h2>
-                {lowStock.length
-                  ? lowStock.map((p) => (
-                      <p key={p.id}>
-                        {p.name} — {p.variants?.filter((v) => (v.stock ?? 0) <= 10).map((v) => `${v.sku}: ${v.stock}`).join(", ")}
-                      </p>
-                    ))
-                  : <p>Không có sản phẩm sắp hết hàng.</p>}
-              </section>
-            </>
-          )}
-
-          {tab === "ORDERS" && <OrderList orders={orders} onUpdate={updateOrderStatus} onCancel={cancelOrder} onStartShipping={startShipping} />}
-
-          {tab === "PRODUCTS" && (
-            <section className="seller-grid">
-              <div className="seller-product-editor">
-                <form className="seller-card seller-form card" onSubmit={saveProduct}>
-                  <h2>{editingProduct ? `Sửa thông tin: ${editingProduct.name}` : "Đăng sản phẩm mới"}</h2>
-
-                  <label className="wide">Tên sản phẩm
-                    <input required value={productInfo.name} onChange={(e) => setProductInfo({ ...productInfo, name: e.target.value })} />
-                  </label>
-                  <label>Danh mục
-                    <select required value={productInfo.categoryId} onChange={(e) => setProductInfo({ ...productInfo, categoryId: e.target.value })}>
-                      <option value="">Chọn danh mục</option>
-                      {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </label>
-                  <label className="wide">Mô tả
-                    <textarea value={productInfo.description} onChange={(e) => setProductInfo({ ...productInfo, description: e.target.value })} />
-                  </label>
-
-                  <div className="wide">
-                    <div className="variant-editor-head">
-                      <h3>Biến thể sản phẩm</h3>
-                      <button type="button" className="btn-secondary btn-sm" onClick={addVariantRow}>+ Thêm biến thể</button>
-                    </div>
-
-                    {variants.map((v, i) => (
-                      <div className="variant-row" key={i}>
-                        <input placeholder="SKU" value={v.sku} onChange={(e) => updateVariantField(i, "sku", e.target.value)} />
-                        <input placeholder="Màu" value={v.color} onChange={(e) => updateVariantField(i, "color", e.target.value)} />
-                        <input placeholder="Size" value={v.size} onChange={(e) => updateVariantField(i, "size", e.target.value)} />
-                        <input required type="number" min="0" placeholder="Giá" value={v.price} onChange={(e) => updateVariantField(i, "price", e.target.value)} />
-                        <input type="number" min="0" placeholder="Giá KM" value={v.discountPrice} onChange={(e) => updateVariantField(i, "discountPrice", e.target.value)} />
-                        <input required type="number" min="0" placeholder="Tồn kho" value={v.stock} onChange={(e) => updateVariantField(i, "stock", e.target.value)} />
-                        <label className="variant-active">
-                          <input type="checkbox" checked={v.active} onChange={(e) => updateVariantField(i, "active", e.target.checked)} />
-                          Bật bán
-                        </label>
-                        {variants.length > 1 && (
-                          <button type="button" className="btn-danger btn-sm" onClick={() => removeVariantRow(i)}>Xoá</button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="wide actions">
-                    {editingProduct && <button type="button" className="btn-secondary" onClick={cancelEditProduct}>Xong, đóng form</button>}
-                    <button className="btn-primary" disabled={saving}>
-                      {saving ? "Đang lưu..." : editingProduct ? "Cập nhật thông tin" : "Đăng sản phẩm"}
-                    </button>
-                  </div>
-                </form>
-
-                {editingProduct && (
-                  <section className="seller-card card">
-                    <ImageManager
-                      product={editingProduct}
-                      onUpload={handleUploadMedia}
-                      onDelete={handleDeleteMedia}
-                      uploading={uploadingMedia}
-                    />
-                  </section>
-                )}
-              </div>
-
-              <ProductList products={products} onEdit={openEditProduct} onDelete={deleteProduct} />
-            </section>
-          )}
-
-          {tab === "REVIEWS" && (
-            <ReviewsPanel loading={reviewsLoading} reviews={reviews} onReply={replyReview} />
-          )}
-
-          {tab === "COUPONS" && (
-            <section className="seller-grid">
-              <form className="seller-card seller-form card" onSubmit={saveCoupon}>
-                <h2>Tạo mã giảm giá</h2>
-                <label>Mã code
-                  <input required value={couponForm.code} onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value })} placeholder="VD: SALE50" />
-                </label>
-                <label>Loại giảm
-                  <select value={couponForm.discountType} onChange={(e) => setCouponForm({ ...couponForm, discountType: e.target.value })}>
-                    <option value="PERCENT">Theo phần trăm (%)</option>
-                    <option value="AMOUNT">Số tiền cố định</option>
-                  </select>
-                </label>
-                <label>Giá trị giảm
-                  <input required min="0" type="number" value={couponForm.discountValue} onChange={(e) => setCouponForm({ ...couponForm, discountValue: e.target.value })} />
-                </label>
-                <label>Đơn tối thiểu
-                  <input min="0" type="number" value={couponForm.minOrderValue} onChange={(e) => setCouponForm({ ...couponForm, minOrderValue: e.target.value })} />
-                </label>
-                {couponForm.discountType === "PERCENT" && (
-                  <label>Giảm tối đa
-                    <input min="0" type="number" value={couponForm.maxDiscountAmount} onChange={(e) => setCouponForm({ ...couponForm, maxDiscountAmount: e.target.value })} />
-                  </label>
-                )}
-                <label>Giới hạn lượt dùng
-                  <input min="1" type="number" value={couponForm.usageLimit} onChange={(e) => setCouponForm({ ...couponForm, usageLimit: e.target.value })} placeholder="Không giới hạn" />
-                </label>
-                <button className="btn-primary wide" disabled={saving}>{saving ? "Đang tạo..." : "Tạo mã giảm giá"}</button>
-              </form>
-              <CouponList coupons={coupons} onDeactivate={deactivateCoupon} />
-            </section>
-          )}
-
-          {tab === "REFUNDS" && <RefundList refunds={refunds} onProcess={processRefund} />}
-
-          {tab === "REVENUE" && (
-            <>
-              <section className="seller-revenue-grid seller-revenue-grid-single">
-                <article className="seller-revenue-card">
-                  <span>Tổng doanh thu (đơn đã giao)</span>
-                  <strong>{revenue.toLocaleString("vi-VN")} ₫</strong>
-                  <small>{deliveredOrders.length} đơn hoàn thành</small>
-                </article>
-              </section>
-              <OrderList orders={deliveredOrders} onUpdate={updateOrderStatus} onCancel={cancelOrder} onStartShipping={startShipping} />
-            </>
-          )}
-
-          {tab === "CHAT" && <ChatPanel shopId={shop.id} currentUserId={user.userId} />}
-
-          {tab === "SETTINGS" && (
-            <section className="seller-grid">
-              <form className="seller-card seller-form card" onSubmit={saveShop}>
-                <h2>Thông tin shop</h2>
-                <label>Tên shop
-                  <input required value={shopForm.shopName} onChange={(e) => setShopForm({ ...shopForm, shopName: e.target.value })} />
-                </label>
-                <label>Số điện thoại
-                  <input value={shopForm.phone} onChange={(e) => setShopForm({ ...shopForm, phone: e.target.value })} />
-                </label>
-                <label>Email
-                  <input type="email" value={shopForm.email} onChange={(e) => setShopForm({ ...shopForm, email: e.target.value })} />
-                </label>
-                <label className="wide">Giới thiệu
-                  <textarea value={shopForm.description} onChange={(e) => setShopForm({ ...shopForm, description: e.target.value })} />
-                </label>
-                <button className="btn-primary wide" disabled={saving}>{saving ? "Đang lưu..." : "Lưu thay đổi"}</button>
-              </form>
-              <section className="seller-card card">
-                <h2>Trạng thái hoạt động</h2>
-                <p>Shop hiện đang: <strong>{shop.status === "ACTIVE" ? "Hoạt động" : "Tạm ngưng"}</strong></p>
-                <button type="button" className="btn-secondary" onClick={toggleShopStatus}>
-                  {shop.status === "ACTIVE" ? "Tạm ngưng shop" : "Kích hoạt lại shop"}
-                </button>
-              </section>
-            </section>
-          )}
-        </main>
-      </div>
-    </div>
-  );
-}
-
-function OrderList({ orders, compact, onUpdate, onCancel, onStartShipping }) {
-  const [shippingDrafts, setShippingDrafts] = useState({});
-
-  const updateShippingDraft = (orderId, field, value) => {
-    setShippingDrafts((current) => ({
-      ...current,
-      [orderId]: { shippingProvider: "GHN", trackingCode: "", ...current[orderId], [field]: value },
-    }));
-  };
-
-  return (
-    <section className="seller-card card">
-      <h2>{compact ? "Đơn hàng cần xử lý" : "Tất cả đơn hàng"}</h2>
-      {orders.length ? (
-        <div className="seller-order-list">
-          {orders.map((o) => {
-            const nextActions = NEXT_STATUS[o.orderStatus] || [];
-            const canCancel = ["PENDING", "CONFIRMED"].includes(o.orderStatus);
-            const shippingDraft = { shippingProvider: "GHN", trackingCode: "", ...shippingDrafts[o.id] };
-            return (
-              <article className="seller-order" data-status={o.orderStatus} key={o.id}>
-                <div>
-                  <strong>#{o.orderCode || o.id}</strong>
-                  <span>{ORDER_LABEL[o.orderStatus] || o.orderStatus} · {Number(o.totalAmount || 0).toLocaleString("vi-VN")} ₫</span>
-                </div>
-                <div className="seller-order-actions">
-                  {nextActions.map(([status, label]) => (
-                    <button key={status} className="btn-primary btn-sm" onClick={() => onUpdate(o, status)}>{label}</button>
-                  ))}
-                  {canCancel && <button className="btn-secondary btn-sm" onClick={() => onCancel(o)}>Huỷ đơn</button>}
-                </div>
-                {o.orderStatus === "PROCESSING" && (
-                  <div className="seller-shipping-form">
-                    <select value={shippingDraft.shippingProvider} onChange={(e) => updateShippingDraft(o.id, "shippingProvider", e.target.value)} aria-label="Hãng vận chuyển">
-                      <option value="GHN">Giao Hàng Nhanh</option>
-                      <option value="GHTK">Giao Hàng Tiết Kiệm</option>
-                      <option value="VIETTEL_POST">Viettel Post</option>
-                    </select>
-                    <input value={shippingDraft.trackingCode} onChange={(e) => updateShippingDraft(o.id, "trackingCode", e.target.value)} placeholder="Mã vận đơn, VD: GHN-DEMO-001" />
-                    <button type="button" className="btn-primary btn-sm" disabled={!shippingDraft.trackingCode.trim()} onClick={() => onStartShipping(o, shippingDraft.shippingProvider, shippingDraft.trackingCode.trim())}>
-                      Bàn giao vận chuyển
-                    </button>
-                  </div>
-                )}
-                {o.orderStatus === "SHIPPING" && (
-                  <small className="seller-shipping-info">{o.shippingProvider || "Đơn vị vận chuyển"} · {o.trackingCode || "Chưa có mã vận đơn"}</small>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      ) : <p className="seller-empty">Chưa có đơn hàng.</p>}
-    </section>
-  );
-}
-
-function ProductList({ products, onEdit, onDelete }) {
-  return (
-    <section className="seller-card card">
-      <h2>Sản phẩm của tôi ({products.length})</h2>
-      {products.length ? products.map((p) => (
-        <div className="seller-product" key={p.id}>
-          <a href={`/product/${p.id}`} className="seller-product-link">
-            <img src={p.images?.[0]?.url || "https://via.placeholder.com/56"} alt="" />
-            <span>
-              <b>{p.name}</b>
-              <small>{Number(p.basePrice || 0).toLocaleString("vi-VN")} ₫ · {p.variants?.length || 0} biến thể</small>
-            </span>
-          </a>
-          <div className="seller-product-actions">
-            <button type="button" className="btn-secondary btn-sm" onClick={() => onEdit(p)}>Sửa</button>
-            <button type="button" className="btn-danger btn-sm" onClick={() => onDelete(p)}>Xoá</button>
-          </div>
-        </div>
-      )) : <p className="seller-empty">Chưa có sản phẩm nào.</p>}
-    </section>
-  );
-}
-
-function ImageManager({ product, onUpload, onDelete, uploading }) {
-  const isVideo = (media) => media?.imageVideo === "VIDEO";
-  const media = product.images || [];
-  const [pendingMedia, setPendingMedia] = useState([]);
-
-  const handleFileChange = (e, mediaType, isMain) => {
-    const file = e.target.files?.[0];
-    if (file) setPendingMedia((current) => [...current, { file, mediaType, isMain }]);
-    e.target.value = "";
-  };
-
-  const updateMedia = async () => {
-    const updated = await onUpload(pendingMedia);
-    if (updated) setPendingMedia([]);
-  };
-
-  return (
-    <div className="image-manager">
-      <h2>Ảnh & video sản phẩm</h2>
-      <p>Chọn ảnh hoặc video trước, sau đó bấm “Cập nhật ảnh & video”. Thông tin sản phẩm được cập nhật bằng nút riêng.</p>
-
-      {media.length > 0 ? (
-        <div className="image-manager-grid">
-          {media.map((m, i) => (
-            <div className="image-manager-item" key={m.key || m.url || i}>
-              {isVideo(m) ? <video src={m.url} muted /> : <img src={m.url} alt="" />}
-              {m.isMain && <span className="image-main-badge">Chính</span>}
-              {isVideo(m) && <span className="image-video-badge">▶ Video</span>}
-              <button
-                type="button"
-                className="image-remove-btn"
-                onClick={() => onDelete(isVideo(m) ? "VIDEO" : "IMAGE", m.key || m.url)}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="image-manager-empty">Chưa có ảnh/video nào. Thêm ít nhất 1 ảnh để sản phẩm hiển thị đẹp hơn.</p>
-      )}
-
-      <div className="image-manager-upload">
-        <label className="btn-secondary btn-sm">
-          Chọn ảnh phụ
-          <input type="file" accept="image/*" hidden onChange={(e) => handleFileChange(e, "IMAGE", false)} />
-        </label>
-        <label className="btn-primary btn-sm">
-          Chọn ảnh chính
-          <input type="file" accept="image/*" hidden onChange={(e) => handleFileChange(e, "IMAGE", true)} />
-        </label>
-        <label className="btn-secondary btn-sm">
-          Chọn video
-          <input type="file" accept="video/*" hidden onChange={(e) => handleFileChange(e, "VIDEO", false)} />
-        </label>
-      </div>
-      <div className="image-manager-pending">
-        <span>{pendingMedia.length ? `Đã chọn ${pendingMedia.length} tệp.` : "Chưa chọn ảnh hoặc video mới."}</span>
-        <button type="button" className="btn-primary btn-sm" onClick={updateMedia} disabled={uploading || !pendingMedia.length}>
-          {uploading ? "Đang cập nhật..." : "Cập nhật ảnh & video"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ReviewsPanel({ loading, reviews, onReply }) {
-  const [replyDrafts, setReplyDrafts] = useState({});
-
-  const submitReply = (review) => {
-    const content = (replyDrafts[review.id] || "").trim();
-    if (!content) return;
-    onReply(review, content);
-    setReplyDrafts((current) => ({ ...current, [review.id]: "" }));
-  };
-
-  return (
-    <section className="seller-card card">
-      <h2>Đánh giá sản phẩm ({reviews.length})</h2>
-      {loading ? (
-        <p className="seller-empty">Đang tải đánh giá từ tất cả sản phẩm...</p>
-      ) : reviews.length ? (
-        <div className="seller-review-list">
-          {reviews.map((r) => (
-            <article className="seller-review" key={r.id}>
-              <div className="seller-review-head">
-                <strong>{r.userName || "Khách hàng"}</strong>
-                <span className="seller-review-stars">{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
-                <span className="seller-review-product">— {r.productName}</span>
-              </div>
-              {r.comment && <p>{r.comment}</p>}
-              {r.imageUrls?.length > 0 && (
-                <div className="seller-review-images">
-                  {r.imageUrls.map((img, i) => <img key={i} src={img} alt="" />)}
-                </div>
-              )}
-              {r.shopReply ? (
-                <p className="seller-review-reply">Bạn đã trả lời: {r.shopReply.content}</p>
-              ) : (
-                <div className="seller-review-reply-form">
-                  <input
-                    placeholder="Trả lời đánh giá này..."
-                    value={replyDrafts[r.id] || ""}
-                    onChange={(e) => setReplyDrafts((current) => ({ ...current, [r.id]: e.target.value }))}
-                  />
-                  <button type="button" className="btn-primary btn-sm" onClick={() => submitReply(r)}>Gửi</button>
-                </div>
-              )}
-            </article>
-          ))}
-        </div>
-      ) : (
-        <p className="seller-empty">Chưa có đánh giá nào.</p>
-      )}
-    </section>
-  );
-}
-
-function CouponList({ coupons, onDeactivate }) {
-  return (
-    <section className="seller-card card">
-      <h2>Mã giảm giá của shop ({coupons.length})</h2>
-      {coupons.length ? coupons.map((c) => (
-        <article className="seller-coupon" key={c.id}>
-          <div>
-            <strong>{c.code}</strong>
-            <span>
-              {c.discountType === "PERCENT" ? `Giảm ${c.discountValue}%` : `Giảm ${Number(c.discountValue).toLocaleString("vi-VN")} ₫`}
-              {" · "}Đã dùng {c.usedCount || 0}{c.usageLimit ? `/${c.usageLimit}` : ""}
-            </span>
-          </div>
-          {c.active ? (
-            <button type="button" className="btn-secondary btn-sm" onClick={() => onDeactivate(c)}>Tắt mã</button>
-          ) : (
-            <span className="seller-coupon-off">Đã tắt</span>
-          )}
-        </article>
-      )) : <p className="seller-empty">Chưa có mã giảm giá nào.</p>}
-    </section>
-  );
-}
-
-function RefundList({ refunds, onProcess }) {
-  return (
-    <section className="seller-card card">
-      <h2>Yêu cầu hoàn tiền / đổi trả ({refunds.length})</h2>
-      {refunds.length ? refunds.map((r) => (
-        <article className="seller-refund" key={r.id}>
-          <div>
-            <strong>Đơn #{r.orderId}</strong>
-            <span className={`seller-refund-status status-${r.status?.toLowerCase()}`}>{REFUND_LABEL[r.status] || r.status}</span>
-            <p>{r.reason}</p>
-            {r.images?.length > 0 && (
-              <div className="seller-refund-images">
-                {r.images.map((img, i) => <img key={i} src={img} alt={`refund-${i}`} />)}
-              </div>
-            )}
-          </div>
-          {r.status === "PENDING" && (
-            <div className="seller-refund-actions">
-              <button type="button" className="btn-primary btn-sm" onClick={() => onProcess(r, "APPROVED")}>Duyệt</button>
-              <button type="button" className="btn-secondary btn-sm" onClick={() => onProcess(r, "REJECTED")}>Từ chối</button>
-            </div>
-          )}
-        </article>
-      )) : <p className="seller-empty">Chưa có yêu cầu hoàn tiền nào.</p>}
-    </section>
-  );
-}
-
-function ChatPanel({ shopId, currentUserId }) {
-  const [conversations, setConversations] = useState([]);
-  const [convLoading, setConvLoading] = useState(true);
-  const [activeConvId, setActiveConvId] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [msgLoading, setMsgLoading] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [pendingImages, setPendingImages] = useState([]);
-  const [sending, setSending] = useState(false);
-  const [chatError, setChatError] = useState("");
-  const messagesEndRef = useRef(null);
-
-  const loadConversations = async () => {
-    try {
-      const data = await authFetch(`${API_BASE_URL}/api/chat/conversations/shop/${shopId}`);
-      setConversations(Array.isArray(data) ? data : []);
-    } catch (e) {
-      setChatError(e.message || "Không thể tải danh sách hội thoại.");
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    (async () => { setConvLoading(true); await loadConversations(); setConvLoading(false); })();
-    const interval = setInterval(loadConversations, 8000);
-    return () => clearInterval(interval);
+    loadData();
   }, [shopId]);
 
-  const loadMessages = async (conversationId, { silent } = {}) => {
-    if (!silent) setMsgLoading(true);
-    try {
-      const data = await authFetch(`${API_BASE_URL}/api/chat/conversations/${conversationId}/messages?page=0&size=30`);
-      setMessages(Array.isArray(data?.content) ? [...data.content].reverse() : []);
-    } catch (e) {
-      setChatError(e.message || "Không thể tải tin nhắn.");
-    } finally {
-      if (!silent) setMsgLoading(false);
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(""), 3000);
+  };
+
+  const handleSaveProduct = async (e) => {
+    e.preventDefault();
+    if (!productForm.name || !productForm.basePrice) {
+      showToast("Vui lòng nhập tên và giá sản phẩm!");
+      return;
+    }
+
+    const payload = {
+      name: productForm.name,
+      categoryId: productForm.categoryId,
+      basePrice: Number(productForm.basePrice),
+      originalPrice: Number(productForm.originalPrice) || Number(productForm.basePrice),
+      description: productForm.description,
+      images: [
+        {
+          id: "img-1",
+          url: productForm.imageUrl || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400",
+          isMain: true,
+        },
+      ],
+      variants: [
+        {
+          sku: `SKU-${Date.now().toString().slice(-4)}`,
+          name: "Tiêu chuẩn",
+          price: Number(productForm.basePrice),
+          stock: Number(productForm.stock) || 50,
+          active: true,
+        },
+      ],
+    };
+
+    if (editingProduct) {
+      await sellerService.updateProduct(shopId, editingProduct.id, payload);
+      showToast("Đã cập nhật sản phẩm thành công!");
+    } else {
+      await sellerService.createProduct(shopId, payload);
+      showToast("Đã thêm sản phẩm mới thành công!");
+    }
+
+    setProductModalOpen(false);
+    setEditingProduct(null);
+    await loadData();
+  };
+
+  const handleDeleteProduct = async (id) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa sản phẩm này?")) {
+      await sellerService.deleteProduct(shopId, id);
+      showToast("Đã xóa sản phẩm thành công!");
+      await loadData();
     }
   };
 
-  const openConversation = async (conv) => {
-    setActiveConvId(conv.id);
-    setChatError("");
-    await loadMessages(conv.id);
-    try {
-      await authFetch(`${API_BASE_URL}/api/chat/conversations/${conv.id}/read`, { method: "PATCH" });
-      setConversations((current) => current.map((c) => c.id === conv.id ? { ...c, unreadCountForShop: 0 } : c));
-    } catch {
-      // không chặn luồng chat nếu mark-as-read lỗi
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    await sellerService.updateOrderStatus(shopId, orderId, newStatus);
+    showToast(`Đã chuyển trạng thái đơn hàng sang: ${newStatus}`);
+    await loadData();
+  };
+
+  const handleSaveCoupon = async (e) => {
+    e.preventDefault();
+    if (!couponForm.code || !couponForm.discount) {
+      showToast("Vui lòng nhập mã và số tiền giảm!");
+      return;
     }
-  };
-
-  useEffect(() => {
-    if (!activeConvId) return;
-    const interval = setInterval(() => loadMessages(activeConvId, { silent: true }), 4000);
-    return () => clearInterval(interval);
-  }, [activeConvId]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
-
-  const handleImagePick = (e) => {
-    const files = Array.from(e.target.files || []);
-    setPendingImages((current) => [...current, ...files]);
-    e.target.value = "";
-  };
-
-  const removePendingImage = (index) => {
-    setPendingImages((current) => current.filter((_, i) => i !== index));
-  };
-
-  const sendMessage = async (event) => {
-    event.preventDefault();
-    if (!activeConvId || (!draft.trim() && !pendingImages.length)) return;
-    setSending(true); setChatError("");
-    try {
-      const formData = new FormData();
-      formData.append("conversationId", activeConvId);
-      formData.append("senderId", String(currentUserId));
-      formData.append("senderRole", "SHOP");
-      if (draft.trim()) formData.append("content", draft.trim());
-      pendingImages.forEach((file) => formData.append("images", file));
-
-      const created = await authFetch(`${API_BASE_URL}/api/chat/messages`, { method: "POST", body: formData });
-      setMessages((current) => [...current, created]);
-      setDraft("");
-      setPendingImages([]);
-      loadConversations();
-    } catch (e) {
-      setChatError(e.message || "Không thể gửi tin nhắn.");
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const deleteMessage = async (message) => {
-    if (!window.confirm("Xoá tin nhắn này?")) return;
-    try {
-      await authFetch(`${API_BASE_URL}/api/chat/messages/${message.id}`, { method: "DELETE" });
-      setMessages((current) => current.filter((m) => m.id !== message.id));
-    } catch (e) {
-      setChatError(e.message || "Không thể xoá tin nhắn.");
-    }
+    await sellerService.createCoupon(shopId, {
+      code: couponForm.code.toUpperCase(),
+      discount: Number(couponForm.discount),
+      minOrder: Number(couponForm.minOrder) || 0,
+      expiry: couponForm.expiry,
+    });
+    showToast("Đã tạo voucher khuyến mãi thành công!");
+    setCouponModalOpen(false);
+    await loadData();
   };
 
   return (
-    <section className="seller-card card seller-chat-card">
-      <h2>Tin nhắn với khách hàng</h2>
-      {chatError && <div className="seller-alert error">{chatError}</div>}
-      <div className="seller-chat">
-        <div className="seller-chat-list">
-          {convLoading ? (
-            <p className="seller-empty">Đang tải hội thoại...</p>
-          ) : conversations.length ? (
-            conversations.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className={`seller-chat-item${activeConvId === c.id ? " active" : ""}`}
-                onClick={() => openConversation(c)}
-              >
-                <span className="seller-chat-item-name">{c.userId ? `Khách #${c.userId}` : "Khách hàng"}</span>
-                <span className="seller-chat-item-last">
-                  {c.lastMessageType === "IMAGE" ? "[Hình ảnh]" : (c.lastMessage || "Chưa có tin nhắn")}
-                </span>
-                {c.unreadCountForShop > 0 && <span className="seller-tab-badge">{c.unreadCountForShop}</span>}
-              </button>
-            ))
-          ) : (
-            <p className="seller-empty">Chưa có hội thoại nào.</p>
-          )}
-        </div>
+    <div className="page-shell">
+      <Header />
+      <SubNav activeTab="seller" />
 
-        <div className="seller-chat-thread">
-          {!activeConvId ? (
-            <p className="seller-empty">Chọn một hội thoại để xem tin nhắn.</p>
-          ) : (
-            <>
-              <div className="seller-chat-messages">
-                {msgLoading ? (
-                  <p className="seller-empty">Đang tải tin nhắn...</p>
-                ) : messages.length ? (
-                  messages.map((m) => (
-                    <div key={m.id} className={`seller-chat-bubble${m.senderRole === "SHOP" ? " mine" : ""}`}>
-                      {m.content && <p>{m.content}</p>}
-                      {m.imageUrls?.length > 0 && (
-                        <div className="seller-chat-bubble-images">
-                          {m.imageUrls.map((url, i) => <img key={i} src={url} alt="" />)}
-                        </div>
-                      )}
-                      <div className="seller-chat-bubble-meta">
-                        <span>{m.sentAt ? new Date(m.sentAt).toLocaleString("vi-VN") : ""}</span>
-                        {m.senderRole === "SHOP" && (
-                          <button type="button" onClick={() => deleteMessage(m)}>Xoá</button>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="seller-empty">Chưa có tin nhắn nào, hãy bắt đầu trò chuyện.</p>
-                )}
-                <div ref={messagesEndRef} />
+      {toastMessage && (
+        <div
+          style={{
+            position: "fixed",
+            top: "80px",
+            right: "20px",
+            zIndex: 9999,
+            backgroundColor: "#10b981",
+            color: "#ffffff",
+            padding: "12px 20px",
+            borderRadius: "var(--r-md)",
+            fontSize: "14px",
+            fontWeight: "600",
+            boxShadow: "var(--shadow-lg)",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <CheckCircle size={18} />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      <main className="page-content">
+        <div className="container">
+          {/* Seller Center Header */}
+          <div
+            className="card"
+            style={{
+              padding: "20px 24px",
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--r-lg)",
+              border: "1px solid var(--border-light)",
+              marginBottom: "20px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "16px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+              <div
+                style={{
+                  width: "56px",
+                  height: "56px",
+                  borderRadius: "50%",
+                  backgroundColor: "var(--primary-light)",
+                  color: "var(--primary)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Store size={28} />
+              </div>
+              <div>
+                <h1 style={{ fontSize: "20px", fontWeight: "800", color: "var(--text)" }}>
+                  Kênh Người Bán - DoMix Seller Center
+                </h1>
+                <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                  Quản lý sản phẩm, xử lý đơn hàng và phát triển doanh số shop của bạn
+                </p>
+              </div>
+            </div>
+
+            <Button
+              variant="primary"
+              icon={Plus}
+              onClick={() => {
+                setEditingProduct(null);
+                setProductForm({
+                  name: "",
+                  categoryId: "dien-thoai",
+                  basePrice: "",
+                  originalPrice: "",
+                  stock: 50,
+                  description: "",
+                  imageUrl: "",
+                });
+                setProductModalOpen(true);
+              }}
+            >
+              Thêm Sản Phẩm Mới
+            </Button>
+          </div>
+
+          {/* Navigation Tabs */}
+          <div
+            className="card"
+            style={{
+              display: "flex",
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--r-md)",
+              border: "1px solid var(--border-light)",
+              marginBottom: "20px",
+              overflowX: "auto",
+            }}
+          >
+            {[
+              { id: "dashboard", label: "📊 Tổng Quan", icon: TrendingUp },
+              { id: "products", label: `📦 Sản Phẩm (${products.length})`, icon: Package },
+              { id: "orders", label: `📑 Đơn Hàng (${orders.length})`, icon: ShoppingBag },
+              { id: "coupons", label: `🎟️ Mã Giảm Giá (${coupons.length})`, icon: Ticket },
+              { id: "settings", label: "⚙️ Cài Đặt Shop", icon: Settings },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  flex: 1,
+                  padding: "14px 16px",
+                  border: "none",
+                  borderBottom: activeTab === tab.id ? "3px solid var(--primary)" : "3px solid transparent",
+                  backgroundColor: "transparent",
+                  color: activeTab === tab.id ? "var(--primary)" : "var(--text)",
+                  fontWeight: activeTab === tab.id ? "700" : "500",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  transition: "all 0.15s",
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* TAB 1: DASHBOARD */}
+          {activeTab === "dashboard" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+              {/* Stat Metric Cards */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: "16px",
+                }}
+              >
+                <div className="card" style={{ padding: "20px", backgroundColor: "#fff" }}>
+                  <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600" }}>
+                    Doanh Thu Tháng Này
+                  </div>
+                  <div style={{ fontSize: "24px", fontWeight: "900", color: "var(--primary)", marginTop: "6px" }}>
+                    {formatCurrency(stats?.totalRevenue || 128450000)}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#059669", marginTop: "4px" }}>
+                    ↑ +18.4% so với tháng trước
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: "20px", backgroundColor: "#fff" }}>
+                  <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600" }}>
+                    Tổng Số Đơn Hàng
+                  </div>
+                  <div style={{ fontSize: "24px", fontWeight: "900", color: "var(--text)", marginTop: "6px" }}>
+                    {stats?.totalOrders || 320} đơn
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
+                    14 đơn đang chờ xác nhận
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: "20px", backgroundColor: "#fff" }}>
+                  <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600" }}>
+                    Đánh Giá Shop
+                  </div>
+                  <div style={{ fontSize: "24px", fontWeight: "900", color: "#f59e0b", marginTop: "6px" }}>
+                    ⭐ {stats?.rating || "4.9"} / 5.0
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
+                    Tỉ lệ phản hồi chat: {stats?.responseRate || "99%"}
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: "20px", backgroundColor: "#fff" }}>
+                  <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600" }}>
+                    Sản Phẩm Đang Bán
+                  </div>
+                  <div style={{ fontSize: "24px", fontWeight: "900", color: "var(--text)", marginTop: "6px" }}>
+                    {products.length} mặt hàng
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--error)", marginTop: "4px" }}>
+                    {stats?.outOfStockProducts || 3} mặt hàng sắp hết kho
+                  </div>
+                </div>
               </div>
 
-              <form className="seller-chat-composer" onSubmit={sendMessage}>
-                {pendingImages.length > 0 && (
-                  <div className="seller-chat-pending-images">
-                    {pendingImages.map((file, i) => (
-                      <span key={i} className="seller-chat-pending-image">
-                        {file.name}
-                        <button type="button" onClick={() => removePendingImage(i)}>✕</button>
+              {/* To-Do List Checklist */}
+              <div
+                className="card"
+                style={{
+                  padding: "24px",
+                  backgroundColor: "var(--surface)",
+                  borderRadius: "var(--r-lg)",
+                  border: "1px solid var(--border-light)",
+                }}
+              >
+                <h3 style={{ fontSize: "16px", fontWeight: "800", marginBottom: "16px" }}>
+                  Danh Sách Việc Cần Làm
+                </h3>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: "14px",
+                  }}
+                >
+                  <div
+                    onClick={() => setActiveTab("orders")}
+                    style={{
+                      padding: "16px",
+                      backgroundColor: "var(--primary-light)",
+                      borderRadius: "8px",
+                      border: "1px solid var(--border-primary)",
+                      textAlign: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <strong style={{ fontSize: "22px", color: "var(--primary)", display: "block" }}>14</strong>
+                    <span style={{ fontSize: "12px", color: "var(--text)" }}>Chờ Xác Nhận</span>
+                  </div>
+
+                  <div
+                    onClick={() => setActiveTab("orders")}
+                    style={{
+                      padding: "16px",
+                      backgroundColor: "var(--surface-muted)",
+                      borderRadius: "8px",
+                      border: "1px solid var(--border)",
+                      textAlign: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <strong style={{ fontSize: "22px", color: "var(--info)", display: "block" }}>8</strong>
+                    <span style={{ fontSize: "12px", color: "var(--text)" }}>Chờ Lấy Hàng</span>
+                  </div>
+
+                  <div
+                    onClick={() => (window.location.href = "/refunds")}
+                    style={{
+                      padding: "16px",
+                      backgroundColor: "#fff7ed",
+                      borderRadius: "8px",
+                      border: "1px solid #fed7aa",
+                      textAlign: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <strong style={{ fontSize: "22px", color: "#ea580c", display: "block" }}>2</strong>
+                    <span style={{ fontSize: "12px", color: "var(--text)" }}>Trả Hàng / Hoàn Tiền</span>
+                  </div>
+
+                  <div
+                    onClick={() => setActiveTab("products")}
+                    style={{
+                      padding: "16px",
+                      backgroundColor: "#fef2f2",
+                      borderRadius: "8px",
+                      border: "1px solid #fecaca",
+                      textAlign: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <strong style={{ fontSize: "22px", color: "var(--error)", display: "block" }}>3</strong>
+                    <span style={{ fontSize: "12px", color: "var(--text)" }}>Sản Phẩm Hết Hàng</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: PRODUCTS MANAGER */}
+          {activeTab === "products" && (
+            <div
+              className="card"
+              style={{
+                backgroundColor: "var(--surface)",
+                borderRadius: "var(--r-lg)",
+                border: "1px solid var(--border-light)",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "18px 20px",
+                  borderBottom: "1px solid var(--border-light)",
+                }}
+              >
+                <strong style={{ fontSize: "16px" }}>Danh Sách Sản Phẩm ({products.length})</strong>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={Plus}
+                  onClick={() => {
+                    setEditingProduct(null);
+                    setProductForm({
+                      name: "",
+                      categoryId: "dien-thoai",
+                      basePrice: "",
+                      originalPrice: "",
+                      stock: 50,
+                      description: "",
+                      imageUrl: "",
+                    });
+                    setProductModalOpen(true);
+                  }}
+                >
+                  Thêm Sản Phẩm
+                </Button>
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                  <thead>
+                    <tr style={{ backgroundColor: "var(--surface-muted)", textAlign: "left" }}>
+                      <th style={{ padding: "12px 16px" }}>Sản phẩm</th>
+                      <th style={{ padding: "12px 16px" }}>Giá bán</th>
+                      <th style={{ padding: "12px 16px" }}>Tồn kho</th>
+                      <th style={{ padding: "12px 16px" }}>Đã bán</th>
+                      <th style={{ padding: "12px 16px" }}>Trạng thái</th>
+                      <th style={{ padding: "12px 16px", textAlign: "right" }}>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.map((p) => (
+                      <tr key={p.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                        <td style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: "12px" }}>
+                          <img
+                            src={p.images?.[0]?.url || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100"}
+                            alt={p.name}
+                            style={{ width: "48px", height: "48px", borderRadius: "6px", objectFit: "cover" }}
+                          />
+                          <div>
+                            <div style={{ fontWeight: "600", maxWidth: "280px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {p.name}
+                            </div>
+                            <div style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                              ID: {p.id} • {p.categoryName || "Điện tử"}
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: "12px 16px", fontWeight: "700", color: "var(--primary)" }}>
+                          {formatCurrency(p.basePrice)}
+                        </td>
+                        <td style={{ padding: "12px 16px" }}>
+                          {p.variants?.[0]?.stock || 50}
+                        </td>
+                        <td style={{ padding: "12px 16px" }}>{p.soldCount || 0}</td>
+                        <td style={{ padding: "12px 16px" }}>
+                          <span
+                            style={{
+                              backgroundColor: "var(--success-bg)",
+                              color: "var(--success-dark)",
+                              padding: "2px 8px",
+                              borderRadius: "99px",
+                              fontSize: "11px",
+                              fontWeight: "700",
+                            }}
+                          >
+                            Đang bán
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                          <div style={{ display: "flex", justifyContent: "flex-end", gap: "6px" }}>
+                            <button
+                              onClick={() => {
+                                setEditingProduct(p);
+                                setProductForm({
+                                  name: p.name,
+                                  categoryId: p.categoryId || "dien-thoai",
+                                  basePrice: p.basePrice,
+                                  originalPrice: p.originalPrice || p.basePrice,
+                                  stock: p.variants?.[0]?.stock || 50,
+                                  description: p.description || "",
+                                  imageUrl: p.images?.[0]?.url || "",
+                                });
+                                setProductModalOpen(true);
+                              }}
+                              style={{ padding: "6px", color: "var(--text-secondary)" }}
+                              title="Chỉnh sửa"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProduct(p.id)}
+                              style={{ padding: "6px", color: "var(--error)" }}
+                              title="Xóa"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: ORDERS MANAGER */}
+          {activeTab === "orders" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {orders.map((o) => (
+                <div
+                  key={o.id}
+                  className="card"
+                  style={{
+                    padding: "20px",
+                    backgroundColor: "var(--surface)",
+                    borderRadius: "var(--r-lg)",
+                    border: "1px solid var(--border-light)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      paddingBottom: "12px",
+                      borderBottom: "1px solid var(--border-light)",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: "14px" }}>Đơn #{o.orderCode || o.id}</strong>
+                      <span style={{ fontSize: "12px", color: "var(--text-secondary)", marginLeft: "8px" }}>
+                        Khách: {o.recipient?.name} ({o.recipient?.phone})
                       </span>
+                    </div>
+
+                    <span
+                      style={{
+                        padding: "3px 10px",
+                        borderRadius: "99px",
+                        fontSize: "12px",
+                        fontWeight: "700",
+                        backgroundColor: "var(--primary-light)",
+                        color: "var(--primary)",
+                      }}
+                    >
+                      {o.orderStatus}
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "14px" }}>
+                    {(o.items || []).map((it, idx) => (
+                      <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}>
+                        <span>{it.productName} (x{it.quantity})</span>
+                        <strong>{formatCurrency(it.price * it.quantity)}</strong>
+                      </div>
                     ))}
                   </div>
-                )}
-                <div className="seller-chat-composer-row">
-                  <label className="btn-secondary btn-sm seller-chat-attach">
-                    📎
-                    <input type="file" accept="image/*" multiple hidden onChange={handleImagePick} />
+
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      paddingTop: "12px",
+                      borderTop: "1px solid var(--border-light)",
+                    }}
+                  >
+                    <div style={{ fontSize: "13px" }}>
+                      Địa chỉ giao: <span style={{ color: "var(--text-secondary)" }}>{o.recipient?.address}</span>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleUpdateOrderStatus(o.id, "PROCESSING")}
+                      >
+                        Xác Nhận Đơn
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleUpdateOrderStatus(o.id, "SHIPPING")}
+                      >
+                        Giao Cho Shipper
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* TAB 4: COUPONS */}
+          {activeTab === "coupons" && (
+            <div
+              className="card"
+              style={{
+                padding: "20px",
+                backgroundColor: "var(--surface)",
+                borderRadius: "var(--r-lg)",
+                border: "1px solid var(--border-light)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: "16px",
+                }}
+              >
+                <strong style={{ fontSize: "16px" }}>Mã Khuyến Mãi Của Shop</strong>
+                <Button variant="primary" size="sm" icon={Plus} onClick={() => setCouponModalOpen(true)}>
+                  Tạo Voucher Mới
+                </Button>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                  gap: "14px",
+                }}
+              >
+                {coupons.map((c) => (
+                  <div
+                    key={c.id}
+                    style={{
+                      border: "1px dashed var(--primary)",
+                      borderRadius: "8px",
+                      padding: "16px",
+                      backgroundColor: "var(--primary-light)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <strong style={{ fontSize: "16px", color: "var(--primary)" }}>{c.code}</strong>
+                      <span style={{ fontSize: "11px", backgroundColor: "#fff", padding: "2px 6px", borderRadius: "4px" }}>
+                        Đã dùng: {c.usageCount || 0}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "13px", fontWeight: "700" }}>
+                      Giảm {formatCurrency(c.discount)}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                      Đơn tối thiểu: {formatCurrency(c.minOrder)} • HSD: {c.expiry}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: SETTINGS */}
+          {activeTab === "settings" && (
+            <div
+              className="card"
+              style={{
+                padding: "24px",
+                backgroundColor: "var(--surface)",
+                borderRadius: "var(--r-lg)",
+                border: "1px solid var(--border-light)",
+                maxWidth: "600px",
+              }}
+            >
+              <h3 style={{ fontSize: "16px", fontWeight: "800", marginBottom: "16px" }}>
+                Cài Đặt Hồ Sơ Shop
+              </h3>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  showToast("Cập nhật thông tin shop thành công!");
+                }}
+                style={{ display: "flex", flexDirection: "column", gap: "14px" }}
+              >
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                    Tên Shop:
                   </label>
                   <input
                     type="text"
-                    placeholder="Nhập tin nhắn..."
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
+                    defaultValue="Apple Flagship Store"
+                    style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
                   />
-                  <button className="btn-primary btn-sm" disabled={sending || (!draft.trim() && !pendingImages.length)}>
-                    {sending ? "Đang gửi..." : "Gửi"}
-                  </button>
                 </div>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                    Địa Chỉ Kho Hàng:
+                  </label>
+                  <input
+                    type="text"
+                    defaultValue="Kho Tân Bình, TP. Hồ Chí Minh"
+                    style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                    Giờ Làm Việc:
+                  </label>
+                  <input
+                    type="text"
+                    defaultValue="08:00 - 22:00 (Tất cả các ngày trong tuần)"
+                    style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+                  />
+                </div>
+                <Button variant="primary" type="submit" style={{ marginTop: "8px" }}>
+                  Lưu Thay Đổi
+                </Button>
               </form>
-            </>
+            </div>
           )}
         </div>
-      </div>
-    </section>
+      </main>
+
+      {/* Modal Add/Edit Product */}
+      <Modal
+        isOpen={productModalOpen}
+        onClose={() => setProductModalOpen(false)}
+        title={editingProduct ? "Chỉnh Sửa Sản Phẩm" : "Thêm Sản Phẩm Mới"}
+      >
+        <form onSubmit={handleSaveProduct} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Tên Sản Phẩm: <span style={{ color: "var(--error)" }}>*</span>
+            </label>
+            <input
+              type="text"
+              value={productForm.name}
+              onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+              placeholder="VD: iPhone 15 Pro Max 256GB"
+              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+              required
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                Giá Bán (₫): <span style={{ color: "var(--error)" }}>*</span>
+              </label>
+              <input
+                type="number"
+                value={productForm.basePrice}
+                onChange={(e) => setProductForm({ ...productForm, basePrice: e.target.value })}
+                placeholder="29990000"
+                style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+                required
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                Số Lượng Kho:
+              </label>
+              <input
+                type="number"
+                value={productForm.stock}
+                onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
+                style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Link Ảnh Sản Phẩm (URL):
+            </label>
+            <input
+              type="text"
+              value={productForm.imageUrl}
+              onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
+              placeholder="https://..."
+              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Mô Tả Sản Phẩm:
+            </label>
+            <textarea
+              rows={3}
+              value={productForm.description}
+              onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
+              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px", fontFamily: "inherit" }}
+            />
+          </div>
+
+          <Button variant="primary" type="submit" block style={{ marginTop: "8px" }}>
+            {editingProduct ? "Lưu Cập Nhật" : "Tạo Sản Phẩm"}
+          </Button>
+        </form>
+      </Modal>
+
+      {/* Modal Add Coupon */}
+      <Modal
+        isOpen={couponModalOpen}
+        onClose={() => setCouponModalOpen(false)}
+        title="Tạo Mã Giảm Giá Mới"
+      >
+        <form onSubmit={handleSaveCoupon} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Mã Voucher (Code):
+            </label>
+            <input
+              type="text"
+              placeholder="VD: SHOP30K"
+              value={couponForm.code}
+              onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value })}
+              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px", textTransform: "uppercase" }}
+              required
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Mức Giảm (₫):
+            </label>
+            <input
+              type="number"
+              placeholder="VD: 30000"
+              value={couponForm.discount}
+              onChange={(e) => setCouponForm({ ...couponForm, discount: e.target.value })}
+              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+              required
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Đơn Hàng Tối Thiểu (₫):
+            </label>
+            <input
+              type="number"
+              placeholder="VD: 200000"
+              value={couponForm.minOrder}
+              onChange={(e) => setCouponForm({ ...couponForm, minOrder: e.target.value })}
+              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+            />
+          </div>
+          <Button variant="primary" type="submit" block>
+            Tạo Mã Voucher
+          </Button>
+        </form>
+      </Modal>
+
+      <Footer />
+      <MobileNav />
+    </div>
   );
 }

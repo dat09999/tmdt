@@ -1,606 +1,878 @@
-import { useEffect, useRef, useState } from "react";
-import { API_BASE_URL, authFetch } from "../utils/auth";
+import React, { useState, useEffect } from "react";
+import Header from "../components/layout/Header";
+import SubNav from "../components/layout/SubNav";
+import Footer from "../components/layout/Footer";
+import MobileNav from "../components/layout/MobileNav";
+import Button from "../components/common/Button";
+import Modal from "../components/common/Modal";
 import { useAuth } from "./Authcontext";
-import Header from "../components/Header";
-import "./ProfilePage.css";
-import "./AddressBookPage.css";
-
-const SIDEBAR_MENU = [
-  { key: "info", label: "Thông tin cá nhân", icon: "👤" },
-  { key: "password", label: "Đổi mật khẩu", icon: "🔒" },
-  { key: "address-book", label: "Sổ địa chỉ", icon: "📍" },
-  { key: "orders", label: "Đơn hàng của tôi", icon: "📦" },
-  { key: "notifications", label: "Thông báo", icon: "🔔" },
-];
-
-const EMPTY_ADDRESS_FORM = {
-  fullName: "",
-  phone: "",
-  detail: "",
-  province: null,
-  district: null,
-  ward: null,
-  lat: null,
-  lng: null,
-  isDefault: false,
-};
+import { formatCurrency } from "../utils/formatters";
+import {
+  User,
+  MapPin,
+  Lock,
+  Ticket,
+  Package,
+  RotateCcw,
+  Camera,
+  Plus,
+  Edit2,
+  Trash2,
+  CheckCircle,
+  ShieldCheck,
+} from "lucide-react";
 
 export default function ProfilePage() {
-  const { user, setUser } = useAuth();
-  const [activeMenu, setActiveMenu] = useState("info");
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState("profile"); // "profile" | "addresses" | "password" | "vouchers"
+  const [toastMessage, setToastMessage] = useState("");
 
-  // --- State cho thông tin cá nhân ---
-  const [form, setForm] = useState({ fullName: "", phone: "" });
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  // Profile Form state
+  const [profileData, setProfileData] = useState({
+    fullName: user?.fullName || user?.name || "Nguyễn Minh Khang",
+    email: user?.email || "khang.nguyen@example.com",
+    phoneNumber: user?.phoneNumber || "0912 345 678",
+    gender: "male",
+    birthDate: "1998-05-15",
+    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+  });
 
-  // --- State cho sổ địa chỉ ---
-  const [addresses, setAddresses] = useState([]);
-  const [addrLoading, setAddrLoading] = useState(true);
-  const [addrError, setAddrError] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [addrForm, setAddrForm] = useState(EMPTY_ADDRESS_FORM);
-  const [addrSaving, setAddrSaving] = useState(false);
-  const [addressInput, setAddressInput] = useState("");
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [suggestLoading, setSuggestLoading] = useState(false);
-  const debounceRef = useRef(null);
-  const suggestBoxRef = useRef(null);
+  // Address Book state
+  const [addresses, setAddresses] = useState([
+    {
+      id: "addr-1",
+      name: "Nguyễn Minh Khang",
+      phone: "0912 345 678",
+      address: "Số 88 Đường Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh",
+      isDefault: true,
+      type: "Nhà Riêng",
+    },
+    {
+      id: "addr-2",
+      name: "Nguyễn Minh Khang (Văn Phòng)",
+      phone: "0912 345 678",
+      address: "Tòa nhà Bitexco, Số 2 Hải Triều, Bến Nghé, Quận 1, TP. Hồ Chí Minh",
+      isDefault: false,
+      type: "Văn Phòng",
+    },
+  ]);
 
-  useEffect(() => {
-    if (!user?.userId) {
-      window.location.href = "/login";
-      return;
-    }
-    if (activeMenu === "info") {
-      fetchProfile();
-    }
-  }, [user?.userId, activeMenu]);
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [editingAddress, setEditingAddress] = useState(null);
+  const [addressForm, setAddressForm] = useState({
+    name: "",
+    phone: "",
+    address: "",
+    type: "Nhà Riêng",
+    isDefault: false,
+  });
 
-  useEffect(() => {
-    if (!user?.userId) return;
-    if (activeMenu === "address-book") {
-      fetchAddresses();
-    }
-  }, [user?.userId, activeMenu]);
+  // Password state
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
 
-  useEffect(() => {
-    const closeOnOutsideClick = (e) => {
-      if (suggestBoxRef.current && !suggestBoxRef.current.contains(e.target)) {
-        setShowSuggestions(false);
-      }
-    };
-    document.addEventListener("mousedown", closeOnOutsideClick);
-    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
-  }, []);
+  // Vouchers state
+  const [vouchers, setVouchers] = useState([
+    { id: "v-1", code: "DOMIX50K", discount: 50000, minOrder: 300000, expiry: "31/12/2026", title: "Giảm 50K cho đơn từ 300K" },
+    { id: "v-2", code: "FREESHIP", discount: 25000, minOrder: 50000, expiry: "31/12/2026", title: "Miễn phí vận chuyển toàn quốc" },
+    { id: "v-3", code: "TECH100K", discount: 100000, minOrder: 1500000, expiry: "15/09/2026", title: "Voucher công nghệ giảm 100K" },
+  ]);
 
-  // --- Hàm Profile ---
-  const fetchProfile = async () => {
-    try {
-      setLoading(true);
-      setError("");
-      setMessage("");
-      const data = await authFetch(`${API_BASE_URL}/api/users/${user.userId}`);
-      const userData = data.user || data.data || data;
-      setForm({
-        fullName: userData.fullName || "",
-        phone: userData.phone || "",
-      });
-    } catch (err) {
-      setError(err.message || "Đã xảy ra lỗi khi tải hồ sơ");
-    } finally {
-      setLoading(false);
-    }
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(""), 3000);
   };
 
-  const handleChange = (field) => (e) =>
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
-
-  const handleSave = async (e) => {
+  const handleUpdateProfile = (e) => {
     e.preventDefault();
-    try {
-      setSaving(true);
-      setError("");
-      setMessage("");
-      const updated = await authFetch(`${API_BASE_URL}/api/users/${user.userId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+    showToast("Cập nhật thông tin hồ sơ thành công!");
+  };
 
-      setMessage("Cập nhật thông tin thành công!");
-      setEditing(false);
-
-      if (typeof setUser === "function") {
-        const updatedData = updated.user || updated.data || updated;
-        setUser((prev) => ({ ...prev, ...updatedData }));
-      }
-    } catch (err) {
-      setError(err.message || "Cập nhật thông tin thất bại");
-    } finally {
-      setSaving(false);
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setProfileData({ ...profileData, avatar: URL.createObjectURL(file) });
+      showToast("Đã tải ảnh đại diện mới!");
     }
   };
 
-  // --- Hàm Sổ Địa Chỉ ---
-  const fetchAddresses = async () => {
-    try {
-      setAddrLoading(true);
-      setAddrError("");
-      const data = await authFetch(`${API_BASE_URL}/api/users/${user.userId}`);
-      const addrList = data.addresses || data.data?.addresses || [];
-      setAddresses(addrList);
-    } catch (err) {
-      setAddrError(err.message || "Không tải được sổ địa chỉ");
-    } finally {
-      setAddrLoading(false);
-    }
-  };
-
-  const openAddForm = () => {
-    setEditingId(null);
-    setAddrForm(EMPTY_ADDRESS_FORM);
-    setAddressInput("");
-    setShowForm(true);
-  };
-
-  const openEditForm = (address) => {
-    setEditingId(address.id);
-    setAddrForm({
-      fullName: address.fullName || "",
-      phone: address.phone || "",
-      detail: address.detail || "",
-      province: address.province,
-      district: address.district,
-      ward: address.ward,
-      lat: address.lat,
-      lng: address.lng,
-      isDefault: !!address.isDefault,
-    });
-    setAddressInput(address.detail || "");
-    setShowForm(true);
-  };
-
-  const handleAddressSearch = (e) => {
-    const value = e.target.value;
-    setAddressInput(value);
-    setAddrForm((prev) => ({
-      ...prev,
-      detail: value,
-      lat: null,
-      lng: null,
-      province: null,
-      district: null,
-      ward: null,
-    }));
-    setShowSuggestions(true);
-
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!value.trim()) {
-      setSuggestions([]);
+  const handleSaveAddress = (e) => {
+    e.preventDefault();
+    if (!addressForm.name || !addressForm.phone || !addressForm.address) {
+      showToast("Vui lòng điền đủ thông tin địa chỉ!");
       return;
     }
 
-    debounceRef.current = setTimeout(async () => {
-      try {
-        setSuggestLoading(true);
-        const data = await authFetch(
-          `${API_BASE_URL}/api/geo/suggest?input=${encodeURIComponent(value.trim())}`
-        );
-
-        // Bóc tách linh hoạt dữ liệu mảng từ Backend
-        const list = Array.isArray(data)
-          ? data
-          : data.predictions || data.data || data.items || [];
-
-        setSuggestions(list);
-      } catch {
-        setSuggestions([]);
-      } finally {
-        setSuggestLoading(false);
-      }
-    }, 350);
-  };
-
-  const handleSelectSuggestion = async (suggestion) => {
-    try {
-      const placeId = suggestion.placeId || suggestion.place_id;
-      const displayAddress =
-        suggestion.description ||
-        suggestion.text ||
-        suggestion.formattedAddress ||
-        addressInput;
-
-      if (placeId) {
-        const detail = await authFetch(
-          `${API_BASE_URL}/api/geo/resolve?placeId=${encodeURIComponent(placeId)}`
-        );
-        const finalAddress = detail.formattedAddress || detail.address || displayAddress;
-        
-        setAddrForm((prev) => ({
-          ...prev,
-          detail: finalAddress,
-          lat: detail.lat ?? null,
-          lng: detail.lng ?? null,
-        }));
-        setAddressInput(finalAddress);
-      } else {
-        setAddrForm((prev) => ({ ...prev, detail: displayAddress }));
-        setAddressInput(displayAddress);
-      }
-    } catch (err) {
-      setAddrError(err.message || "Không lấy được chi tiết địa chỉ");
-    } finally {
-      setShowSuggestions(false);
-      setSuggestions([]);
-    }
-  };
-
-  const handleAddrFieldChange = (field) => (e) => {
-    const value = field === "isDefault" ? e.target.checked : e.target.value;
-    setAddrForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleAddrSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      setAddrSaving(true);
-      setAddrError("");
-
-      const payload = {
-        fullName: addrForm.fullName,
-        phone: addrForm.phone,
-        province: addrForm.province,
-        district: addrForm.district,
-        ward: addrForm.ward,
-        detail: addrForm.detail,
-        lat: addrForm.lat,
-        lng: addrForm.lng,
-        isDefault: addrForm.isDefault,
+    if (editingAddress) {
+      setAddresses(
+        addresses.map((a) =>
+          a.id === editingAddress.id ? { ...a, ...addressForm } : a
+        )
+      );
+      showToast("Đã cập nhật địa chỉ!");
+    } else {
+      const newAddr = {
+        id: `addr-${Date.now()}`,
+        ...addressForm,
+        isDefault: addresses.length === 0,
       };
-      console.log("Payload gửi lên:", JSON.stringify(payload, null, 2));    
-
-      const url = editingId
-        ? `${API_BASE_URL}/api/users/${user.userId}/addresses/${editingId}`
-        : `${API_BASE_URL}/api/users/${user.userId}/addresses`;
-
-      const data = await authFetch(url, {
-        method: editingId ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const updatedList = data.addresses || data.data?.addresses || data;
-      setAddresses(Array.isArray(updatedList) ? updatedList : []);
-      setShowForm(false);
-    } catch (err) {
-      setAddrError(err.message || "Lưu địa chỉ thất bại");
-    } finally {
-      setAddrSaving(false);
+      setAddresses([...addresses, newAddr]);
+      showToast("Đã thêm địa chỉ nhận hàng mới!");
     }
+    setAddressModalOpen(false);
+    setEditingAddress(null);
   };
 
-  const handleDelete = async (addressId) => {
-    if (!window.confirm("Xóa địa chỉ này?")) return;
-    try {
-      const data = await authFetch(
-        `${API_BASE_URL}/api/users/${user.userId}/addresses/${addressId}`,
-        { method: "DELETE" }
-      );
-      const updatedList = data.addresses || data.data?.addresses || data;
-      setAddresses(Array.isArray(updatedList) ? updatedList : []);
-    } catch (err) {
-      setAddrError(err.message || "Xóa địa chỉ thất bại");
-    }
+  const handleDeleteAddress = (id) => {
+    setAddresses(addresses.filter((a) => a.id !== id));
+    showToast("Đã xóa địa chỉ!");
   };
 
-  const renderContent = () => {
-    if (activeMenu === "info") {
-      return (
-        <div className="profile-card">
-          <div className="profile-header">
-            <h2>Hồ sơ của tôi</h2>
-            <p className="profile-subtitle">Quản lý thông tin để bảo mật tài khoản</p>
-          </div>
-          {message && <div className="profile-message success">{message}</div>}
-          {error && <div className="profile-message error">{error}</div>}
-          {loading ? (
-            <div className="profile-loading">Đang tải thông tin...</div>
-          ) : (
-            <form className="profile-form" onSubmit={handleSave}>
-              <div className="profile-field">
-                <label>Họ và tên</label>
-                <input
-                  type="text"
-                  value={form.fullName}
-                  onChange={handleChange("fullName")}
-                  disabled={!editing}
-                  placeholder="Nhập họ và tên"
-                />
-              </div>
-
-              <div className="profile-field">
-                <label>Số điện thoại</label>
-                <input
-                  type="tel"
-                  value={form.phone}
-                  onChange={handleChange("phone")}
-                  disabled={!editing}
-                  placeholder="Nhập số điện thoại"
-                />
-              </div>
-
-              <div className="profile-field">
-                <label>Email</label>
-                <input type="email" value={user?.email || ""} disabled />
-              </div>
-
-              <div className="profile-actions">
-                {editing ? (
-                  <>
-                    <button type="submit" className="btn-primary" disabled={saving}>
-                      {saving ? "Đang lưu..." : "Lưu thay đổi"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => {
-                        setEditing(false);
-                        fetchProfile();
-                      }}
-                      disabled={saving}
-                    >
-                      Hủy
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => {
-                      setMessage("");
-                      setError("");
-                      setEditing(true);
-                    }}
-                  >
-                    Chỉnh sửa
-                  </button>
-                )}
-              </div>
-            </form>
-          )}
-        </div>
-      );
-    }
-
-    if (activeMenu === "address-book") {
-      return (
-        <div className="address-book">
-          <div className="address-book-header">
-            <h2>Sổ địa chỉ</h2>
-            <button type="button" className="btn-primary" onClick={openAddForm}>
-              + Thêm địa chỉ mới
-            </button>
-          </div>
-
-          {addrError && <div className="profile-message error">{addrError}</div>}
-
-          {addrLoading ? (
-            <div className="profile-loading">Đang tải...</div>
-          ) : addresses.length === 0 ? (
-            <div className="address-empty">Bạn chưa có địa chỉ nào.</div>
-          ) : (
-            <div className="address-list">
-              {addresses.map((addr) => (
-                <div key={addr.id} className="address-item">
-                  {addr.isDefault && <span className="address-badge">Mặc định</span>}
-                  <strong>
-                    {addr.fullName} · {addr.phone}
-                  </strong>
-                  <p>{addr.detail}</p>
-                  <div className="address-item-actions">
-                    <button type="button" onClick={() => openEditForm(addr)}>
-                      Sửa
-                    </button>
-                    <button type="button" onClick={() => handleDelete(addr.id)}>
-                      Xóa
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {showForm && (
-            <div className="address-form-overlay">
-              <form className="address-form" onSubmit={handleAddrSubmit}>
-                <h3>{editingId ? "Sửa địa chỉ" : "Thêm địa chỉ mới"}</h3>
-
-                <div className="profile-field">
-                  <label>Họ tên người nhận</label>
-                  <input
-                    value={addrForm.fullName}
-                    onChange={handleAddrFieldChange("fullName")}
-                    required
-                  />
-                </div>
-
-                <div className="profile-field">
-                  <label>Số điện thoại</label>
-                  <input
-                    value={addrForm.phone}
-                    onChange={handleAddrFieldChange("phone")}
-                    required
-                  />
-                </div>
-
-                {/* Container gợi ý địa chỉ bổ sung z-index trực tiếp */}
-                <div
-                  className="profile-field"
-                  ref={suggestBoxRef}
-                  style={{ position: "relative", zIndex: 999 }}
-                >
-                  <label>Địa chỉ</label>
-                  <input
-                    value={addressInput}
-                    onChange={handleAddressSearch}
-                    onFocus={() => addressInput.trim() && setShowSuggestions(true)}
-                    placeholder="Nhập địa chỉ để tìm kiếm..."
-                    autoComplete="off"
-                    required
-                  />
-                  {showSuggestions && (
-                    <div
-                      className="address-suggest-box"
-                      style={{
-                        position: "absolute",
-                        top: "100%",
-                        left: 0,
-                        right: 0,
-                        background: "#fff",
-                        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                        borderRadius: "4px",
-                        maxHeight: "220px",
-                        overflowY: "auto",
-                        zIndex: 1000,
-                      }}
-                    >
-                      {suggestLoading && (
-                        <div className="address-suggest-item muted">Đang tìm...</div>
-                      )}
-                      {!suggestLoading &&
-                        suggestions.length === 0 &&
-                        addressInput.trim() && (
-                          <div className="address-suggest-item muted">
-                            Không tìm thấy địa chỉ
-                          </div>
-                        )}
-                      {!suggestLoading &&
-                        suggestions.map((s, index) => {
-                          const mainText =
-                            s.mainText ||
-                            s.structured_formatting?.main_text ||
-                            s.description ||
-                            s.text ||
-                            "";
-                          const subText =
-                            s.secondaryText ||
-                            s.structured_formatting?.secondary_text ||
-                            "";
-
-                          return (
-                            <button
-                              type="button"
-                              key={s.placeId || s.place_id || index}
-                              className="address-suggest-item"
-                              style={{
-                                width: "100%",
-                                textAlign: "left",
-                                padding: "8px 12px",
-                                border: "none",
-                                background: "none",
-                                cursor: "pointer",
-                                display: "block",
-                              }}
-                              onClick={() => handleSelectSuggestion(s)}
-                            >
-                              <strong>{mainText}</strong>
-                              {subText && (
-                                <span
-                                  style={{
-                                    display: "block",
-                                    fontSize: "0.85em",
-                                    color: "#666",
-                                  }}
-                                >
-                                  {subText}
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                    </div>
-                  )}
-                </div>
-
-                <label className="address-default-check">
-                  <input
-                    type="checkbox"
-                    checked={addrForm.isDefault}
-                    onChange={handleAddrFieldChange("isDefault")}
-                  />
-                  Đặt làm địa chỉ mặc định
-                </label>
-
-                <div className="profile-actions">
-                  <button type="submit" className="btn-primary" disabled={addrSaving}>
-                    {addrSaving ? "Đang lưu..." : "Lưu địa chỉ"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => setShowForm(false)}
-                    disabled={addrSaving}
-                  >
-                    Hủy
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <div className="profile-card">
-        <h3>{SIDEBAR_MENU.find((m) => m.key === activeMenu)?.label}</h3>
-        <p>Chức năng đang được phát triển...</p>
-      </div>
+  const handleSetDefaultAddress = (id) => {
+    setAddresses(
+      addresses.map((a) => ({
+        ...a,
+        isDefault: a.id === id,
+      }))
     );
+    showToast("Đã đặt làm địa chỉ mặc định!");
   };
 
-  const displayName =
-    user?.fullName || user?.name || user?.email?.split("@")[0] || "Tài khoản";
-  const avatarLetter = displayName.charAt(0).toUpperCase();
+  const handleChangePassword = (e) => {
+    e.preventDefault();
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      showToast("Mật khẩu mới không trùng khớp!");
+      return;
+    }
+    if (passwordForm.newPassword.length < 6) {
+      showToast("Mật khẩu phải có ít nhất 6 ký tự!");
+      return;
+    }
+    showToast("Đổi mật khẩu thành công!");
+    setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  };
 
   return (
     <div className="page-shell">
       <Header />
-      <div className="profile-layout">
-        <aside className="profile-sidebar">
-          <div className="profile-sidebar-user">
-            <span className="profile-avatar sm">{avatarLetter}</span>
+      <SubNav activeTab="profile" />
+
+      {toastMessage && (
+        <div
+          style={{
+            position: "fixed",
+            top: "80px",
+            right: "20px",
+            zIndex: 9999,
+            backgroundColor: "#10b981",
+            color: "#ffffff",
+            padding: "12px 20px",
+            borderRadius: "var(--r-md)",
+            fontSize: "14px",
+            fontWeight: "600",
+            boxShadow: "var(--shadow-lg)",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <CheckCircle size={18} />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      <main className="page-content">
+        <div className="container">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "240px 1fr",
+              gap: "24px",
+              alignItems: "start",
+            }}
+          >
+            {/* Left Sidebar: User profile badge & nav items */}
+            <aside
+              className="card"
+              style={{
+                padding: "20px 16px",
+                backgroundColor: "var(--surface)",
+                borderRadius: "var(--r-lg)",
+                border: "1px solid var(--border-light)",
+              }}
+            >
+              {/* User Mini Header */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  paddingBottom: "16px",
+                  borderBottom: "1px solid var(--border-light)",
+                  marginBottom: "14px",
+                }}
+              >
+                <img
+                  src={profileData.avatar}
+                  alt="Avatar"
+                  style={{
+                    width: "48px",
+                    height: "48px",
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                    border: "2px solid var(--primary-light)",
+                  }}
+                />
+                <div style={{ minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: "700",
+                      color: "var(--text)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {profileData.fullName}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                    Sửa hồ sơ
+                  </div>
+                </div>
+              </div>
+
+              {/* Sidebar Menu Links */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                {[
+                  { id: "profile", label: "Hồ Sơ Của Tôi", icon: User },
+                  { id: "addresses", label: "Địa Chỉ Nhận Hàng", icon: MapPin },
+                  { id: "password", label: "Đổi Mật Khẩu", icon: Lock },
+                  { id: "vouchers", label: "Kho Voucher", icon: Ticket },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        padding: "10px 12px",
+                        borderRadius: "var(--r-sm)",
+                        border: "none",
+                        backgroundColor: isActive ? "var(--primary-light)" : "transparent",
+                        color: isActive ? "var(--primary)" : "var(--text)",
+                        fontWeight: isActive ? "700" : "500",
+                        fontSize: "13px",
+                        textAlign: "left",
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      <Icon size={16} color={isActive ? "var(--primary)" : "var(--text-secondary)"} />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+
+                <div style={{ height: "1px", backgroundColor: "var(--border-light)", margin: "8px 0" }} />
+
+                <a
+                  href="/orders"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    padding: "10px 12px",
+                    borderRadius: "var(--r-sm)",
+                    color: "var(--text)",
+                    fontSize: "13px",
+                    fontWeight: "500",
+                  }}
+                >
+                  <Package size={16} color="var(--text-secondary)" />
+                  <span>Đơn Mua Của Tôi</span>
+                </a>
+
+                <a
+                  href="/refunds"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    padding: "10px 12px",
+                    borderRadius: "var(--r-sm)",
+                    color: "var(--text)",
+                    fontSize: "13px",
+                    fontWeight: "500",
+                  }}
+                >
+                  <RotateCcw size={16} color="var(--text-secondary)" />
+                  <span>Trả Hàng & Hoàn Tiền</span>
+                </a>
+              </div>
+            </aside>
+
+            {/* Right Main Content */}
             <div>
-              <strong>{displayName}</strong>
-              <span className="profile-sidebar-edit">Sửa hồ sơ</span>
+              {/* TAB 1: PROFILE FORM */}
+              {activeTab === "profile" && (
+                <div
+                  className="card"
+                  style={{
+                    padding: "28px",
+                    backgroundColor: "var(--surface)",
+                    borderRadius: "var(--r-lg)",
+                    border: "1px solid var(--border-light)",
+                  }}
+                >
+                  <h2 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "4px" }}>
+                    Hồ Sơ Của Tôi
+                  </h2>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "24px" }}>
+                    Quản lý thông tin hồ sơ để bảo mật tài khoản
+                  </p>
+
+                  <form
+                    onSubmit={handleUpdateProfile}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 240px",
+                      gap: "32px",
+                      alignItems: "start",
+                    }}
+                  >
+                    {/* Form fields */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", marginBottom: "6px" }}>
+                          Họ và Tên
+                        </label>
+                        <input
+                          type="text"
+                          value={profileData.fullName}
+                          onChange={(e) => setProfileData({ ...profileData, fullName: e.target.value })}
+                          style={{
+                            width: "100%",
+                            padding: "9px 12px",
+                            border: "1px solid var(--border)",
+                            borderRadius: "var(--r-sm)",
+                            fontSize: "13px",
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", marginBottom: "6px" }}>
+                          Email
+                        </label>
+                        <input
+                          type="email"
+                          value={profileData.email}
+                          onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                          style={{
+                            width: "100%",
+                            padding: "9px 12px",
+                            border: "1px solid var(--border)",
+                            borderRadius: "var(--r-sm)",
+                            fontSize: "13px",
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", marginBottom: "6px" }}>
+                          Số Điện Thoại
+                        </label>
+                        <input
+                          type="tel"
+                          value={profileData.phoneNumber}
+                          onChange={(e) => setProfileData({ ...profileData, phoneNumber: e.target.value })}
+                          style={{
+                            width: "100%",
+                            padding: "9px 12px",
+                            border: "1px solid var(--border)",
+                            borderRadius: "var(--r-sm)",
+                            fontSize: "13px",
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", marginBottom: "6px" }}>
+                          Giới Tính
+                        </label>
+                        <div style={{ display: "flex", gap: "18px", fontSize: "13px" }}>
+                          <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+                            <input
+                              type="radio"
+                              name="gender"
+                              checked={profileData.gender === "male"}
+                              onChange={() => setProfileData({ ...profileData, gender: "male" })}
+                              style={{ accentColor: "var(--primary)" }}
+                            />
+                            <span>Nam</span>
+                          </label>
+                          <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+                            <input
+                              type="radio"
+                              name="gender"
+                              checked={profileData.gender === "female"}
+                              onChange={() => setProfileData({ ...profileData, gender: "female" })}
+                              style={{ accentColor: "var(--primary)" }}
+                            />
+                            <span>Nữ</span>
+                          </label>
+                          <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+                            <input
+                              type="radio"
+                              name="gender"
+                              checked={profileData.gender === "other"}
+                              onChange={() => setProfileData({ ...profileData, gender: "other" })}
+                              style={{ accentColor: "var(--primary)" }}
+                            />
+                            <span>Khác</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ display: "block", fontSize: "13px", fontWeight: "700", marginBottom: "6px" }}>
+                          Ngày Sinh
+                        </label>
+                        <input
+                          type="date"
+                          value={profileData.birthDate}
+                          onChange={(e) => setProfileData({ ...profileData, birthDate: e.target.value })}
+                          style={{
+                            width: "100%",
+                            padding: "9px 12px",
+                            border: "1px solid var(--border)",
+                            borderRadius: "var(--r-sm)",
+                            fontSize: "13px",
+                          }}
+                        />
+                      </div>
+
+                      <Button variant="primary" type="submit" style={{ width: "fit-content", marginTop: "8px" }}>
+                        Lưu Thay Đổi
+                      </Button>
+                    </div>
+
+                    {/* Avatar Upload */}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        borderLeft: "1px solid var(--border-light)",
+                        paddingLeft: "24px",
+                      }}
+                    >
+                      <div style={{ position: "relative", marginBottom: "14px" }}>
+                        <img
+                          src={profileData.avatar}
+                          alt="Avatar Large"
+                          style={{
+                            width: "110px",
+                            height: "110px",
+                            borderRadius: "50%",
+                            objectFit: "cover",
+                            border: "3px solid var(--primary-light)",
+                          }}
+                        />
+                        <label
+                          htmlFor="avatar-input"
+                          style={{
+                            position: "absolute",
+                            bottom: "0",
+                            right: "0",
+                            width: "32px",
+                            height: "32px",
+                            borderRadius: "50%",
+                            backgroundColor: "var(--primary)",
+                            color: "#fff",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            cursor: "pointer",
+                            boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                          }}
+                        >
+                          <Camera size={16} />
+                          <input
+                            id="avatar-input"
+                            type="file"
+                            accept="image/*"
+                            onChange={handleAvatarChange}
+                            style={{ display: "none" }}
+                          />
+                        </label>
+                      </div>
+
+                      <span style={{ fontSize: "12px", color: "var(--text-secondary)", textAlign: "center" }}>
+                        Dung lượng tối đa 1 MB
+                        <br />
+                        Định dạng: .JPEG, .PNG
+                      </span>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* TAB 2: ADDRESS BOOK */}
+              {activeTab === "addresses" && (
+                <div
+                  className="card"
+                  style={{
+                    padding: "28px",
+                    backgroundColor: "var(--surface)",
+                    borderRadius: "var(--r-lg)",
+                    border: "1px solid var(--border-light)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: "20px",
+                      paddingBottom: "16px",
+                      borderBottom: "1px solid var(--border-light)",
+                    }}
+                  >
+                    <div>
+                      <h2 style={{ fontSize: "18px", fontWeight: "800" }}>Địa Chỉ Của Tôi</h2>
+                      <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                        Quản lý các địa chỉ giao hàng nhận hàng
+                      </p>
+                    </div>
+
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={Plus}
+                      onClick={() => {
+                        setEditingAddress(null);
+                        setAddressForm({
+                          name: "",
+                          phone: "",
+                          address: "",
+                          type: "Nhà Riêng",
+                          isDefault: false,
+                        });
+                        setAddressModalOpen(true);
+                      }}
+                    >
+                      Thêm Địa Chỉ Mới
+                    </Button>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    {addresses.map((addr) => (
+                      <div
+                        key={addr.id}
+                        style={{
+                          padding: "16px",
+                          borderRadius: "var(--r-md)",
+                          border: addr.isDefault ? "1.5px solid var(--primary)" : "1px solid var(--border)",
+                          backgroundColor: addr.isDefault ? "var(--primary-subtle)" : "var(--surface)",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          gap: "16px",
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                            <strong style={{ fontSize: "14px" }}>{addr.name}</strong>
+                            <span style={{ color: "var(--text-tertiary)" }}>|</span>
+                            <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>{addr.phone}</span>
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                padding: "1px 6px",
+                                borderRadius: "3px",
+                                backgroundColor: "var(--surface-muted)",
+                                border: "1px solid var(--border)",
+                              }}
+                            >
+                              {addr.type}
+                            </span>
+                            {addr.isDefault && (
+                              <span
+                                style={{
+                                  fontSize: "11px",
+                                  backgroundColor: "var(--primary)",
+                                  color: "#fff",
+                                  padding: "1px 6px",
+                                  borderRadius: "3px",
+                                  fontWeight: "700",
+                                }}
+                              >
+                                Mặc định
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.5" }}>
+                            {addr.address}
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "6px" }}>
+                          <div style={{ display: "flex", gap: "8px" }}>
+                            <button
+                              onClick={() => {
+                                setEditingAddress(addr);
+                                setAddressForm(addr);
+                                setAddressModalOpen(true);
+                              }}
+                              style={{ fontSize: "12px", color: "var(--info)", fontWeight: "600" }}
+                            >
+                              Cập nhật
+                            </button>
+                            {!addr.isDefault && (
+                              <button
+                                onClick={() => handleDeleteAddress(addr.id)}
+                                style={{ fontSize: "12px", color: "var(--error)", fontWeight: "600" }}
+                              >
+                                Xóa
+                              </button>
+                            )}
+                          </div>
+
+                          {!addr.isDefault && (
+                            <button
+                              onClick={() => handleSetDefaultAddress(addr.id)}
+                              style={{
+                                fontSize: "12px",
+                                color: "var(--text-secondary)",
+                                border: "1px solid var(--border)",
+                                padding: "3px 8px",
+                                borderRadius: "3px",
+                                backgroundColor: "#fff",
+                              }}
+                            >
+                              Thiết lập mặc định
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: PASSWORD */}
+              {activeTab === "password" && (
+                <div
+                  className="card"
+                  style={{
+                    padding: "28px",
+                    backgroundColor: "var(--surface)",
+                    borderRadius: "var(--r-lg)",
+                    border: "1px solid var(--border-light)",
+                    maxWidth: "500px",
+                  }}
+                >
+                  <h2 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "4px" }}>
+                    Đổi Mật Khẩu
+                  </h2>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "20px" }}>
+                    Để bảo mật tài khoản, vui lòng không chia sẻ mật khẩu cho người khác
+                  </p>
+
+                  <form onSubmit={handleChangePassword} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: "700", marginBottom: "6px" }}>
+                        Mật Khẩu Hiện Tại
+                      </label>
+                      <input
+                        type="password"
+                        value={passwordForm.currentPassword}
+                        onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                        style={{ width: "100%", padding: "9px 12px", border: "1px solid var(--border)", borderRadius: "var(--r-sm)" }}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: "700", marginBottom: "6px" }}>
+                        Mật Khẩu Mới
+                      </label>
+                      <input
+                        type="password"
+                        value={passwordForm.newPassword}
+                        onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                        style={{ width: "100%", padding: "9px 12px", border: "1px solid var(--border)", borderRadius: "var(--r-sm)" }}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: "block", fontSize: "12px", fontWeight: "700", marginBottom: "6px" }}>
+                        Xác Nhận Mật Khẩu Mới
+                      </label>
+                      <input
+                        type="password"
+                        value={passwordForm.confirmPassword}
+                        onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                        style={{ width: "100%", padding: "9px 12px", border: "1px solid var(--border)", borderRadius: "var(--r-sm)" }}
+                        required
+                      />
+                    </div>
+                    <Button variant="primary" type="submit" style={{ marginTop: "8px" }}>
+                      Xác Nhận Đổi Mật Khẩu
+                    </Button>
+                  </form>
+                </div>
+              )}
+
+              {/* TAB 4: VOUCHERS */}
+              {activeTab === "vouchers" && (
+                <div
+                  className="card"
+                  style={{
+                    padding: "28px",
+                    backgroundColor: "var(--surface)",
+                    borderRadius: "var(--r-lg)",
+                    border: "1px solid var(--border-light)",
+                  }}
+                >
+                  <h2 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "4px" }}>
+                    Kho Voucher Của Tôi
+                  </h2>
+                  <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "20px" }}>
+                    Các mã giảm giá sẵn sàng áp dụng khi thanh toán
+                  </p>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                      gap: "16px",
+                    }}
+                  >
+                    {vouchers.map((v) => (
+                      <div
+                        key={v.id}
+                        style={{
+                          border: "1px dashed var(--primary)",
+                          borderRadius: "var(--r-md)",
+                          padding: "16px",
+                          backgroundColor: "var(--primary-light)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "8px",
+                          position: "relative",
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <strong style={{ fontSize: "16px", color: "var(--primary)" }}>{v.code}</strong>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard?.writeText(v.code);
+                              showToast(`Đã sao chép mã ${v.code}!`);
+                            }}
+                            style={{
+                              fontSize: "11px",
+                              backgroundColor: "#fff",
+                              color: "var(--primary)",
+                              border: "1px solid var(--border-primary)",
+                              padding: "3px 8px",
+                              borderRadius: "4px",
+                              fontWeight: "700",
+                              cursor: "pointer",
+                            }}
+                          >
+                            Sao chép
+                          </button>
+                        </div>
+                        <div style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>
+                          {v.title}
+                        </div>
+                        <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                          Hạn sử dụng: {v.expiry}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-          <nav className="profile-sidebar-menu">
-            {SIDEBAR_MENU.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className={
-                  activeMenu === item.key
-                    ? "profile-menu-item active"
-                    : "profile-menu-item"
-                }
-                onClick={() => setActiveMenu(item.key)}
-              >
-                <span className="profile-menu-icon">{item.icon}</span>
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        </aside>
-        <div className="profile-content">{renderContent()}</div>
-      </div>
+        </div>
+      </main>
+
+      {/* Modal Add/Edit Address */}
+      <Modal
+        isOpen={addressModalOpen}
+        onClose={() => setAddressModalOpen(false)}
+        title={editingAddress ? "Chỉnh Sửa Địa Chỉ" : "Thêm Địa Chỉ Mới"}
+      >
+        <form onSubmit={handleSaveAddress} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Họ và Tên:
+            </label>
+            <input
+              type="text"
+              value={addressForm.name}
+              onChange={(e) => setAddressForm({ ...addressForm, name: e.target.value })}
+              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+              required
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Số Điện Thoại:
+            </label>
+            <input
+              type="tel"
+              value={addressForm.phone}
+              onChange={(e) => setAddressForm({ ...addressForm, phone: e.target.value })}
+              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+              required
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Địa Chỉ Chi Tiết (Số nhà, đường, phường, quận, tỉnh/thành):
+            </label>
+            <textarea
+              rows={3}
+              value={addressForm.address}
+              onChange={(e) => setAddressForm({ ...addressForm, address: e.target.value })}
+              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+              required
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Loại Địa Chỉ:
+            </label>
+            <select
+              value={addressForm.type}
+              onChange={(e) => setAddressForm({ ...addressForm, type: e.target.value })}
+              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px", backgroundColor: "#fff" }}
+            >
+              <option value="Nhà Riêng">Nhà Riêng</option>
+              <option value="Văn Phòng">Văn Phòng / Công Ty</option>
+            </select>
+          </div>
+          <Button variant="primary" type="submit" block style={{ marginTop: "8px" }}>
+            Lưu Địa Chỉ
+          </Button>
+        </form>
+      </Modal>
+
+      <Footer />
+      <MobileNav />
     </div>
   );
 }

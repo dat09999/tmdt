@@ -1,58 +1,83 @@
-  import LoginPage from "./pages/LoginPage";
-  import OAuth2SuccessPage from "./pages/OAuth2SuccessPage";
-  import ProfilePage from "./pages/ProfilePage";
-  import RegisterPage from "./pages/register";
-  import HomePage from "./pages/HomePage";
-  import CartPage from "./pages/CartPage";
-  import WishlistPage from "./pages/WishlistPage";
-  import OrdersPage from "./pages/OrdersPage";
-  import OrderDetailPage from "./pages/OrderDetailPage";
-  import NotificationsPage from "./pages/NotificationsPage";
-  import CheckoutPage from "./pages/CheckoutPage";
-  import ProductDetailPage from "./pages/ProductDetailPage";
-  import VnpayResultPage from "./pages/VnpayResultPage";
-  import ShopDetailPage from "./pages/ShopDetailPage";
-  import SellerPage from "./pages/SellerPage";
-  import ChatWidget from "./components/ChatWidget";
-  import { useAuth } from "./pages/Authcontext";
+import React from "react";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/register";
+import OAuth2SuccessPage from "./pages/OAuth2SuccessPage";
+import ProfilePage from "./pages/ProfilePage";
+import HomePage from "./pages/HomePage";
+import ProductListPage from "./pages/ProductListPage";
+import ProductDetailPage from "./pages/ProductDetailPage";
+import CartPage from "./pages/CartPage";
+import CheckoutPage from "./pages/CheckoutPage";
+import OrdersPage from "./pages/OrdersPage";
+import OrderDetailPage from "./pages/OrderDetailPage";
+import WishlistPage from "./pages/WishlistPage";
+import NotificationsPage from "./pages/NotificationsPage";
+import RefundPage from "./pages/RefundPage";
+import SellerPage from "./pages/SellerPage";
+import VnpayResultPage from "./pages/VnpayResultPage";
+import ChatWidget from "./components/chat/ChatWidget";
+import { useAuth } from "./pages/Authcontext";
 
-  function resolvePage(path, isAuthenticated) {
-    if (path === "/register") return <RegisterPage />;
-    if (path === "/profile") return isAuthenticated ? <ProfilePage /> : <LoginPage />;
-    if (path === "/cart") return <CartPage />;
-    if (path === "/wishlist") return <WishlistPage />;
-    if (path.startsWith("/orders/")) return <OrderDetailPage />;
-    if (path === "/orders") return <OrdersPage />;
-    if (path === "/checkout") return <CheckoutPage />;
-    if (path === "/payment/vnpay-result") return <VnpayResultPage />;
-    if (path === "/notifications") return <NotificationsPage />;
-    if (path.startsWith("/product/")) return <ProductDetailPage />;
-    if (path.startsWith("/shop/")) return <ShopDetailPage />;
-    if (path === "/seller") return <SellerPage />;
-    if (path === "/" || path === "/home") return isAuthenticated ? <HomePage /> : <LoginPage />;
-    if (path === "/login") return <LoginPage />;
-    return isAuthenticated ? <HomePage /> : <LoginPage />;
+function resolvePage(path, isAuthenticated) {
+  if (path === "/register") return <RegisterPage />;
+  if (path === "/login") return <LoginPage />;
+  if (path === "/oauth2/success") return <OAuth2SuccessPage />;
+  
+  if (path === "/profile") return isAuthenticated ? <ProfilePage /> : <LoginPage />;
+  if (path === "/cart") return <CartPage />;
+  if (path === "/checkout") return <CheckoutPage />;
+  if (path === "/payment/vnpay-result") return <VnpayResultPage />;
+  if (path === "/wishlist") return <WishlistPage />;
+  if (path === "/notifications") return <NotificationsPage />;
+  if (path === "/refunds") return <RefundPage />;
+  
+  if (path.startsWith("/orders/")) return <OrderDetailPage />;
+  if (path === "/orders") return <OrdersPage />;
+  
+  if (path.startsWith("/product/")) return <ProductDetailPage />;
+  if (path === "/products" || path === "/search" || path === "/catalog") return <ProductListPage />;
+  if (path === "/seller") return <SellerPage />;
+  
+  // Default home page
+  return <HomePage />;
+}
+
+export default function App() {
+  const path = window.location.pathname;
+  const { isAuthenticated, loading } = useAuth();
+
+  if (path === "/oauth2/success") {
+    return <OAuth2SuccessPage />;
   }
 
-  export default function App() {
-    const path = window.location.pathname;
-    const { isAuthenticated, loading } = useAuth();
-
-    // Trang OAuth callback hiện riêng, không kèm chat widget vì chưa xác thực xong.
-    if (path === "/oauth2/success") {
-      return <OAuth2SuccessPage />;
-    }
-
-    if (loading) {
-      return <div className="app-loading">Loading...</div>;
-    }
-
-    const page = resolvePage(path, isAuthenticated);
-
+  if (loading) {
     return (
-      <>
-        {page}
-        <ChatWidget />
-      </>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100vh",
+          backgroundColor: "var(--bg)",
+          fontSize: "15px",
+          fontWeight: "600",
+          color: "var(--primary)",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: "36px", marginBottom: "8px" }}>🛒</div>
+          <div>Đang tải ứng dụng DoMix...</div>
+        </div>
+      </div>
     );
   }
+
+  const page = resolvePage(path, isAuthenticated);
+
+  return (
+    <>
+      {page}
+      <ChatWidget />
+    </>
+  );
+}

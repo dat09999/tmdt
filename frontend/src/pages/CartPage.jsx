@@ -1,200 +1,366 @@
-import { useEffect, useMemo, useState } from "react";
-import { API_BASE_URL, authFetch } from "../utils/auth";
+import React, { useState, useEffect, useMemo } from "react";
+import Header from "../components/layout/Header";
+import SubNav from "../components/layout/SubNav";
+import Footer from "../components/layout/Footer";
+import MobileNav from "../components/layout/MobileNav";
+import CartShopGroup from "../components/cart/CartShopGroup";
+import Button from "../components/common/Button";
+import EmptyState from "../components/common/EmptyState";
+import { cartService } from "../services/cartService";
 import { useAuth } from "./Authcontext";
-import Header from "../components/Header";
-import "./CartPage.css";
-
-const itemKey = (item) => `${item.productId}__${item.variantSku || ""}`;
+import { formatCurrency } from "../utils/formatters";
+import { ShoppingBag, ArrowRight, Tag, ShieldCheck, Trash2 } from "lucide-react";
 
 export default function CartPage() {
   const { user } = useAuth();
-  const [cart, setCart] = useState(null);
+  const [cart, setCart] = useState({ items: [] });
   const [selectedKeys, setSelectedKeys] = useState(new Set());
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [coupon, setCoupon] = useState("");
-  useEffect(() => {
-    if (!user?.userId) { window.location.href = "/login"; return; }
-    fetchCart();
-  }, []);
+  const [loading, setLoading] = useState(true);
+  const [voucherCode, setVoucherCode] = useState("");
+  const [appliedDiscount, setAppliedDiscount] = useState(0);
+  const [toastMessage, setToastMessage] = useState("");
+
+  const itemKey = (item) => `${item.productId}__${item.variantSku || ""}`;
 
   const fetchCart = async () => {
     try {
       setLoading(true);
-      const data = await authFetch(`${API_BASE_URL}/cart/${user.userId}`);
-      setCart(data);
-      setSelectedKeys(new Set((data.items || []).map(itemKey)));
+      const data = await cartService.getCart(user?.userId);
+      setCart(data || { items: [] });
+      // Select all by default
+      const keys = new Set((data?.items || []).map(itemKey));
+      setSelectedKeys(keys);
     } catch (err) {
-      setMessage(err.message || "Không tải được giỏ hàng");
-    } finally { setLoading(false); }
+      console.error("Fetch cart error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  useEffect(() => {
+    fetchCart();
+  }, [user?.userId]);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(""), 3000);
+  };
+
+  // Group items by shop
   const groupedItems = useMemo(() => {
     return (cart?.items || []).reduce((groups, item) => {
-      const shopId = item.shopId || "UNKNOWN_SHOP";
-      if (!groups[shopId]) groups[shopId] = [];
-      groups[shopId].push(item);
+      const shopId = item.shopId || "shop-official";
+      if (!groups[shopId]) {
+        groups[shopId] = {
+          shopId,
+          shopName: item.shopName || "Cửa Hàng Chính Hãng",
+          items: [],
+        };
+      }
+      groups[shopId].items.push(item);
       return groups;
     }, {});
   }, [cart]);
 
-  const selectedItems = (cart?.items || []).filter(item => selectedKeys.has(itemKey(item)));
-  const totalPrice = selectedItems.reduce(
-    (sum, item) => sum + (item.price || 0) * (item.quantity || 1), 0
+  const allItems = cart?.items || [];
+  const selectedItems = allItems.filter((i) => selectedKeys.has(itemKey(i)));
+
+  const subtotal = selectedItems.reduce(
+    (sum, i) => sum + (i.price || 0) * (i.quantity || 1),
+    0
   );
-  const itemCount = cart?.items?.length || 0;
-  const allSelected = itemCount > 0 && selectedItems.length === itemCount;
 
-  const setItemSelected = (item, checked) => {
-    setSelectedKeys(previous => {
-      const next = new Set(previous);
-      checked ? next.add(itemKey(item)) : next.delete(itemKey(item));
+  const totalAmount = Math.max(0, subtotal - appliedDiscount);
+
+  const allSelected = allItems.length > 0 && selectedItems.length === allItems.length;
+
+  const handleToggleSelectAll = (checked) => {
+    if (checked) {
+      setSelectedKeys(new Set(allItems.map(itemKey)));
+    } else {
+      setSelectedKeys(new Set());
+    }
+  };
+
+  const handleSelectItem = (item, checked) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      const k = itemKey(item);
+      checked ? next.add(k) : next.delete(k);
       return next;
     });
   };
 
-  const setShopSelected = (items, checked) => {
-    setSelectedKeys(previous => {
-      const next = new Set(previous);
-      items.forEach(item => checked ? next.add(itemKey(item)) : next.delete(itemKey(item)));
+  const handleSelectShop = (shopItems, checked) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      shopItems.forEach((item) => {
+        const k = itemKey(item);
+        checked ? next.add(k) : next.delete(k);
+      });
       return next;
     });
   };
 
-  const setAllSelected = (checked) => {
-    setSelectedKeys(checked ? new Set((cart?.items || []).map(itemKey)) : new Set());
+  const handleQuantityChange = async (item, newQty) => {
+    await cartService.updateQuantity(user?.userId, {
+      productId: item.productId,
+      variantSku: item.variantSku,
+      quantity: newQty,
+    });
+    await fetchCart();
   };
 
-  const removeItem = async (item) => {
-    await authFetch(
-      `${API_BASE_URL}/cart/${user.userId}/item?productId=${encodeURIComponent(item.productId)}&variantSku=${encodeURIComponent(item.variantSku || "")}`,
-      { method: "DELETE" }
-    );
-  };
-
-  const handleRemove = async (item) => {
-    try {
-      setLoading(true);
-      await removeItem(item);
-      setMessage("Đã xóa sản phẩm khỏi giỏ hàng.");
-      await fetchCart();
-    } catch (err) {
-      setMessage(err.message || "Không xóa được sản phẩm.");
-    } finally { setLoading(false); }
+  const handleRemoveItem = async (item) => {
+    await cartService.removeItem(user?.userId, item);
+    showToast("Đã xóa sản phẩm khỏi giỏ hàng");
+    await fetchCart();
   };
 
   const handleDeleteSelected = async () => {
-    if (!selectedItems.length) {
-      setMessage("Bạn chưa chọn sản phẩm cần xóa.");
-      return;
+    for (const item of selectedItems) {
+      await cartService.removeItem(user?.userId, item);
     }
-    try {
-      setLoading(true);
-      await Promise.all(selectedItems.map(removeItem));
-      setMessage(`Đã xóa ${selectedItems.length} sản phẩm đã chọn.`);
-      await fetchCart();
-    } catch (err) {
-      setMessage(err.message || "Không xóa được các sản phẩm đã chọn.");
-    } finally { setLoading(false); }
+    showToast(`Đã xóa ${selectedItems.length} sản phẩm`);
+    await fetchCart();
   };
 
-  const goToCheckout = () => {
-    if (!selectedItems.length) {
-      setMessage("Vui lòng chọn ít nhất một sản phẩm để mua.");
+  const handleApplyVoucher = (e) => {
+    e.preventDefault();
+    if (!voucherCode.trim()) return;
+    if (voucherCode.toUpperCase() === "DOMIX50K") {
+      setAppliedDiscount(50000);
+      showToast("Áp dụng mã giảm giá 50.000₫ thành công!");
+    } else if (voucherCode.toUpperCase() === "FREESHIP") {
+      setAppliedDiscount(25000);
+      showToast("Áp dụng mã miễn phí vận chuyển 25.000₫ thành công!");
+    } else {
+      showToast("Mã giảm giá không hợp lệ hoặc đã hết hạn");
+    }
+  };
+
+  const handleProceedCheckout = () => {
+    if (selectedItems.length === 0) {
+      showToast("Vui lòng chọn ít nhất một sản phẩm để thanh toán!");
       return;
     }
-    sessionStorage.setItem("checkoutSelectedItems", JSON.stringify(
-      selectedItems.map(item => ({
-        productId: item.productId,
-        variantSku: item.variantSku
-      }))
-    ));
-    sessionStorage.setItem("checkoutCouponCode", coupon.trim());
+    // Save selected items in session storage for checkout page
+    sessionStorage.setItem("checkout_items", JSON.stringify(selectedItems));
+    sessionStorage.setItem("checkout_discount", JSON.stringify(appliedDiscount));
     window.location.href = "/checkout";
   };
 
   return (
-    <div className="cart-page">
+    <div className="page-shell">
       <Header />
+      <SubNav />
 
-      <div className="cart-body">
-        <div className="breadcrumb"><a href="/">Trang chủ</a><span>›</span><span>Giỏ hàng</span></div>
-        {message && <div className="alert alert-warn" style={{gridColumn:"1/-1"}}>{message}</div>}
+      {toastMessage && (
+        <div
+          style={{
+            position: "fixed",
+            top: "80px",
+            right: "20px",
+            zIndex: 9999,
+            backgroundColor: "var(--text)",
+            color: "#ffffff",
+            padding: "10px 18px",
+            borderRadius: "var(--r-md)",
+            fontSize: "13px",
+            fontWeight: "600",
+            boxShadow: "var(--shadow-lg)",
+          }}
+        >
+          {toastMessage}
+        </div>
+      )}
 
-        {loading && !cart ? (
-          <div className="cart-empty-state"><p>Đang tải giỏ hàng...</p></div>
-        ) : !cart?.items?.length ? (
-          <div className="cart-empty-state">
-            <p>Giỏ hàng của bạn đang trống</p>
-            <button className="btn-primary" onClick={() => window.location.href = "/"}>Tiếp tục mua sắm</button>
+      <main className="page-content">
+        <div className="container">
+          <div className="section-header" style={{ marginBottom: "20px" }}>
+            <h1 className="section-title" style={{ fontSize: "20px" }}>
+              GIỎ HÀNG CỦA BẠN ({allItems.length} sản phẩm)
+            </h1>
           </div>
-        ) : (
-          <>
-            <div className="cart-main">
-              {Object.entries(groupedItems).map(([shopId, items]) => {
-                const shopSelected = items.every(item => selectedKeys.has(itemKey(item)));
-                return (
-                  <section className="cart-shop" key={shopId}>
-                    <label className="cart-shop-header">
-                      <input type="checkbox" checked={shopSelected}
-                        onChange={e => setShopSelected(items, e.target.checked)} />
-                      <strong>🏪 Shop: {shopId}</strong>
-                      <span>{items.length} sản phẩm</span>
-                    </label>
-                    <div className="cart-list">
-                      {items.map(item => (
-                        <div key={itemKey(item)} className="cart-item">
-                          <input type="checkbox" checked={selectedKeys.has(itemKey(item))}
-                            onChange={e => setItemSelected(item, e.target.checked)} />
-                          <img src={item.image || "https://via.placeholder.com/80x80?text=SP"}
-                            alt={item.productName}
-                            onClick={() => window.location.href = `/product/${item.productId}`} />
-                          <div>
-                            <div className="cart-item-name">{item.productName}</div>
-                            <div className="cart-item-sku">Phân loại: {item.variantSku}</div>
-                          </div>
-                          <div className="cart-item-price">{(item.price || 0).toLocaleString()}đ</div>
-                          <div className="cart-qty"><input type="number" value={item.quantity} readOnly /></div>
-                          <div className="cart-subtotal">{((item.price || 0) * (item.quantity || 1)).toLocaleString()}đ</div>
-                          <button className="cart-remove" onClick={() => handleRemove(item)} title="Xóa">✕</button>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
 
-              <div className="cart-bottom">
-                <label className="cart-select-all">
-                  <input type="checkbox" checked={allSelected} onChange={e => setAllSelected(e.target.checked)} />
-                  Chọn tất cả ({itemCount})
-                </label>
-                <button className="cart-delete-selected" onClick={handleDeleteSelected} disabled={loading}>
-                  Xóa đã chọn
-                </button>
+          {allItems.length === 0 && !loading ? (
+            <EmptyState
+              icon={ShoppingBag}
+              title="Giỏ hàng của bạn đang trống"
+              description="Hãy khám phá hàng ngàn sản phẩm chất lượng giá tốt trên DoMix nhé!"
+              actionText="Khám phá ngay"
+              onAction={() => (window.location.href = "/products")}
+            />
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 340px",
+                gap: "24px",
+                alignItems: "start",
+              }}
+            >
+              {/* Left Column: Cart items table */}
+              <div>
+                {/* Select all bar */}
+                <div
+                  className="card"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "14px 18px",
+                    marginBottom: "16px",
+                    backgroundColor: "var(--surface)",
+                  }}
+                >
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      fontSize: "14px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={(e) => handleToggleSelectAll(e.target.checked)}
+                      style={{ width: "18px", height: "18px", accentColor: "var(--primary)" }}
+                    />
+                    <span>Chọn tất cả ({allItems.length} sản phẩm)</span>
+                  </label>
+
+                  {selectedItems.length > 0 && (
+                    <button
+                      onClick={handleDeleteSelected}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontSize: "13px",
+                        color: "var(--error)",
+                        fontWeight: "600",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Trash2 size={15} />
+                      <span>Xóa mục đã chọn ({selectedItems.length})</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Groups by Shop */}
+                {Object.values(groupedItems).map((group) => (
+                  <CartShopGroup
+                    key={group.shopId}
+                    shopId={group.shopId}
+                    shopName={group.shopName}
+                    items={group.items}
+                    selectedKeys={selectedKeys}
+                    onSelectItem={handleSelectItem}
+                    onSelectShop={handleSelectShop}
+                    onQuantityChange={handleQuantityChange}
+                    onRemoveItem={handleRemoveItem}
+                  />
+                ))}
               </div>
-            </div>
 
-            <div className="cart-sidebar">
-              <div className="cart-voucher">
-                <h4>🎟️ Mã giảm giá</h4>
-                <div className="cart-voucher-input">
-                  <input placeholder="Nhập mã voucher..." value={coupon} onChange={e => setCoupon(e.target.value)} />
+              {/* Right Column: Order Summary & Voucher */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                {/* Voucher Box */}
+                <div
+                  className="card"
+                  style={{
+                    padding: "18px",
+                    backgroundColor: "var(--surface)",
+                    borderRadius: "var(--r-md)",
+                    border: "1px solid var(--border-light)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "700", marginBottom: "12px" }}>
+                    <Tag size={16} color="var(--primary)" />
+                    <span>MÃ GIẢM GIÁ / VOUCHER</span>
+                  </div>
+                  <form onSubmit={handleApplyVoucher} style={{ display: "flex", gap: "8px" }}>
+                    <input
+                      type="text"
+                      placeholder="Nhập mã DOMIX50K / FREESHIP"
+                      value={voucherCode}
+                      onChange={(e) => setVoucherCode(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: "8px 12px",
+                        fontSize: "13px",
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--r-sm)",
+                        textTransform: "uppercase",
+                      }}
+                    />
+                    <Button variant="secondary" size="sm" type="submit">
+                      Áp Dụng
+                    </Button>
+                  </form>
+                </div>
+
+                {/* Summary Card */}
+                <div
+                  className="card"
+                  style={{
+                    padding: "20px",
+                    backgroundColor: "var(--surface)",
+                    borderRadius: "var(--r-md)",
+                    border: "1px solid var(--border-light)",
+                  }}
+                >
+                  <h3 style={{ fontSize: "16px", fontWeight: "800", marginBottom: "16px", color: "var(--text)" }}>
+                    TỔNG ĐƠN HÀNG
+                  </h3>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "13px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-secondary)" }}>
+                      <span>Tổng tiền hàng ({selectedItems.length} món):</span>
+                      <strong style={{ color: "var(--text)" }}>{formatCurrency(subtotal)}</strong>
+                    </div>
+
+                    {appliedDiscount > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", color: "#059669", fontWeight: "600" }}>
+                        <span>Giảm giá voucher:</span>
+                        <span>-{formatCurrency(appliedDiscount)}</span>
+                      </div>
+                    )}
+
+                    <div style={{ height: "1px", backgroundColor: "var(--border-light)", margin: "6px 0" }} />
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                      <span style={{ fontSize: "14px", fontWeight: "700" }}>Tổng thanh toán:</span>
+                      <strong style={{ fontSize: "20px", color: "var(--primary)", fontWeight: "900" }}>
+                        {formatCurrency(totalAmount)}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    block
+                    iconRight={ArrowRight}
+                    onClick={handleProceedCheckout}
+                    style={{ marginTop: "20px" }}
+                  >
+                    Mua Hàng ({selectedItems.length})
+                  </Button>
                 </div>
               </div>
-              <div className="cart-summary-card">
-                <h3>Tóm tắt đơn hàng</h3>
-                <div className="summary-row"><span>Đã chọn ({selectedItems.length} sản phẩm)</span><span>{totalPrice.toLocaleString()}đ</span></div>
-                <div className="summary-row total"><span>Tổng cộng</span><span>{totalPrice.toLocaleString()}đ</span></div>
-                <button className="btn-primary cart-checkout-btn" onClick={goToCheckout}
-                  disabled={loading || !selectedItems.length}>
-                  Thanh toán ({selectedItems.length})
-                </button>
-              </div>
             </div>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      </main>
+
+      <Footer />
+      <MobileNav />
     </div>
   );
 }

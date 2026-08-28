@@ -1,0 +1,67 @@
+export const MOCK_CONVERSATIONS = [
+  {
+    id: "conv-1",
+    shopId: "shop-apple-official",
+    shopName: "Apple Flagship Store",
+    shopAvatar: "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=100&auto=format&fit=crop&q=60",
+    isOnline: true,
+    lastMessage: "Dạ chào bạn! iPhone 15 Pro Max bản 256GB Titan Tự Nhiên hiện đang sẵn hàng tại kho HCM ạ.",
+    lastTime: "10:35",
+    unreadCount: 1,
+    messages: [
+      {
+        id: "m-1",
+        sender: "user",
+        text: "Chào shop, iPhone 15 Pro Max bản Titan Tự Nhiên còn hàng sẵn không bạn?",
+        time: "10:30",
+      },
+      {
+        id: "m-2",
+        sender: "shop",
+        text: "Dạ chào bạn! iPhone 15 Pro Max bản 256GB Titan Tự Nhiên hiện đang sẵn hàng tại kho HCM ạ.",
+        time: "10:35",
+      },
+      {
+        id: "m-3",
+        sender: "shop",
+        text: "Nếu bạn đặt hôm nay shop hỗ trợ giao hỏa tốc nhận trong 2 tiếng bạn nhé!",
+        time: "10:36",
+      },
+    ],
+  },
+  {
+    id: "conv-2",
+    shopId: "shop-coolmate-vn",
+    shopName: "CoolStyle Fashion",
+    shopAvatar: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=100&auto=format&fit=crop&q=60",
+    isOnline: false,
+    lastMessage: "Shop đã gửi hàng cho bên vận chuyển rồi bạn nhé.",
+    lastTime: "Hôm qua",
+    unreadCount: 0,
+    messages: [
+      {
+        id: "m-201",
+        sender: "user",
+        text: "Shop ơi đơn áo thun của mình gửi chưa ạ?",
+        time: "14:10",
+      },
+      {
+        id: "m-202",
+        sender: "shop",
+        text: "Shop đã gửi hàng cho bên vận chuyển rồi bạn nhé. Mã vận đơn là GHN8829104VN ạ.",
+        time: "14:15",
+      },
+    ],
+  },
+  {
+    id: "conv-3",
+    shopId: "shop-locklock",
+    shopName: "Lock&Lock Official Mall",
+    shopAvatar: "https://images.unsplash.com/photo-1584269600464-37b1b58a9fe7?w=100&auto=format&fit=crop&q=60",
+    isOnline: true,
+    lastMessage: "Nồi chiên không dầu được bảo hành chính hãng 24 tháng ạ.",
+    lastTime: "2 ngày trước",
+    unreadCount: 0,
+    messages: [],
+  },
+];

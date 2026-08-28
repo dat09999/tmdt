@@ -1,229 +1,230 @@
-import { useEffect, useRef, useState } from "react";
-import { Client } from "@stomp/stompjs";
-import { API_BASE_URL, authFetch, getAccessToken, onAuthChange } from "../utils/auth";
+import React, { useState, useEffect } from "react";
+import Header from "../components/layout/Header";
+import SubNav from "../components/layout/SubNav";
+import Footer from "../components/layout/Footer";
+import MobileNav from "../components/layout/MobileNav";
+import Button from "../components/common/Button";
+import EmptyState from "../components/common/EmptyState";
+import { notificationService } from "../services/notificationService";
 import { useAuth } from "./Authcontext";
-import Header from "../components/Header";
-import "./NotificationsPage.css";
-
-const ICON_MAP = {
-  order_status: "📦",
-  review_reply: "💬",
-  chat_message: "✉️",
-  promotion: "🎁",
-  system: "⚙️",
-};
-
-// TODO: xác nhận đúng path WebSocket - đang giả định khớp WebSocketConfig.registerStompEndpoints("/ws")
-// và API_BASE_URL cùng domain/port với backend REST. Nếu WS chạy ở domain/port khác, sửa lại URL này.
-const WS_URL = (API_BASE_URL || "").replace(/^http/, "ws") + "/ws";
+import { Bell, CheckCheck, Tag, Truck, ShieldAlert } from "lucide-react";
 
 export default function NotificationsPage() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [markingAll, setMarkingAll] = useState(false);
-  // accessToken không có trong AuthContext -> lấy trực tiếp từ utils/auth và
-  // đồng bộ qua onAuthChange, vì đây là biến module thường, không phải React state,
-  // nên khi refreshAccessToken() chạy ngầm (ví dụ trong authFetch lúc gặp 401),
-  // component cần được báo để reconnect WS với token mới.
-  const [accessToken, setAccessToken] = useState(getAccessToken());
-  const stompClientRef = useRef(null);
+  const [activeTab, setActiveTab] = useState("ALL");
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const unsubscribe = onAuthChange(({ accessToken: nextToken }) => {
-      setAccessToken(nextToken);
-    });
-    return unsubscribe;
-  }, []);
-
-  // ── Tải danh sách thông báo lúc vào trang ──
-  useEffect(() => {
-    if (!user?.userId) {
-      window.location.href = "/login";
-      return;
+  const fetchNotifs = async () => {
+    try {
+      setLoading(true);
+      const data = await notificationService.getNotifications(user?.userId);
+      setNotifications(data || []);
+    } catch (err) {
+      console.error("Fetch notifications failed:", err);
+    } finally {
+      setLoading(false);
     }
+  };
 
-    let cancelled = false;
-
-    (async () => {
-      try {
-        setLoading(true);
-        const data = await authFetch(`${API_BASE_URL}/notifications?page=0&size=20`);
-
-        // backend trả về Page<Notification> (Spring Data) -> danh sách thật nằm
-        // trong data.content, không phải data trực tiếp.
-        const list = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.content)
-          ? data.content
-          : [];
-
-        if (!cancelled) setNotifications(list);
-      } catch (err) {
-        if (!cancelled) setMessage(err.message || "Không tải được thông báo");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+  useEffect(() => {
+    fetchNotifs();
   }, [user?.userId]);
 
-  // ── Kết nối WebSocket để nhận thông báo mới ngay lập tức, không cần F5 ──
-  useEffect(() => {
-    if (!user?.userId || !accessToken) return;
+  const handleMarkAllRead = async () => {
+    const updated = await notificationService.markAllAsRead(user?.userId);
+    setNotifications([...updated]);
+  };
 
-    const client = new Client({
-      brokerURL: WS_URL,
-      connectHeaders: { Authorization: `Bearer ${accessToken}` },
-      reconnectDelay: 5000, // tự động reconnect nếu mất kết nối
-      onConnect: () => {
-        client.subscribe("/user/queue/notifications", (frame) => {
-          try {
-            const incoming = JSON.parse(frame.body);
-            setNotifications((prev) => [incoming, ...prev]);
-          } catch {
-            // bỏ qua nếu payload không parse được, không làm crash UI
-          }
-        });
-      },
-      onStompError: (frame) => {
-        // Không chặn UI nếu WS lỗi - trang vẫn dùng được qua REST fetch bình thường,
-        // chỉ là không có cập nhật realtime.
-        console.warn("STOMP error:", frame.headers?.message);
-      },
-    });
-
-    client.activate();
-    stompClientRef.current = client;
-
-    return () => {
-      client.deactivate();
-      stompClientRef.current = null;
-    };
-  }, [user?.userId, accessToken]);
-
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
-  // ── Nút "Đánh dấu tất cả đã đọc" ──
-  const handleMarkAllAsRead = async () => {
-    if (markingAll || unreadCount === 0) return;
-
-    setMarkingAll(true);
-    const previousState = notifications;
-
-    // Cập nhật lạc quan trên UI trước để cảm giác phản hồi nhanh, rollback nếu API lỗi
-    setNotifications((list) => list.map((n) => ({ ...n, read: true })));
-
-    try {
-      await authFetch(`${API_BASE_URL}/notifications/read-all`, {
-        method: "POST",
-      });
-    } catch (err) {
-      setNotifications(previousState); // rollback nếu lỗi
-      setMessage(err.message || "Không thể đánh dấu tất cả đã đọc");
-    } finally {
-      setMarkingAll(false);
+  const handleItemClick = async (notif) => {
+    if (!notif.read) {
+      await notificationService.markAsRead(user?.userId, notif.id);
+    }
+    if (notif.link) {
+      window.location.href = notif.link;
     }
   };
 
-  // ── Click vào 1 thông báo -> đánh dấu đã đọc (nếu chưa đọc) + điều hướng theo actionUrl ──
-  const handleNotificationClick = async (notif) => {
-    if (notif.read) {
-      if (notif.actionUrl) window.location.href = notif.actionUrl;
-      return;
-    }
+  const tabs = [
+    { id: "ALL", label: "Tất cả" },
+    { id: "ORDER", label: "Cập nhật đơn hàng" },
+    { id: "PROMO", label: "Khuyến mãi" },
+    { id: "SYSTEM", label: "Hệ thống" },
+  ];
 
-    const previousState = notifications;
-    setNotifications((list) =>
-      list.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
-    );
-
-    try {
-      // Khớp NotificationController: POST /notifications/{id}/read
-      // userId lấy từ JWT trong Authentication ở backend, không cần gửi qua query param.
-      await authFetch(`${API_BASE_URL}/notifications/${notif.id}/read`, {
-        method: "POST",
-      });
-    } catch (err) {
-      setNotifications(previousState); // rollback nếu lỗi
-      setMessage(err.message || "Không thể đánh dấu đã đọc");
-      return;
-    }
-
-    if (notif.actionUrl) window.location.href = notif.actionUrl;
-  };
+  const filteredNotifs = notifications.filter((n) => {
+    if (activeTab === "ALL") return true;
+    return n.type === activeTab;
+  });
 
   return (
-    <div className="notifications-page">
+    <div className="page-shell">
       <Header />
+      <SubNav activeTab="notifications" />
 
-      <div className="notifications-body">
-        {message && <div className="notifications-message">{message}</div>}
-
-        <div className="notif-toolbar">
-          <h2>
-            🔔 Thông báo{" "}
-            {unreadCount > 0 && (
-              <span className="badge" style={{ marginLeft: 6 }}>
-                {unreadCount}
-              </span>
-            )}
-          </h2>
-          <button
-            className="notif-mark-all"
-            onClick={handleMarkAllAsRead}
-            disabled={markingAll || unreadCount === 0}
+      <main className="page-content">
+        <div className="container" style={{ maxWidth: "860px" }}>
+          {/* Header & Mark All Read CTA */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: "16px",
+            }}
           >
-            {markingAll ? "Đang xử lý..." : "Đánh dấu tất cả đã đọc"}
-          </button>
-        </div>
+            <h1 className="section-title" style={{ fontSize: "20px" }}>
+              THÔNG BÁO ({notifications.filter((n) => !n.read).length} chưa đọc)
+            </h1>
 
-        {loading ? (
-          <div className="notifications-empty">Đang tải thông báo...</div>
-        ) : notifications.length === 0 ? (
-          <div className="notifications-empty">
-            <p>Chưa có thông báo nào.</p>
+            <button
+              onClick={handleMarkAllRead}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                fontSize: "13px",
+                color: "var(--primary)",
+                fontWeight: "600",
+                cursor: "pointer",
+              }}
+            >
+              <CheckCheck size={16} />
+              <span>Đánh dấu đã đọc tất cả</span>
+            </button>
           </div>
-        ) : (
-          <div className="notifications-list">
-            {notifications.map((notif, i) => {
-              const isRead = notif.read;
-              const type = notif.type?.toLowerCase() || "system";
-              const icon = ICON_MAP[type] || "🔔";
+
+          {/* Tabs */}
+          <div
+            className="card"
+            style={{
+              display: "flex",
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--r-md)",
+              border: "1px solid var(--border-light)",
+              marginBottom: "16px",
+              overflowX: "auto",
+            }}
+          >
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
               return (
-                <div
-                  key={notif.id || i}
-                  className={`notification-item${isRead ? " read" : " unread"}`}
-                  onClick={() => handleNotificationClick(notif)}
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  style={{
+                    flex: 1,
+                    padding: "12px 16px",
+                    border: "none",
+                    borderBottom: isActive ? "3px solid var(--primary)" : "3px solid transparent",
+                    backgroundColor: "transparent",
+                    color: isActive ? "var(--primary)" : "var(--text)",
+                    fontWeight: isActive ? "700" : "500",
+                    fontSize: "13px",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
                 >
-                  <div className={`notif-icon ${type}`}>{icon}</div>
-                  <div className="notif-body">
-                    <div className="notif-title">{notif.title || "Thông báo"}</div>
-                    <div className="notif-msg">{notif.message || ""}</div>
-                  </div>
-                  <div className="notif-right">
-                    <span className="notif-time">
-                      {notif.createdAt
-                        ? new Date(notif.createdAt).toLocaleString("vi-VN", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            day: "2-digit",
-                            month: "2-digit",
-                          })
-                        : ""}
-                    </span>
-                    {!isRead && <span className="notif-dot" />}
-                  </div>
-                </div>
+                  {tab.label}
+                </button>
               );
             })}
           </div>
-        )}
-      </div>
+
+          {/* Notifications List */}
+          {filteredNotifs.length === 0 && !loading ? (
+            <EmptyState
+              icon={Bell}
+              title="Không có thông báo nào"
+              description="Bạn chưa có thông báo nào trong phân loại này."
+            />
+          ) : (
+            <div
+              className="card"
+              style={{
+                backgroundColor: "var(--surface)",
+                borderRadius: "var(--r-lg)",
+                border: "1px solid var(--border-light)",
+                overflow: "hidden",
+              }}
+            >
+              {filteredNotifs.map((notif, idx) => (
+                <div
+                  key={notif.id}
+                  onClick={() => handleItemClick(notif)}
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "14px",
+                    padding: "16px 20px",
+                    backgroundColor: notif.read ? "transparent" : "var(--primary-subtle)",
+                    borderBottom: idx === filteredNotifs.length - 1 ? "none" : "1px solid var(--border-light)",
+                    cursor: "pointer",
+                    transition: "background 0.15s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--surface-muted)")}
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.backgroundColor = notif.read ? "transparent" : "var(--primary-subtle)")
+                  }
+                >
+                  <div
+                    style={{
+                      width: "42px",
+                      height: "42px",
+                      borderRadius: "50%",
+                      backgroundColor: notif.type === "PROMO" ? "#fef3c7" : notif.type === "ORDER" ? "#e0e7ff" : "#fee2e2",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "20px",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {notif.icon || "🔔"}
+                  </div>
+
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      <strong style={{ fontSize: "14px", color: "var(--text)" }}>
+                        {notif.title}
+                      </strong>
+                      <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
+                        {notif.time}
+                      </span>
+                    </div>
+
+                    <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.5" }}>
+                      {notif.body}
+                    </p>
+                  </div>
+
+                  {!notif.read && (
+                    <span
+                      style={{
+                        width: "8px",
+                        height: "8px",
+                        borderRadius: "50%",
+                        backgroundColor: "var(--primary)",
+                        marginTop: "6px",
+                      }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      <Footer />
+      <MobileNav />
     </div>
   );
 }
