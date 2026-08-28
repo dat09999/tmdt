@@ -7,6 +7,7 @@ import CartShopGroup from "../components/cart/CartShopGroup";
 import Button from "../components/common/Button";
 import EmptyState from "../components/common/EmptyState";
 import { cartService } from "../services/cartService";
+import { couponService } from "../services/couponService";
 import { useAuth } from "./Authcontext";
 import { formatCurrency } from "../utils/formatters";
 import { ShoppingBag, ArrowRight, Tag, ShieldCheck, Trash2 } from "lucide-react";
@@ -125,17 +126,19 @@ export default function CartPage() {
     await fetchCart();
   };
 
-  const handleApplyVoucher = (e) => {
+  const handleApplyVoucher = async (e) => {
     e.preventDefault();
     if (!voucherCode.trim()) return;
-    if (voucherCode.toUpperCase() === "DOMIX50K") {
-      setAppliedDiscount(50000);
-      showToast("Áp dụng mã giảm giá 50.000₫ thành công!");
-    } else if (voucherCode.toUpperCase() === "FREESHIP") {
-      setAppliedDiscount(25000);
-      showToast("Áp dụng mã miễn phí vận chuyển 25.000₫ thành công!");
-    } else {
-      showToast("Mã giảm giá không hợp lệ hoặc đã hết hạn");
+    try {
+      const res = await couponService.validateCoupon(voucherCode.trim(), subtotal);
+      if (res && res.discountValue) {
+        setAppliedDiscount(res.discountValue);
+        showToast(`Áp dụng mã giảm giá ${formatCurrency(res.discountValue)} thành công!`);
+      } else {
+        showToast("Mã giảm giá không hợp lệ hoặc chưa đủ điều kiện áp dụng.");
+      }
+    } catch (err) {
+      showToast(err.message || "Mã giảm giá không hợp lệ");
     }
   };
 

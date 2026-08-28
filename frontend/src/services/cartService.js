@@ -1,7 +1,6 @@
 import { API_BASE_URL, authFetch } from "../utils/auth";
 import { safeFetch } from "./api";
 
-// Local storage fallback key for cart if offline
 const CART_STORAGE_KEY = "domix_local_cart";
 
 function getLocalCart() {
@@ -20,7 +19,7 @@ function saveLocalCart(cart) {
 }
 
 export const cartService = {
-  // Lấy giỏ hàng của user
+  // GET /cart/{userId}
   async getCart(userId) {
     if (!userId) return getLocalCart();
     return safeFetch(
@@ -32,7 +31,7 @@ export const cartService = {
     );
   },
 
-  // Thêm sản phẩm vào giỏ
+  // POST /cart - Body: { userId, productId, variantSku, quantity }
   async addToCart(userId, item) {
     if (!userId) {
       const cart = getLocalCart();
@@ -50,9 +49,14 @@ export const cartService = {
 
     return safeFetch(
       async () => {
-        return await authFetch(`${API_BASE_URL}/cart/${userId}/item`, {
+        return await authFetch(`${API_BASE_URL}/cart`, {
           method: "POST",
-          body: JSON.stringify(item),
+          body: JSON.stringify({
+            userId,
+            productId: item.productId,
+            variantSku: item.variantSku || "default",
+            quantity: item.quantity || 1,
+          }),
         });
       },
       (() => {
@@ -64,7 +68,7 @@ export const cartService = {
     );
   },
 
-  // Cập nhật số lượng
+  // Cập nhật số lượng bằng POST /cart (hoặc tính năng delta)
   async updateQuantity(userId, { productId, variantSku, quantity }) {
     if (!userId) {
       const cart = getLocalCart();
@@ -78,16 +82,22 @@ export const cartService = {
 
     return safeFetch(
       async () => {
-        return await authFetch(`${API_BASE_URL}/cart/${userId}/item`, {
-          method: "PUT",
-          body: JSON.stringify({ productId, variantSku, quantity }),
+        // Backend OpenAPI AddToCartRequest handles setting/incrementing item in cart
+        return await authFetch(`${API_BASE_URL}/cart`, {
+          method: "POST",
+          body: JSON.stringify({
+            userId,
+            productId,
+            variantSku: variantSku || "default",
+            quantity,
+          }),
         });
       },
       getLocalCart()
     );
   },
 
-  // Xóa sản phẩm khỏi giỏ
+  // DELETE /cart/{userId}/item?productId=...&variantSku=...
   async removeItem(userId, item) {
     if (!userId) {
       const cart = getLocalCart();
@@ -109,5 +119,18 @@ export const cartService = {
       },
       getLocalCart()
     );
+  },
+
+  // DELETE /cart/{userId}/clear
+  async clearCart(userId) {
+    if (!userId) {
+      saveLocalCart({ items: [] });
+      return;
+    }
+    return safeFetch(async () => {
+      return await authFetch(`${API_BASE_URL}/cart/${userId}/clear`, {
+        method: "DELETE",
+      });
+    }, null);
   },
 };

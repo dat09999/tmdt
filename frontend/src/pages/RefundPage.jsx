@@ -89,12 +89,14 @@ export default function RefundPage() {
 
       const payload = {
         orderId: selectedOrderId,
+        userId: user?.userId || "user-default",
         orderCode: selectedOrder?.orderCode || selectedOrderId,
         productName: selectedOrder?.items?.[0]?.productName || "Sản phẩm đơn hàng #" + selectedOrderId,
         variantSku: selectedOrder?.items?.[0]?.variantSku || "Mặc định",
         refundAmount: Number(refundAmount) || selectedOrder?.totalAmount || 189000,
         reason,
         solution,
+        type: solution,
         description,
         images: uploadedImages.length > 0 ? uploadedImages : [
           "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=300",

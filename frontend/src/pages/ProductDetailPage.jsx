@@ -12,6 +12,7 @@ import RatingStars from "../components/common/RatingStars";
 import { productService } from "../services/productService";
 import { cartService } from "../services/cartService";
 import { wishlistService } from "../services/wishlistService";
+import { openChatWithShop } from "../services/chatService";
 import { useAuth } from "./Authcontext";
 import { formatCurrency, formatSoldCount } from "../utils/formatters";
 import {
@@ -50,6 +51,20 @@ export default function ProductDetailPage() {
           setSelectedVariant(data.variants[0]);
         }
         setIsWishlisted(wishlistService.isWishlisted(productId));
+
+        // Load reviews and summary
+        const [reviewsList, ratingSummary] = await Promise.all([
+          productService.getProductReviews(productId),
+          productService.getProductRatingSummary(productId),
+        ]);
+
+        if (Array.isArray(reviewsList) && reviewsList.length > 0) {
+          data.reviews = reviewsList;
+        }
+        if (ratingSummary?.avgRating) {
+          data.rating = ratingSummary.avgRating;
+          data.reviewCount = ratingSummary.totalReviews;
+        }
 
         // Load related products
         const allProds = await productService.getProducts();
@@ -457,8 +472,7 @@ export default function ProductDetailPage() {
                     size="sm"
                     icon={MessageCircle}
                     onClick={() => {
-                      const chatBtn = document.querySelector(".dev-badge");
-                      if (chatBtn) chatBtn.click();
+                      openChatWithShop(product.shopId || product.shop?.id || "shop-01");
                     }}
                   >
                     Chat Ngay

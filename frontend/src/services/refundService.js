@@ -20,24 +20,40 @@ function saveLocalRefunds(refunds) {
 }
 
 export const refundService = {
-  // Lấy danh sách yêu cầu hoàn tiền
-  async getRefunds() {
+  // GET /refunds/user/{userId}
+  async getRefunds(userId) {
+    if (!userId) return getLocalRefunds();
     return safeFetch(
       async () => {
-        const res = await authFetch(`${API_BASE_URL}/refunds`);
-        return Array.isArray(res) ? res : [];
+        const res = await authFetch(`${API_BASE_URL}/refunds/user/${userId}`);
+        return Array.isArray(res) ? res : getLocalRefunds();
       },
       getLocalRefunds()
     );
   },
 
-  // Tạo yêu cầu hoàn tiền mới
+  // GET /refunds/{refundId}
+  async getRefundById(refundId) {
+    return safeFetch(async () => {
+      const res = await authFetch(`${API_BASE_URL}/refunds/${refundId}`);
+      return res;
+    }, MOCK_REFUNDS[0]);
+  },
+
+  // POST /refunds
+  // Body: { orderId, userId, reason, type, images }
   async createRefund(payload) {
     return safeFetch(
       async () => {
         return await authFetch(`${API_BASE_URL}/refunds`, {
           method: "POST",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            orderId: payload.orderId,
+            userId: payload.userId,
+            reason: payload.reason,
+            type: payload.solution || payload.type || "REFUND_ONLY",
+            images: payload.images || [],
+          }),
         });
       },
       (() => {
@@ -46,7 +62,7 @@ export const refundService = {
           id: `ref-${Date.now()}`,
           refundCode: `REF-2026-${Math.floor(10000 + Math.random() * 90000)}`,
           createdAt: new Date().toISOString(),
-          status: "PROCESSING",
+          status: "PENDING",
           statusLabel: "Shop đang xem xét",
           timeline: [
             {
@@ -66,5 +82,23 @@ export const refundService = {
         return newRefund;
       })()
     );
+  },
+
+  // GET /refunds/shop/{shopId}
+  async getShopRefunds(shopId) {
+    return safeFetch(async () => {
+      const res = await authFetch(`${API_BASE_URL}/refunds/shop/${shopId}`);
+      return Array.isArray(res) ? res : [];
+    }, []);
+  },
+
+  // PATCH /refunds/{refundId}/process?status=...&adminNote=...&resolvedBy=...
+  async processRefund(refundId, { status, adminNote, resolvedBy }) {
+    return safeFetch(async () => {
+      return await authFetch(
+        `${API_BASE_URL}/refunds/${refundId}/process?status=${encodeURIComponent(status)}&resolvedBy=${encodeURIComponent(resolvedBy || "shop")}${adminNote ? `&adminNote=${encodeURIComponent(adminNote)}` : ""}`,
+        { method: "PATCH" }
+      );
+    }, null);
   },
 };

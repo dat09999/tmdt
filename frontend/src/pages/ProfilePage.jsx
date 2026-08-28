@@ -6,6 +6,8 @@ import MobileNav from "../components/layout/MobileNav";
 import Button from "../components/common/Button";
 import Modal from "../components/common/Modal";
 import { useAuth } from "./Authcontext";
+import { userService } from "../services/userService";
+import { couponService } from "../services/couponService";
 import { formatCurrency } from "../utils/formatters";
 import {
   User,
@@ -81,13 +83,60 @@ export default function ProfilePage() {
     { id: "v-3", code: "TECH100K", discount: 100000, minOrder: 1500000, expiry: "15/09/2026", title: "Voucher công nghệ giảm 100K" },
   ]);
 
+  useEffect(() => {
+    if (!user?.userId) return;
+    userService.getUserProfile(user.userId).then((data) => {
+      if (data) {
+        setProfileData((prev) => ({
+          ...prev,
+          fullName: data.fullName || prev.fullName,
+          email: data.email || prev.email,
+          phoneNumber: data.phone || prev.phoneNumber,
+        }));
+        if (Array.isArray(data.address) && data.address.length > 0) {
+          setAddresses(
+            data.address.map((a) => ({
+              id: a.id || `addr-${Date.now()}`,
+              name: a.fullName || data.fullName,
+              phone: a.phone || data.phone,
+              address: a.detail || `${a.ward || ""}, ${a.district || ""}, ${a.province || ""}`.trim(),
+              isDefault: !!a.isDefault,
+              type: "Nhà Riêng",
+            }))
+          );
+        }
+      }
+    });
+
+    couponService.getActiveCoupons().then((list) => {
+      if (Array.isArray(list) && list.length > 0) {
+        setVouchers(
+          list.map((c) => ({
+            id: c.id,
+            code: c.code,
+            discount: c.discountValue,
+            minOrder: c.minOrderValue,
+            expiry: c.endDate ? new Date(c.endDate).toLocaleDateString("vi-VN") : "31/12/2026",
+            title: `Giảm ${formatCurrency(c.discountValue)} cho đơn từ ${formatCurrency(c.minOrderValue)}`,
+          }))
+        );
+      }
+    });
+  }, [user?.userId]);
+
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 3000);
   };
 
-  const handleUpdateProfile = (e) => {
+  const handleUpdateProfile = async (e) => {
     e.preventDefault();
+    if (user?.userId) {
+      await userService.updateUserProfile(user.userId, {
+        fullName: profileData.fullName,
+        phone: profileData.phoneNumber,
+      });
+    }
     showToast("Cập nhật thông tin hồ sơ thành công!");
   };
 
@@ -99,14 +148,29 @@ export default function ProfilePage() {
     }
   };
 
-  const handleSaveAddress = (e) => {
+  const handleSaveAddress = async (e) => {
     e.preventDefault();
     if (!addressForm.name || !addressForm.phone || !addressForm.address) {
       showToast("Vui lòng điền đủ thông tin địa chỉ!");
       return;
     }
 
+    const payload = {
+      fullName: addressForm.name,
+      phone: addressForm.phone,
+      detail: addressForm.address,
+      province: "",
+      district: "",
+      ward: "",
+      lat: null,
+      lng: null,
+      isDefault: !!addressForm.isDefault,
+    };
+
     if (editingAddress) {
+      if (user?.userId) {
+        await userService.updateAddress(user.userId, editingAddress.id, payload);
+      }
       setAddresses(
         addresses.map((a) =>
           a.id === editingAddress.id ? { ...a, ...addressForm } : a
@@ -114,6 +178,9 @@ export default function ProfilePage() {
       );
       showToast("Đã cập nhật địa chỉ!");
     } else {
+      if (user?.userId) {
+        await userService.addAddress(user.userId, payload);
+      }
       const newAddr = {
         id: `addr-${Date.now()}`,
         ...addressForm,
@@ -126,12 +193,15 @@ export default function ProfilePage() {
     setEditingAddress(null);
   };
 
-  const handleDeleteAddress = (id) => {
+  const handleDeleteAddress = async (id) => {
+    if (user?.userId) {
+      await userService.deleteAddress(user.userId, id);
+    }
     setAddresses(addresses.filter((a) => a.id !== id));
     showToast("Đã xóa địa chỉ!");
   };
 
-  const handleSetDefaultAddress = (id) => {
+  const handleSetDefaultAddress = async (id) => {
     setAddresses(
       addresses.map((a) => ({
         ...a,
@@ -141,7 +211,7 @@ export default function ProfilePage() {
     showToast("Đã đặt làm địa chỉ mặc định!");
   };
 
-  const handleChangePassword = (e) => {
+  const handleChangePassword = async (e) => {
     e.preventDefault();
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       showToast("Mật khẩu mới không trùng khớp!");
@@ -151,8 +221,19 @@ export default function ProfilePage() {
       showToast("Mật khẩu phải có ít nhất 6 ký tự!");
       return;
     }
-    showToast("Đổi mật khẩu thành công!");
-    setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+
+    try {
+      if (user?.userId) {
+        await userService.changePassword(user.userId, {
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword,
+        });
+      }
+      showToast("Đổi mật khẩu thành công!");
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch (err) {
+      showToast(err.message || "Đổi mật khẩu thất bại!");
+    }
   };
 
   return (

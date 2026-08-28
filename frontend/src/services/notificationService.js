@@ -20,47 +20,53 @@ function saveLocalNotifications(notifs) {
 }
 
 export const notificationService = {
-  // Lấy danh sách thông báo
-  async getNotifications(userId) {
+  // GET /notifications?page=0&size=20
+  async getNotifications(userId, page = 0, size = 20) {
     return safeFetch(
       async () => {
-        const res = await authFetch(`${API_BASE_URL}/notifications/${userId}`);
-        return Array.isArray(res) ? res : [];
+        const res = await authFetch(`${API_BASE_URL}/notifications?page=${page}&size=${size}`);
+        return Array.isArray(res?.content) ? res.content : Array.isArray(res) ? res : getLocalNotifications();
       },
       getLocalNotifications()
     );
   },
 
-  // Đánh dấu 1 thông báo đã đọc
+  // GET /notifications/unread-count
+  async getUnreadCount() {
+    return safeFetch(async () => {
+      const res = await authFetch(`${API_BASE_URL}/notifications/unread-count`);
+      return res?.unreadCount || 0;
+    }, 2);
+  },
+
+  // POST /notifications/{id}/read
   async markAsRead(userId, notifId) {
     const list = getLocalNotifications();
     const target = list.find((n) => n.id === notifId);
     if (target) target.read = true;
     saveLocalNotifications(list);
 
-    if (userId) {
-      safeFetch(async () => {
-        return await authFetch(`${API_BASE_URL}/notifications/${userId}/${notifId}/read`, {
-          method: "PUT",
-        });
-      }, null);
-    }
+    safeFetch(async () => {
+      return await authFetch(`${API_BASE_URL}/notifications/${notifId}/read`, {
+        method: "POST",
+      });
+    }, null);
+
     return list;
   },
 
-  // Đánh dấu tất cả là đã đọc
+  // POST /notifications/read-all
   async markAllAsRead(userId) {
     const list = getLocalNotifications();
     list.forEach((n) => (n.read = true));
     saveLocalNotifications(list);
 
-    if (userId) {
-      safeFetch(async () => {
-        return await authFetch(`${API_BASE_URL}/notifications/${userId}/read-all`, {
-          method: "PUT",
-        });
-      }, null);
-    }
+    safeFetch(async () => {
+      return await authFetch(`${API_BASE_URL}/notifications/read-all`, {
+        method: "POST",
+      });
+    }, null);
+
     return list;
   },
 };

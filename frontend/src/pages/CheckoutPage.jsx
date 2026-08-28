@@ -71,32 +71,42 @@ export default function CheckoutPage() {
       setErrorMsg("");
 
       const orderPayload = {
-        userId: user?.userId || "guest",
-        items,
-        recipient,
-        shippingProvider: selectedShipping.name,
-        shippingFee,
-        voucherDiscount: discount,
-        totalAmount,
+        buyerId: user?.userId || "guest",
+        shippingAddress: {
+          fullName: recipient.name,
+          phone: recipient.phone,
+          detail: recipient.address,
+          province: recipient.province || "",
+          district: recipient.district || "",
+          ward: recipient.ward || "",
+          lat: recipient.lat || null,
+          lng: recipient.lng || null,
+          isDefault: true,
+        },
+        selectedItems: items.map((item) => ({
+          productId: item.productId,
+          variantSku: item.variantSku || "default",
+        })),
+        couponCode: discount > 0 ? "DOMIX50K" : "",
+        note: orderNote,
         paymentMethod,
-        orderNote,
-        orderStatus: paymentMethod === "COD" ? "PENDING" : "PENDING",
       };
 
-      const createdOrder = await orderService.createOrder(orderPayload);
+      const createdOrders = await orderService.createOrderFromCart(orderPayload);
+      const ordersList = Array.isArray(createdOrders) ? createdOrders : [createdOrders];
+      const primaryOrder = ordersList[0];
 
       // If VNPay, get payment redirect URL
       if (paymentMethod === "VNPAY") {
         const vnpayUrl = await orderService.createVNPayUrl(
-          createdOrder.id || createdOrder.orderCode,
-          totalAmount
+          primaryOrder.id || primaryOrder.orderCode
         );
         window.location.href = vnpayUrl;
       } else {
         // COD order placed directly
         sessionStorage.removeItem("checkout_items");
         sessionStorage.removeItem("checkout_discount");
-        window.location.href = `/orders/${createdOrder.id || createdOrder.orderCode}`;
+        window.location.href = `/orders/${primaryOrder.id || primaryOrder.orderCode}`;
       }
     } catch (err) {
       setErrorMsg(err.message || "Đặt hàng thất bại. Vui lòng thử lại!");

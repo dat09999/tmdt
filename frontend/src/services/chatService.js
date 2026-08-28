@@ -2,70 +2,102 @@ import { API_BASE_URL, authFetch } from "../utils/auth";
 import { safeFetch } from "./api";
 import { MOCK_CONVERSATIONS } from "../mocks/mockChat";
 
-const CHAT_STORAGE_KEY = "domix_mock_chat_data";
-
-function getLocalConversations() {
-  try {
-    const raw = localStorage.getItem(CHAT_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : MOCK_CONVERSATIONS;
-  } catch {
-    return MOCK_CONVERSATIONS;
-  }
-}
-
-function saveLocalConversations(convs) {
-  try {
-    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(convs));
-  } catch {}
+export function openChatWithShop(shopId) {
+  window.dispatchEvent(new CustomEvent("domix:open-chat", { detail: { shopId } }));
 }
 
 export const chatService = {
-  // Lấy danh sách cuộc hội thoại
+  // GET /api/chat/conversations/me
   async getConversations() {
     return safeFetch(
       async () => {
-        const res = await authFetch(`${API_BASE_URL}/chat/conversations`);
-        return res;
+        const res = await authFetch(`${API_BASE_URL}/api/chat/conversations/me`);
+        return Array.isArray(res) ? res : [];
       },
-      getLocalConversations()
+      MOCK_CONVERSATIONS
     );
   },
 
-  // Gửi tin nhắn mới
-  async sendMessage(conversationId, text) {
-    const convs = getLocalConversations();
-    const conv = convs.find((c) => c.id === conversationId);
-    
-    const newMsg = {
-      id: `msg-${Date.now()}`,
-      sender: "user",
-      text,
-      time: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
-    };
-
-    if (conv) {
-      conv.messages.push(newMsg);
-      conv.lastMessage = text;
-      conv.lastTime = newMsg.time;
-      saveLocalConversations(convs);
-    }
-
-    // Mock automatic shop reply after 1.5s
-    setTimeout(() => {
-      const updatedConvs = getLocalConversations();
-      const targetConv = updatedConvs.find((c) => c.id === conversationId);
-      if (targetConv) {
-        targetConv.messages.push({
-          id: `msg-reply-${Date.now()}`,
-          sender: "shop",
-          text: `Cảm ơn bạn đã nhắn tin cho ${targetConv.shopName}! Chúng tôi sẽ phản hồi sớm nhất có thể.`,
-          time: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+  // POST /api/chat/conversations?shopId=...
+  async getOrCreateConversation(shopId) {
+    return safeFetch(
+      async () => {
+        return await authFetch(`${API_BASE_URL}/api/chat/conversations?shopId=${encodeURIComponent(shopId)}`, {
+          method: "POST",
         });
-        saveLocalConversations(updatedConvs);
-        window.dispatchEvent(new CustomEvent("chat_message_received", { detail: { conversationId } }));
-      }
-    }, 1500);
+      },
+      MOCK_CONVERSATIONS.find((c) => c.shopId === shopId) || MOCK_CONVERSATIONS[0]
+    );
+  },
 
-    return newMsg;
+  // GET /api/chat/conversations/{conversationId}/messages?page=0&size=30
+  async getMessages(conversationId, page = 0, size = 30) {
+    return safeFetch(
+      async () => {
+        const res = await authFetch(
+          `${API_BASE_URL}/api/chat/conversations/${conversationId}/messages?page=${page}&size=${size}`
+        );
+        if (Array.isArray(res?.content)) {
+          return [...res.content].reverse();
+        }
+        if (Array.isArray(res)) {
+          return [...res].reverse();
+        }
+        return [];
+      },
+      (() => {
+        const conv = MOCK_CONVERSATIONS.find((c) => c.id === conversationId);
+        return conv?.messages || [];
+      })()
+    );
+  },
+
+  // POST /api/chat/messages (multipart/form-data)
+  async sendMessage(conversationId, text, senderId, senderRole = "USER", files = []) {
+    return safeFetch(
+      async () => {
+        const formData = new FormData();
+        formData.append("conversationId", conversationId);
+        formData.append("senderId", String(senderId || "user"));
+        formData.append("senderRole", senderRole);
+        if (text && text.trim()) {
+          formData.append("content", text.trim());
+        }
+        if (files && files.length > 0) {
+          files.forEach((file) => formData.append("images", file));
+        }
+
+        return await authFetch(`${API_BASE_URL}/api/chat/messages`, {
+          method: "POST",
+          body: formData,
+        });
+      },
+      {
+        id: `msg-${Date.now()}`,
+        conversationId,
+        senderId: String(senderId || "user"),
+        senderRole,
+        content: text,
+        sentAt: new Date().toISOString(),
+        read: false,
+      }
+    );
+  },
+
+  // PATCH /api/chat/conversations/{conversationId}/read
+  async markAsRead(conversationId) {
+    try {
+      await authFetch(`${API_BASE_URL}/api/chat/conversations/${conversationId}/read`, {
+        method: "PATCH",
+      });
+    } catch {}
+  },
+
+  // GET /api/chat/unread-count
+  async getUnreadCount() {
+    return safeFetch(async () => {
+      const res = await authFetch(`${API_BASE_URL}/api/chat/unread-count`);
+      return res?.total || res?.unreadCount || 0;
+    }, 0);
   },
 };

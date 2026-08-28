@@ -20,46 +20,76 @@ function saveLocalWishlist(list) {
 }
 
 export const wishlistService = {
-  // Lấy danh sách sản phẩm yêu thích
+  // GET /wishlist/{userId}
   async getWishlist(userId) {
+    if (!userId) return getLocalWishlist();
     return safeFetch(
       async () => {
         const res = await authFetch(`${API_BASE_URL}/wishlist/${userId}`);
-        return Array.isArray(res) ? res : [];
+        // Response format: { id, userId, items: [{ productId, productName, image, price, shopId }] }
+        return Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : getLocalWishlist();
       },
       getLocalWishlist()
     );
   },
 
-  // Thêm hoặc xóa khỏi yêu thích
+  // GET /wishlist/{userId}{productId}
+  async isProductWishlisted(userId, productId) {
+    if (!userId) return this.isWishlisted(productId);
+    return safeFetch(
+      async () => {
+        return await authFetch(`${API_BASE_URL}/wishlist/${userId}${productId}`);
+      },
+      this.isWishlisted(productId)
+    );
+  },
+
+  // POST /wishlist - Add to wishlist
+  async addToWishlist(userId, productId) {
+    if (!userId) return;
+    return safeFetch(async () => {
+      return await authFetch(`${API_BASE_URL}/wishlist`, {
+        method: "POST",
+        body: JSON.stringify({ userId, productId }),
+      });
+    }, null);
+  },
+
+  // DELETE /wishlist/{userId}/item?productId=...
+  async removeFromWishlist(userId, productId) {
+    if (!userId) return;
+    return safeFetch(async () => {
+      return await authFetch(
+        `${API_BASE_URL}/wishlist/${userId}/item?productId=${encodeURIComponent(productId)}`,
+        { method: "DELETE" }
+      );
+    }, null);
+  },
+
+  // Local fallback toggle
   async toggleWishlist(userId, product) {
     const list = getLocalWishlist();
-    const index = list.findIndex((p) => p.id === product.id);
+    const index = list.findIndex((p) => (p.id || p.productId) === (product.id || product.productId));
     let isAdded = false;
 
     if (index >= 0) {
       list.splice(index, 1);
+      if (userId) {
+        await this.removeFromWishlist(userId, product.id || product.productId);
+      }
     } else {
       list.push(product);
       isAdded = true;
+      if (userId) {
+        await this.addToWishlist(userId, product.id || product.productId);
+      }
     }
     saveLocalWishlist(list);
-
-    if (userId) {
-      safeFetch(async () => {
-        return await authFetch(`${API_BASE_URL}/wishlist/${userId}/toggle`, {
-          method: "POST",
-          body: JSON.stringify({ productId: product.id }),
-        });
-      }, null);
-    }
-
     return { list, isAdded };
   },
 
-  // Kiểm tra sản phẩm có trong wishlist không
   isWishlisted(productId) {
     const list = getLocalWishlist();
-    return list.some((p) => p.id === productId);
+    return list.some((p) => (p.id || p.productId) === productId);
   },
 };
