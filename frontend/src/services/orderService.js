@@ -3,6 +3,37 @@ import { safeFetch } from "./api";
 import { MOCK_ORDERS } from "../mocks/mockOrders";
 
 export const orderService = {
+  // POST /shipping/estimate - Body: { shopId, buyerLocation: { lat, lng } }
+  async estimateShipping(shopId, buyerLocation) {
+    return safeFetch(
+      async () => {
+        const payload = {
+          shopId: shopId || "default-shop",
+          buyerLocation: {
+            lat: Number(buyerLocation?.lat) || 10.762622,
+            lng: Number(buyerLocation?.lng) || 106.660172,
+          },
+        };
+
+        const res = await fetch(`${API_BASE_URL}/shipping/estimate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) throw new Error("Estimate shipping failed");
+        return await res.json();
+      },
+      {
+        distanceKm: 8.4,
+        shippingFee: 25000,
+        feeLabel: "25.000 đ",
+        distanceLabel: "~8.4 km",
+        note: null,
+      }
+    );
+  },
+
   // GET /orders/buyer/{buyerId}?page=0&size=10
   async getBuyerOrders(buyerId, page = 0, size = 10) {
     if (!buyerId) return [];

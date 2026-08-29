@@ -31,6 +31,7 @@ export default function CheckoutPage() {
   const [orderNote, setOrderNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [shippingEstimate, setShippingEstimate] = useState(null);
 
   // Saved Addresses state
   const [addressModalOpen, setAddressModalOpen] = useState(false);
@@ -110,12 +111,31 @@ export default function CheckoutPage() {
     }
   }, []);
 
+  // Dynamic Shipping Estimation via POST /shipping/estimate
+  useEffect(() => {
+    const shopId = items[0]?.shopId || "shop-1";
+    const buyerLocation = {
+      lat: currentAddress?.lat || 10.762622,
+      lng: currentAddress?.lng || 106.660172,
+    };
+
+    orderService
+      .estimateShipping(shopId, buyerLocation)
+      .then((estimate) => {
+        if (estimate) {
+          setShippingEstimate(estimate);
+        }
+      })
+      .catch(() => {});
+  }, [items, currentAddress?.address, currentAddress?.lat, currentAddress?.lng]);
+
   const itemsSubtotal = items.reduce(
     (sum, item) => sum + (item.price || 0) * (item.quantity || 1),
     0
   );
 
-  const shippingFee = selectedShipping?.price || 25000;
+  const baseShippingPrice = selectedShipping?.id === "sp-express" ? 45000 : selectedShipping?.id === "sp-standard" ? 18000 : 25000;
+  const shippingFee = shippingEstimate?.shippingFee ?? baseShippingPrice;
   const totalAmount = Math.max(0, itemsSubtotal + shippingFee - discount);
 
   const handlePlaceOrder = async () => {
@@ -372,48 +392,73 @@ export default function CheckoutPage() {
                   border: "1px solid var(--border-light)",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "700", fontSize: "15px", marginBottom: "14px" }}>
-                  <Truck size={18} color="var(--primary)" />
-                  <span>PHƯƠNG THỨC VẬN CHUYỂN</span>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px", flexWrap: "wrap", gap: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "700", fontSize: "15px" }}>
+                    <Truck size={18} color="var(--primary)" />
+                    <span>PHƯƠNG THỨC VẬN CHUYỂN</span>
+                  </div>
+                  {shippingEstimate?.distanceLabel && (
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        fontWeight: "700",
+                        color: "#059669",
+                        backgroundColor: "#ecfdf5",
+                        padding: "3px 8px",
+                        borderRadius: "99px",
+                        border: "1px solid #a7f3d0",
+                      }}
+                    >
+                      📍 Khoảng cách: {shippingEstimate.distanceLabel}
+                    </span>
+                  )}
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {SHIPPING_PROVIDERS.map((prov) => (
-                    <label
-                      key={prov.id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "12px 14px",
-                        borderRadius: "var(--r-sm)",
-                        border: selectedShipping.id === prov.id ? "2px solid var(--primary)" : "1px solid var(--border)",
-                        backgroundColor: selectedShipping.id === prov.id ? "var(--primary-light)" : "var(--surface)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <input
-                          type="radio"
-                          name="shipping_provider"
-                          checked={selectedShipping.id === prov.id}
-                          onChange={() => setSelectedShipping(prov)}
-                          style={{ accentColor: "var(--primary)" }}
-                        />
-                        <div>
-                          <div style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>
-                            {prov.name}
-                          </div>
-                          <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                            Dự kiến nhận hàng: {prov.estDays}
+                  {SHIPPING_PROVIDERS.map((prov) => {
+                    const dynamicPrice = prov.id === "sp-standard"
+                      ? (shippingEstimate?.shippingFee || 25000)
+                      : prov.id === "sp-express"
+                      ? (shippingEstimate?.shippingFee ? shippingEstimate.shippingFee + 15000 : 45000)
+                      : (shippingEstimate?.shippingFee ? Math.max(15000, shippingEstimate.shippingFee - 7000) : 18000);
+
+                    return (
+                      <label
+                        key={prov.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "12px 14px",
+                          borderRadius: "var(--r-sm)",
+                          border: selectedShipping.id === prov.id ? "2px solid var(--primary)" : "1px solid var(--border)",
+                          backgroundColor: selectedShipping.id === prov.id ? "var(--primary-light)" : "var(--surface)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <input
+                            type="radio"
+                            name="shipping_provider"
+                            checked={selectedShipping.id === prov.id}
+                            onChange={() => setSelectedShipping(prov)}
+                            style={{ accentColor: "var(--primary)" }}
+                          />
+                          <div>
+                            <div style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>
+                              {prov.name}
+                            </div>
+                            <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                              Dự kiến nhận hàng: {prov.estDays}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <strong style={{ fontSize: "13px", color: "var(--primary)" }}>
-                        {formatCurrency(prov.price)}
-                      </strong>
-                    </label>
-                  ))}
+                        <strong style={{ fontSize: "13px", color: "var(--primary)" }}>
+                          {formatCurrency(dynamicPrice)}
+                        </strong>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 

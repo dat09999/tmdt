@@ -68,6 +68,8 @@ public class SecurityConfig {
                 ).permitAll()
                 // Xem danh sách sản phẩm, danh mục, shop thì ai cũng xem được (GET)
                 .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/shops/**", "/reviews/**").permitAll()
+                // Ước tính phí ship trước khi đặt hàng - không cần đăng nhập
+                .requestMatchers(HttpMethod.POST, "/shipping/estimate").permitAll()
 
                 // Các thao tác mua bán, sửa đổi phải đăng nhập:
                 .requestMatchers("/orders/**", "/cart/**", "/wishlist/**", "/notifications/**").authenticated()

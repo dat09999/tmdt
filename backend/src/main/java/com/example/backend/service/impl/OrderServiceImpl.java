@@ -50,8 +50,10 @@ public class OrderServiceImpl implements OrderService {
     private final CartRepository cartRepository;
     private final CouponRepository couponRepository;
     private final ProductRepository productRepository;
+    private final ShopRepository shopRepository;
     private final MongoTemplate mongoTemplate;
     private final NotificationService notificationService;
+    private final com.example.backend.service.ShippingService shippingService;
 
     // ĐÃ THÊM: thông báo trạng thái đơn hàng (notify buyer) tại các điểm đổi trạng thái
     // quan trọng - markPaymentSuccess, cancelOrder, markPaymentFailed, startShipping,
@@ -61,7 +63,6 @@ public class OrderServiceImpl implements OrderService {
     // dùng "ORDER" - đổi lại cho khớp enum thật nếu tên khác).
 
     private static final Set<String> TERMINAL_STATUSES = Set.of("COMPLETED", "DELIVERED", "CANCELED");
-    private static final long SHIPPING_FEE = 30000L;
 
     // ================== TẠO ĐƠN TỪ GIỎ HÀNG ==================
 
@@ -284,7 +285,12 @@ public class OrderServiceImpl implements OrderService {
             // hoàn lại nếu order bị hủy/hết hạn) - hỏi thêm nếu bạn muốn implement phần này.
         }
 
-        long totalAmount = Math.max(0, built.subtotal + SHIPPING_FEE - discountAmount);
+        // Tính phí ship động dựa trên khoảng cách Shop → Người mua
+        Shop shop = shopRepository.findById(shopId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy shop: " + shopId));
+        long shippingFee = shippingService.calculateShippingFee(shop.getAddress(), shippingAddress);
+
+        long totalAmount = Math.max(0, built.subtotal + shippingFee - discountAmount);
         String paymentMethodNormalized = requireText(paymentMethod, "paymentMethod không được để trống").toUpperCase();
 
         List<Map.Entry<String, Integer>> applied = new ArrayList<>();
@@ -334,7 +340,7 @@ public class OrderServiceImpl implements OrderService {
                 .shippingAddress(shippingAddress)
                 .items(built.orderItems)
                 .subtotal(built.subtotal)
-                .shippingFee(SHIPPING_FEE)
+                .shippingFee(shippingFee)
                 .discountAmount(discountAmount)
                 .totalAmount(totalAmount)
                 .orderStatus(initialStatus)
