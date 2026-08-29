@@ -5,6 +5,7 @@ import com.example.backend.module.RefundRequest;
 import com.example.backend.service.RefundRequestService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,13 +25,19 @@ public class RefundRequestController {
     }
 
     @GetMapping("/user/{userId}")
-    public ResponseEntity<List<RefundRequest>> getByUser(@PathVariable String userId) {
-        return ResponseEntity.ok(refundRequestService.getRefundsByUser(userId));
+    public ResponseEntity<Page<RefundRequest>> getByUser(
+            @PathVariable String userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(refundRequestService.getRefundsByUser(userId, page, size));
     }
 
     @GetMapping("/shop/{shopId}")
-    public ResponseEntity<List<RefundRequest>> getByShop(@PathVariable String shopId) {
-        return ResponseEntity.ok(refundRequestService.getRefundsByShop(shopId));
+    public ResponseEntity<Page<RefundRequest>> getByShop(
+            @PathVariable String shopId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(refundRequestService.getRefundsByShop(shopId, page, size));
     }
 
     @GetMapping("/{refundId}")

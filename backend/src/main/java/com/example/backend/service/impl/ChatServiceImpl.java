@@ -94,6 +94,14 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    public Page<ConversationResponse> getConversationsByUser(int page, int size) {
+        String userId = SecurityUtils.getCurrentUserId();
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("lastMessageAt").descending());
+        return conversationRepository.findByUserId(userId, pageable)
+                .map(c -> toConversationResponse(c, shopRepository.findById(c.getShopId()).orElse(null)));
+    }
+
+    @Override
     public List<ConversationResponse> getConversationsByShop(String shopId) {
         Shop shop = shopRepository.findById(shopId)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy shop"));
@@ -106,6 +114,20 @@ public class ChatServiceImpl implements ChatService {
                 .stream()
                 .map(c -> toConversationResponse(c, shop))
                 .toList();
+    }
+
+    @Override
+    public Page<ConversationResponse> getConversationsByShop(String shopId, int page, int size) {
+        Shop shop = shopRepository.findById(shopId)
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy shop"));
+
+        if (!shop.getOwnerId().equals(SecurityUtils.getCurrentUserId())) {
+            throw new ForbiddenException("Bạn không phải chủ shop này");
+        }
+
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("lastMessageAt").descending());
+        return conversationRepository.findByShopId(shopId, pageable)
+                .map(c -> toConversationResponse(c, shop));
     }
 
     /**

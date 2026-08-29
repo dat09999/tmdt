@@ -14,9 +14,11 @@ public interface ChatService {
 
     /** Danh sách đoạn chat của chính buyer đang đăng nhập. */
     List<ConversationResponse> getConversationsByUser();
+    Page<ConversationResponse> getConversationsByUser(int page, int size);
 
     /** Danh sách đoạn chat của 1 shop - chỉ chủ shop mới gọi được. */
     List<ConversationResponse> getConversationsByShop(String shopId);
+    Page<ConversationResponse> getConversationsByShop(String shopId, int page, int size);
 
     /** Gửi tin nhắn (text và/hoặc ảnh). Server tự xác định người gửi là buyer hay shop. */
     MessageResponse sendMessage(MessageRequest request);

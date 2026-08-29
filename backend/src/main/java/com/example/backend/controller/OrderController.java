@@ -7,6 +7,7 @@ import com.example.backend.module.Order;
 import com.example.backend.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -45,25 +46,29 @@ public class OrderController {
     }
 
     /**
-     * Lấy danh sách đơn hàng của người mua.
+     * Lấy danh sách đơn hàng của người mua có phân trang.
      * GET /api/orders/buyer/{buyerId}
      */
     @GetMapping("/buyer/{buyerId}")
-    public ResponseEntity<List<Order>> getOrdersByBuyer(
-            @PathVariable String buyerId) {
+    public ResponseEntity<Page<Order>> getOrdersByBuyer(
+            @PathVariable String buyerId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
 
-        return ResponseEntity.ok(orderService.getOrdersByBuyer(buyerId));
+        return ResponseEntity.ok(orderService.getOrdersByBuyer(buyerId, page, size));
     }
 
     /**
-     * Lấy danh sách đơn hàng của shop.
+     * Lấy danh sách đơn hàng của shop có phân trang.
      * GET /api/orders/shop/{shopId}
      */
     @GetMapping("/shop/{shopId}")
-    public ResponseEntity<List<Order>> getOrdersByShop(
-            @PathVariable String shopId) {
+    public ResponseEntity<Page<Order>> getOrdersByShop(
+            @PathVariable String shopId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
 
-        return ResponseEntity.ok(orderService.getOrdersByShop(shopId));
+        return ResponseEntity.ok(orderService.getOrdersByShop(shopId, page, size));
     }
 
     /**

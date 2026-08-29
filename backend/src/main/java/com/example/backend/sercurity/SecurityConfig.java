@@ -58,24 +58,23 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(
-                                "/categories",
-                                "/auth/**",
-                                "/auth/register",
-                                "/reviews/**",
-                                "/oauth2/**",
-                                "/login/oauth2/**",
-                                "/v3/api-docs/**",
-                                "/swagger-ui/**",
-                                "/swagger-ui.html",
-                                "/shops/**",
-                                "/products/**",
-                                "/api/**",
-                                "/orders/**",
-                                "/ws/**",
-                               "/notifications/**"
-                        ).permitAll()
+                // Các API công khai (Không cần đăng nhập)
+                .requestMatchers(
+                        "/auth/**",
+                        "/ws/**",
+                        "/v3/api-docs/**",
+                        "/swagger-ui/**",
+                        "/swagger-ui.html"
+                ).permitAll()
+                // Xem danh sách sản phẩm, danh mục, shop thì ai cũng xem được (GET)
+                .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/shops/**", "/reviews/**").permitAll()
+
+                // Các thao tác mua bán, sửa đổi phải đăng nhập:
+                .requestMatchers("/orders/**", "/cart/**", "/wishlist/**", "/notifications/**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/products/**", "/shops/**", "/reviews/**").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/products/**", "/shops/**").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/products/**", "/shops/**").authenticated()
+
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

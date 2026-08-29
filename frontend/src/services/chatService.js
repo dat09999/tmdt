@@ -7,11 +7,24 @@ export function openChatWithShop(shopId) {
 }
 
 export const chatService = {
-  // GET /api/chat/conversations/me
-  async getConversations() {
+  // GET /api/chat/conversations/me?page=0&size=20
+  async getConversations(page = 0, size = 20) {
     return safeFetch(
       async () => {
-        const res = await authFetch(`${API_BASE_URL}/api/chat/conversations/me`);
+        const res = await authFetch(`${API_BASE_URL}/api/chat/conversations/me?page=${page}&size=${size}`);
+        if (Array.isArray(res?.content)) return res.content;
+        return Array.isArray(res) ? res : [];
+      },
+      MOCK_CONVERSATIONS
+    );
+  },
+
+  // GET /api/chat/conversations/shop/{shopId}?page=0&size=20
+  async getShopConversations(shopId, page = 0, size = 20) {
+    return safeFetch(
+      async () => {
+        const res = await authFetch(`${API_BASE_URL}/api/chat/conversations/shop/${encodeURIComponent(shopId)}?page=${page}&size=${size}`);
+        if (Array.isArray(res?.content)) return res.content;
         return Array.isArray(res) ? res : [];
       },
       MOCK_CONVERSATIONS

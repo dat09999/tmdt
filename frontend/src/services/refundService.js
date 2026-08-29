@@ -20,12 +20,13 @@ function saveLocalRefunds(refunds) {
 }
 
 export const refundService = {
-  // GET /refunds/user/{userId}
-  async getRefunds(userId) {
+  // GET /refunds/user/{userId}?page=0&size=10
+  async getRefunds(userId, page = 0, size = 10) {
     if (!userId) return getLocalRefunds();
     return safeFetch(
       async () => {
-        const res = await authFetch(`${API_BASE_URL}/refunds/user/${userId}`);
+        const res = await authFetch(`${API_BASE_URL}/refunds/user/${userId}?page=${page}&size=${size}`);
+        if (Array.isArray(res?.content)) return res.content;
         return Array.isArray(res) ? res : getLocalRefunds();
       },
       getLocalRefunds()
@@ -84,10 +85,11 @@ export const refundService = {
     );
   },
 
-  // GET /refunds/shop/{shopId}
-  async getShopRefunds(shopId) {
+  // GET /refunds/shop/{shopId}?page=0&size=10
+  async getShopRefunds(shopId, page = 0, size = 10) {
     return safeFetch(async () => {
-      const res = await authFetch(`${API_BASE_URL}/refunds/shop/${shopId}`);
+      const res = await authFetch(`${API_BASE_URL}/refunds/shop/${encodeURIComponent(shopId)}?page=${page}&size=${size}`);
+      if (Array.isArray(res?.content)) return res.content;
       return Array.isArray(res) ? res : [];
     }, []);
   },

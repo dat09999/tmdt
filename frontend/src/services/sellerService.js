@@ -66,16 +66,16 @@ export const sellerService = {
     );
   },
 
-  // GET /products?shopId={shopId}
-  async getProducts(shopId) {
+  // GET /products/shop/{shopId}?page=0&size=12
+  async getProducts(shopId, page = 0, size = 12) {
     return safeFetch(
       async () => {
         const url = shopId
-          ? `${API_BASE_URL}/products?shopId=${encodeURIComponent(shopId)}`
-          : `${API_BASE_URL}/products`;
+          ? `${API_BASE_URL}/products/shop/${encodeURIComponent(shopId)}?page=${page}&size=${size}`
+          : `${API_BASE_URL}/products?page=${page}&size=${size}`;
         const res = await authFetch(url);
+        if (Array.isArray(res?.content)) return res.content;
         if (Array.isArray(res)) return res;
-        if (res && Array.isArray(res.content)) return res.content;
         if (res && Array.isArray(res.products)) return res.products;
         return [];
       },
@@ -121,12 +121,13 @@ export const sellerService = {
     );
   },
 
-  // GET /orders/shop/{shopId}
-  async getOrders(shopId) {
+  // GET /orders/shop/{shopId}?page=0&size=10
+  async getOrders(shopId, page = 0, size = 10) {
     if (!shopId) return [];
     return safeFetch(
       async () => {
-        const res = await authFetch(`${API_BASE_URL}/orders/shop/${shopId}`);
+        const res = await authFetch(`${API_BASE_URL}/orders/shop/${encodeURIComponent(shopId)}?page=${page}&size=${size}`);
+        if (Array.isArray(res?.content)) return res.content;
         return Array.isArray(res) ? res : [];
       },
       []

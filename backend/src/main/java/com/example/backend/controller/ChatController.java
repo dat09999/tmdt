@@ -26,16 +26,21 @@ public class ChatController {
         return ResponseEntity.ok(chatService.getOrCreateConversation(shopId));
     }
 
-    // Danh sách đoạn chat của chính buyer đang đăng nhập.
+    // Danh sách đoạn chat của chính buyer đang đăng nhập (phân trang).
     @GetMapping("/conversations/me")
-    public ResponseEntity<List<ConversationResponse>> myConversations() {
-        return ResponseEntity.ok(chatService.getConversationsByUser());
+    public ResponseEntity<Page<ConversationResponse>> myConversations(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(chatService.getConversationsByUser(page, size));
     }
 
-    // Danh sách đoạn chat của 1 shop - service tự check requester có phải chủ shop không.
+    // Danh sách đoạn chat của 1 shop - service tự check requester có phải chủ shop không (phân trang).
     @GetMapping("/conversations/shop/{shopId}")
-    public ResponseEntity<List<ConversationResponse>> shopConversations(@PathVariable String shopId) {
-        return ResponseEntity.ok(chatService.getConversationsByShop(shopId));
+    public ResponseEntity<Page<ConversationResponse>> shopConversations(
+            @PathVariable String shopId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(chatService.getConversationsByShop(shopId, page, size));
     }
 
     // multipart/form-data vì có thể kèm ảnh.

@@ -16,6 +16,10 @@ import com.example.backend.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -151,6 +155,12 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    public Page<ProductResponse> getAllProducts(int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("createdAt").descending());
+        return productRepository.findByStatus("ACTIVE", pageable).map(this::toProductResponse);
+    }
+
+    @Override
     public ProductResponse getProductById(String productId) {
         Product product = productRepository.findById(productId).orElseThrow(()->new RuntimeException("ko thay"));
         return toProductResponse(product);
@@ -173,11 +183,23 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    public Page<ProductResponse> getProductsByShop(String shopId, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("createdAt").descending());
+        return productRepository.findByShopId(shopId, pageable).map(this::toProductResponse);
+    }
+
+    @Override
     public List<ProductResponse> getProductsByCategory(String categoryId) {
         return productRepository.findByCategoryId(categoryId)
                 .stream()
                 .map(this::toProductResponse)
                 .toList();
+    }
+
+    @Override
+    public Page<ProductResponse> getProductsByCategory(String categoryId, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("createdAt").descending());
+        return productRepository.findByCategoryId(categoryId, pageable).map(this::toProductResponse);
     }
 
     @Override
@@ -197,11 +219,27 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    public Page<ProductResponse> searchByName(String keyword, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("createdAt").descending());
+        String key = normalize(keyword);
+        if (key == null || key.isBlank()) {
+            return productRepository.findAll(pageable).map(this::toProductResponse);
+        }
+        return productRepository.findByNameContainingIgnoreCase(key, pageable).map(this::toProductResponse);
+    }
+
+    @Override
     public List<ProductResponse> searchByTag(String tag) {
         return productRepository.findByTagsContaining(tag)
                 .stream()
                 .map(this::toProductResponse)
                 .toList();
+    }
+
+    @Override
+    public Page<ProductResponse> searchByTag(String tag, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("createdAt").descending());
+        return productRepository.findByTagsContaining(tag, pageable).map(this::toProductResponse);
     }
 
     /**

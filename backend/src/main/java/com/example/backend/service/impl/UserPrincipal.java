@@ -17,12 +17,15 @@ public class UserPrincipal implements UserDetails {
     private final String email;
     private final String password;
     private final String role;
+    private final Boolean active;
 
     public UserPrincipal(User user) {
         this.id = user.getId();
         this.email = user.getEmail();
         this.password = user.getPassword();
         this.role = user.getRole();
+        this.active=user.getActive();
+
     }
 
     @NotNull
@@ -37,5 +40,9 @@ public class UserPrincipal implements UserDetails {
     @Override public boolean isAccountNonExpired() { return true; }
     @Override public boolean isAccountNonLocked() { return true; }
     @Override public boolean isCredentialsNonExpired() { return true; }
-    @Override public boolean isEnabled() { return true; }
+    @Override public boolean isEnabled() {
+      return   Boolean.TRUE.equals(this.active);
+
+         }
+
 }

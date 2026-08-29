@@ -6,6 +6,7 @@ import com.example.backend.service.ProductService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -25,8 +26,10 @@ public class ProductController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ProductResponse>> getAllProducts() {
-        return ResponseEntity.ok(productService.getAllProducts());
+    public ResponseEntity<Page<ProductResponse>> getAllProducts(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size) {
+        return ResponseEntity.ok(productService.getAllProducts(page, size));
     }
 
     @GetMapping("/{productId}")
@@ -41,20 +44,31 @@ public class ProductController {
     }
 
     @GetMapping("/shop/{shopId}")
-    public ResponseEntity<List<ProductResponse>> getByShop(@PathVariable String shopId) {
-        return ResponseEntity.ok(productService.getProductsByShop(shopId));
+    public ResponseEntity<Page<ProductResponse>> getByShop(
+            @PathVariable String shopId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size) {
+        return ResponseEntity.ok(productService.getProductsByShop(shopId, page, size));
     }
 
     @GetMapping("/category/{categoryId}")
-    public ResponseEntity<List<ProductResponse>> getByCategory(@PathVariable String categoryId) {
-        return ResponseEntity.ok(productService.getProductsByCategory(categoryId));
+    public ResponseEntity<Page<ProductResponse>> getByCategory(
+            @PathVariable String categoryId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size) {
+        return ResponseEntity.ok(productService.getProductsByCategory(categoryId, page, size));
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<ProductResponse>> search(@RequestParam(required = false) String keyword,
-                                                @RequestParam(required = false) String tag) {
-        if (tag != null && !tag.isBlank()) return ResponseEntity.ok(productService.searchByTag(tag));
-        return ResponseEntity.ok(productService.searchByName(keyword));
+    public ResponseEntity<Page<ProductResponse>> search(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String tag,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size) {
+        if (tag != null && !tag.isBlank()) {
+            return ResponseEntity.ok(productService.searchByTag(tag, page, size));
+        }
+        return ResponseEntity.ok(productService.searchByName(keyword, page, size));
     }
 
     @PutMapping("/{productId}")

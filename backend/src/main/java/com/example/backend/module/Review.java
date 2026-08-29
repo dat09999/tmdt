@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
@@ -28,7 +29,7 @@ import java.util.List;
                 def = "{'productId': 1, 'createdAt': -1}")
 })
 public class Review {
-
+@Id
     private String id;
 
     private String productId;

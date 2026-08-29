@@ -3,12 +3,13 @@ import { safeFetch } from "./api";
 import { MOCK_ORDERS } from "../mocks/mockOrders";
 
 export const orderService = {
-  // GET /orders/buyer/{buyerId}
-  async getBuyerOrders(buyerId) {
+  // GET /orders/buyer/{buyerId}?page=0&size=10
+  async getBuyerOrders(buyerId, page = 0, size = 10) {
     if (!buyerId) return [];
     return safeFetch(
       async () => {
-        const res = await authFetch(`${API_BASE_URL}/orders/buyer/${buyerId}`);
+        const res = await authFetch(`${API_BASE_URL}/orders/buyer/${buyerId}?page=${page}&size=${size}`);
+        if (Array.isArray(res?.content)) return res.content;
         return Array.isArray(res) ? res : [];
       },
       []

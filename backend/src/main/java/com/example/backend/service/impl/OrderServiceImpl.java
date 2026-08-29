@@ -8,6 +8,10 @@ import com.example.backend.service.OrderService;
 import com.example.backend.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -365,8 +369,20 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    public Page<Order> getOrdersByBuyer(String buyerId, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("createdAt").descending());
+        return orderRepository.findByBuyerId(buyerId, pageable);
+    }
+
+    @Override
     public List<Order> getOrdersByShop(String shopId) {
         return orderRepository.findByShopIdOrderByCreatedAtDesc(shopId);
+    }
+
+    @Override
+    public Page<Order> getOrdersByShop(String shopId, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("createdAt").descending());
+        return orderRepository.findByShopId(shopId, pageable);
     }
 
     @Override

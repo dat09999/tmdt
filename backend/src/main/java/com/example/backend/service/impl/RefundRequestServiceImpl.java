@@ -8,6 +8,10 @@ import com.example.backend.repository.RefundRequestRepository;
 import com.example.backend.service.RefundRequestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -121,8 +125,20 @@ public class RefundRequestServiceImpl implements RefundRequestService {
     }
 
     @Override
+    public Page<RefundRequest> getRefundsByUser(String userId, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("createdAt").descending());
+        return refundRequestRepository.findByUserId(userId, pageable);
+    }
+
+    @Override
     public List<RefundRequest> getRefundsByShop(String shopId) {
         return refundRequestRepository.findByShopId(shopId);
+    }
+
+    @Override
+    public Page<RefundRequest> getRefundsByShop(String shopId, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("createdAt").descending());
+        return refundRequestRepository.findByShopId(shopId, pageable);
     }
 
     @Override

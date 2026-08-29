@@ -48,10 +48,10 @@ export default function ShopDetailPage() {
         setLoading(true);
         const [shopData, productData] = await Promise.all([
           authFetch(`${API_BASE_URL}/shops/${shopId}`),
-          authFetch(`${API_BASE_URL}/products/shop/${shopId}`),
+          authFetch(`${API_BASE_URL}/products/shop/${shopId}?page=0&size=24`),
         ]);
         setShop(shopData);
-        setProducts(Array.isArray(productData) ? productData : []);
+        setProducts(Array.isArray(productData?.content) ? productData.content : (Array.isArray(productData) ? productData : []));
         if (user?.userId) {
           const followData = await authFetch(`${API_BASE_URL}/shops/${shopId}/follow?userId=${user.userId}`);
           setFollow(followData);

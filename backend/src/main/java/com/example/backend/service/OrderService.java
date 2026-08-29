@@ -3,6 +3,7 @@ package com.example.backend.service;
 import com.example.backend.DTO.order.BuyNowOrderRequest;
 import com.example.backend.DTO.order.CreateOrderRequest;
 import com.example.backend.module.Order;
+import org.springframework.data.domain.Page;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -14,7 +15,10 @@ public interface OrderService {
     Order createOrderDirect(BuyNowOrderRequest request);
 
     List<Order> getOrdersByBuyer(String buyerId);
+    Page<Order> getOrdersByBuyer(String buyerId, int page, int size);
+
     List<Order> getOrdersByShop(String shopId);
+    Page<Order> getOrdersByShop(String shopId, int page, int size);
     Order getOrderById(String orderId);
     Order updateOrderStatus(String orderId, String status, String updatedBy, String note);
     Order startShipping(String orderId, String shippingProvider, String trackingCode, String note);

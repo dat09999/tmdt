@@ -5,6 +5,9 @@ import com.example.backend.service.ShopService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -26,8 +29,11 @@ public class ShopController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ShopSummaryResponse>> getAllShops() {
-        return ResponseEntity.ok(shopService.getAllShops());
+    public ResponseEntity<Page<ShopSummaryResponse>> getAllShops(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size));
+        return ResponseEntity.ok(shopService.getShopsPaged(pageable));
     }
 
     @GetMapping("/{shopId}")
@@ -41,8 +47,12 @@ public class ShopController {
     }
 
     @GetMapping("/search")
-    public ResponseEntity<List<ShopSummaryResponse>> searchByName(@RequestParam String keyword) {
-        return ResponseEntity.ok(shopService.searchByName(keyword));
+    public ResponseEntity<Page<ShopSummaryResponse>> searchByName(
+            @RequestParam String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size));
+        return ResponseEntity.ok(shopService.searchShopsPaged(keyword, pageable));
     }
 
     @GetMapping("/{shopId}/statistics")

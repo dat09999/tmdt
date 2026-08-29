@@ -27,19 +27,19 @@ export const productService = {
 
   // GET /products, /products/search, /products/category/{categoryId}
   async getProducts(params = {}) {
-    const { category, search, tag, sort } = params;
+    const { category, search, tag, sort, page = 0, size = 12 } = params;
     return safeFetch(
       async () => {
-        let url = `${API_BASE_URL}/products`;
+        let url = `${API_BASE_URL}/products?page=${page}&size=${size}`;
         if (search) {
-          url = `${API_BASE_URL}/products/search?keyword=${encodeURIComponent(search)}${tag ? `&tag=${encodeURIComponent(tag)}` : ""}`;
+          url = `${API_BASE_URL}/products/search?keyword=${encodeURIComponent(search)}${tag ? `&tag=${encodeURIComponent(tag)}` : ""}&page=${page}&size=${size}`;
         } else if (category) {
-          url = `${API_BASE_URL}/products/category/${encodeURIComponent(category)}`;
+          url = `${API_BASE_URL}/products/category/${encodeURIComponent(category)}?page=${page}&size=${size}`;
         }
         const res = await fetch(url);
         if (!res.ok) throw new Error("Fetch products failed");
-        const list = await res.json();
-        return Array.isArray(list) ? list : [];
+        const data = await res.json();
+        return Array.isArray(data?.content) ? data.content : Array.isArray(data) ? data : [];
       },
       (() => {
         let list = [...MOCK_PRODUCTS];
@@ -78,11 +78,12 @@ export const productService = {
   },
 
   // GET /products/shop/{shopId} - Lấy sản phẩm của 1 shop
-  async getProductsByShop(shopId) {
+  async getProductsByShop(shopId, page = 0, size = 12) {
     return safeFetch(async () => {
-      const res = await fetch(`${API_BASE_URL}/products/shop/${shopId}`);
+      const res = await fetch(`${API_BASE_URL}/products/shop/${shopId}?page=${page}&size=${size}`);
       if (!res.ok) throw new Error("Fetch shop products failed");
-      return await res.json();
+      const data = await res.json();
+      return Array.isArray(data?.content) ? data.content : Array.isArray(data) ? data : [];
     }, MOCK_PRODUCTS);
   },
 
