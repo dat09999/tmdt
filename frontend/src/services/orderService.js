@@ -60,12 +60,13 @@ export const orderService = {
 
   // GET /orders/{orderId}
   async getOrderById(orderId) {
+    if (!orderId) return null;
     return safeFetch(
       async () => {
         const res = await authFetch(`${API_BASE_URL}/orders/${orderId}`);
         return res;
       },
-      MOCK_ORDERS.find((o) => o.id === orderId || o.orderCode === orderId) || MOCK_ORDERS[0]
+      null
     );
   },
 

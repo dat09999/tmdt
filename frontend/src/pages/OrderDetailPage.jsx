@@ -3,49 +3,54 @@ import Header from "../components/layout/Header";
 import SubNav from "../components/layout/SubNav";
 import Footer from "../components/layout/Footer";
 import MobileNav from "../components/layout/MobileNav";
-import OrderTimeline from "../components/order/OrderTimeline";
 import Button from "../components/common/Button";
+import EmptyState from "../components/common/EmptyState";
+import OrderTimeline from "../components/order/OrderTimeline";
 import { orderService } from "../services/orderService";
 import { formatCurrency, formatDate } from "../utils/formatters";
 import { ORDER_STATUS } from "../utils/constants";
 import {
+  ArrowLeft,
   MapPin,
   Truck,
+  Store,
   CreditCard,
   RotateCcw,
-  ArrowLeft,
-  Store,
   CheckCircle,
+  HelpCircle,
+  Package,
 } from "lucide-react";
 
 function buildOrderTimeline(order) {
   if (!order) return [];
-  const status = (order.orderStatus || "PENDING").toUpperCase();
-  const isCancelled = status === "CANCELLED";
 
-  if (isCancelled) {
+  const status = (order.orderStatus || "").toUpperCase();
+
+  // If order was cancelled
+  if (status === "CANCELED" || status === "CANCELLED") {
     return [
       {
         title: "Đơn Hàng Đã Đặt",
-        time: order.createdAt ? formatDate(order.createdAt) : "Đã đặt",
+        time: order.createdAt ? formatDate(order.createdAt, true) : "Vừa xong",
         done: true,
         current: false,
       },
       {
-        title: "Đơn Hàng Đã Hủy",
-        time: order.updatedAt ? formatDate(order.updatedAt) : "Đã hủy",
+        title: "Đơn Hàng Đã Bị Hủy",
+        time: order.updatedAt ? formatDate(order.updatedAt, true) : "Đã hủy",
         done: true,
         current: true,
         isCancelled: true,
+        note: order.cancelReason || "Đơn hàng đã bị hủy",
       },
     ];
   }
 
   const isStep1Done = true;
-  const isStep1Current = status === "PENDING" || status === "UNPAID" || status === "WAITING_PAYMENT";
+  const isStep1Current = status === "PENDING";
 
-  const isStep2Done = ["CONFIRMED", "PROCESSING", "SHIPPING", "DELIVERED", "COMPLETED"].includes(status);
-  const isStep2Current = status === "CONFIRMED" || status === "PROCESSING";
+  const isStep2Done = ["PROCESSING", "SHIPPING", "DELIVERED", "COMPLETED"].includes(status);
+  const isStep2Current = status === "PROCESSING";
 
   const isStep3Done = ["SHIPPING", "DELIVERED", "COMPLETED"].includes(status);
   const isStep3Current = status === "SHIPPING";
@@ -56,25 +61,25 @@ function buildOrderTimeline(order) {
   return [
     {
       title: "Đơn Hàng Đã Đặt",
-      time: order.createdAt ? formatDate(order.createdAt) : "Vừa xong",
+      time: order.createdAt ? formatDate(order.createdAt, true) : "Vừa xong",
       done: isStep1Done,
       current: isStep1Current,
     },
     {
       title: "Chờ Shop Chuẩn Bị Hàng",
-      time: isStep2Done ? (order.updatedAt ? formatDate(order.updatedAt) : "Đã xác nhận") : "Đang chờ xác nhận",
+      time: isStep2Done ? (order.updatedAt ? formatDate(order.updatedAt, true) : "Đã xác nhận") : "Đang chờ xác nhận",
       done: isStep2Done,
       current: isStep2Current,
     },
     {
       title: "Đang Vận Chuyển",
-      time: order.shippedAt ? formatDate(order.shippedAt) : isStep3Done ? "Đang giao hàng" : "Chờ giao hàng",
+      time: order.shippedAt ? formatDate(order.shippedAt, true) : isStep3Done ? "Đang giao hàng" : "Chờ bàn giao",
       done: isStep3Done,
       current: isStep3Current,
     },
     {
       title: "Giao Hàng Thành Công",
-      time: order.deliveredAt ? formatDate(order.deliveredAt) : isStep4Done ? "Đã nhận hàng" : "Dự kiến 2-3 ngày",
+      time: order.deliveredAt ? formatDate(order.deliveredAt, true) : isStep4Done ? "Đã nhận hàng" : "Dự kiến 2-3 ngày",
       done: isStep4Done,
       current: isStep4Current,
     },
@@ -82,19 +87,27 @@ function buildOrderTimeline(order) {
 }
 
 export default function OrderDetailPage() {
-  const orderId = window.location.pathname.split("/orders/")[1] || "ord-1001";
+  const orderId = window.location.pathname.split("/orders/")[1] || "";
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!orderId) {
+      setLoading(false);
+      return;
+    }
+
     orderService
       .getOrderById(orderId)
       .then((data) => setOrder(data))
-      .catch((err) => console.error("Load order detail failed:", err))
+      .catch((err) => {
+        console.error("Load order detail failed:", err);
+        setOrder(null);
+      })
       .finally(() => setLoading(false));
   }, [orderId]);
 
-  if (loading || !order) {
+  if (loading) {
     return (
       <div className="page-shell">
         <Header />
@@ -105,22 +118,55 @@ export default function OrderDetailPage() {
     );
   }
 
+  // If order is not found in database
+  if (!order) {
+    return (
+      <div className="page-shell">
+        <Header />
+        <SubNav />
+        <main className="page-content">
+          <div className="container" style={{ maxWidth: "860px", padding: "60px 16px", textAlign: "center" }}>
+            <EmptyState
+              icon={Package}
+              title="Không Tìm Thấy Đơn Hàng"
+              description={`Đơn hàng mã #${orderId} không tồn tại trong hệ thống hoặc bạn không có quyền truy cập.`}
+              actionText="Quay lại danh sách đơn mua"
+              onAction={() => (window.location.href = "/orders")}
+            />
+          </div>
+        </main>
+        <Footer />
+        <MobileNav />
+      </div>
+    );
+  }
+
   const statusInfo = ORDER_STATUS[order.orderStatus] || {
     label: order.orderStatus || "Chờ xác nhận",
     color: "var(--primary)",
   };
 
   const recipientName =
-    order.shippingAddress?.fullName || order.recipient?.name || order.buyerId || "Người Nhận";
+    order.shippingAddress?.fullName || order.recipient?.name || order.buyerId || "Khách Hàng";
   const recipientPhone =
-    order.shippingAddress?.phone || order.recipient?.phone || "0912 345 678";
-  const recipientAddress =
-    order.shippingAddress?.detail ||
-    order.recipient?.address ||
-    "Số 88 Đường Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh";
+    order.shippingAddress?.phone || order.recipient?.phone || "Chưa có SĐT";
+
+  const recipientAddress = order.shippingAddress
+    ? typeof order.shippingAddress === "string"
+      ? order.shippingAddress
+      : [
+          order.shippingAddress.detail,
+          order.shippingAddress.ward,
+          order.shippingAddress.district,
+          order.shippingAddress.province,
+        ]
+          .filter(Boolean)
+          .join(", ")
+    : order.recipient?.address || "Chưa có thông tin địa chỉ giao hàng";
 
   const totalAmount = order.totalAmount || order.subtotal || 0;
-  const shippingFee = order.shippingFee || 25000;
+  const shippingFee = order.shippingFee !== undefined ? order.shippingFee : 30000;
+  const discountAmount = order.discountAmount || 0;
   const itemsSubtotal = (order.items || []).reduce(
     (sum, it) => sum + (it.unitPrice || it.price || 0) * (it.quantity || 1),
     0
@@ -142,6 +188,8 @@ export default function OrderDetailPage() {
               alignItems: "center",
               justifyContent: "space-between",
               marginBottom: "16px",
+              flexWrap: "wrap",
+              gap: "10px",
             }}
           >
             <a
@@ -199,7 +247,7 @@ export default function OrderDetailPage() {
               border: "1px solid var(--border-light)",
               marginBottom: "20px",
               display: "grid",
-              gridTemplateColumns: "1fr 1fr",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
               gap: "24px",
             }}
           >
@@ -222,7 +270,7 @@ export default function OrderDetailPage() {
               <div style={{ fontSize: "13px", lineHeight: "1.6" }}>
                 <strong>{recipientName}</strong>
                 <div>{recipientPhone}</div>
-                <div style={{ color: "var(--text-secondary)" }}>
+                <div style={{ color: "var(--text-secondary)", marginTop: "4px" }}>
                   {recipientAddress}
                 </div>
               </div>
@@ -245,16 +293,20 @@ export default function OrderDetailPage() {
                 <span>Thông Tin Vận Chuyển</span>
               </div>
               <div style={{ fontSize: "13px", lineHeight: "1.6" }}>
-                <div>Đơn vị vận chuyển: <strong>{order.shippingProvider || "Giao Hàng Nhanh"}</strong></div>
+                <div>Đơn vị vận chuyển: <strong>{order.shippingProvider || "Giao Hàng Nhanh (GHN)"}</strong></div>
                 {order.trackingCode && (
                   <div style={{ color: "var(--text-secondary)" }}>
                     Mã vận đơn: <strong style={{ color: "var(--primary)" }}>{order.trackingCode}</strong>
                   </div>
                 )}
-                <div style={{ color: "#059669", fontSize: "12px", marginTop: "4px" }}>
-                  {order.orderStatus === "SHIPPING" || order.orderStatus === "DELIVERED"
-                    ? "✓ Đã được bàn giao cho đối tác vận chuyển"
-                    : "⏳ Chờ shop xác nhận và chuẩn bị hàng"}
+                <div style={{ color: "#059669", fontSize: "12px", marginTop: "4px", fontWeight: "600" }}>
+                  {order.orderStatus === "SHIPPING"
+                    ? "🚚 Đang trên đường giao đến bạn"
+                    : order.orderStatus === "DELIVERED"
+                    ? "✓ Giao hàng thành công"
+                    : order.orderStatus === "CANCELED"
+                    ? "✕ Đơn hàng đã hủy"
+                    : "⏳ Người bán đang chuẩn bị hàng"}
                 </div>
               </div>
             </div>
@@ -282,7 +334,9 @@ export default function OrderDetailPage() {
               }}
             >
               <Store size={16} color="var(--primary)" />
-              <strong style={{ fontSize: "15px" }}>{order.shop?.name || "Cửa Hàng DoMix Mall"}</strong>
+              <strong style={{ fontSize: "15px" }}>
+                {order.shop?.name || order.shopName || (order.shopId ? `Gian Hàng #${order.shopId}` : "Cửa Hàng DoMix")}
+              </strong>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -323,7 +377,7 @@ export default function OrderDetailPage() {
 
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: "15px", fontWeight: "700", color: "var(--primary)" }}>
-                      {formatCurrency((item.unitPrice || item.price || 0) * (item.quantity || 1))}
+                      {formatCurrency((item.unitPrice || item.price || (item.totalPrice ? item.totalPrice / (item.quantity || 1) : 0)) * (item.quantity || 1))}
                     </div>
                   </div>
                 </div>
@@ -344,28 +398,77 @@ export default function OrderDetailPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "13px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-secondary)" }}>
                 <span>Tổng tiền hàng</span>
-                <strong>{formatCurrency(itemsSubtotal || totalAmount)}</strong>
+                <strong>{formatCurrency(itemsSubtotal || order.subtotal || totalAmount)}</strong>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-secondary)" }}>
                 <span>Phí vận chuyển</span>
                 <strong>{formatCurrency(shippingFee)}</strong>
               </div>
-              {order.discountAmount > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", color: "#059669" }}>
-                  <span>Voucher giảm giá</span>
-                  <strong>-{formatCurrency(order.discountAmount)}</strong>
+              {discountAmount > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--primary)" }}>
+                  <span>Giảm giá Voucher {order.couponCode ? `(${order.couponCode})` : ""}</span>
+                  <strong>-{formatCurrency(discountAmount)}</strong>
                 </div>
               )}
-              <div style={{ height: "1px", backgroundColor: "var(--border-light)", margin: "4px 0" }} />
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ fontSize: "15px", fontWeight: "700" }}>Tổng số tiền:</span>
-                <strong style={{ fontSize: "22px", color: "var(--primary)", fontWeight: "900" }}>
-                  {formatCurrency(totalAmount || itemsSubtotal + shippingFee)}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: "16px",
+                  paddingTop: "12px",
+                  borderTop: "1px dashed var(--border)",
+                  marginTop: "6px",
+                }}
+              >
+                <strong>Thành tiền:</strong>
+                <strong style={{ color: "var(--primary)", fontSize: "20px", fontWeight: "900" }}>
+                  {formatCurrency(totalAmount)}
                 </strong>
               </div>
-              <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>
-                Phương thức thanh toán: <strong>{order.paymentMethod || order.payment?.method || "Thanh toán khi nhận hàng (COD)"}</strong>
+              <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-tertiary)", fontSize: "12px", marginTop: "4px" }}>
+                <span>Phương thức thanh toán:</span>
+                <span>{order.payment?.method === "COD" ? "Thanh toán khi nhận hàng (COD)" : order.payment?.method || "VNPAY"}</span>
               </div>
+            </div>
+
+            {/* Actions */}
+            <div
+              style={{
+                marginTop: "20px",
+                paddingTop: "16px",
+                borderTop: "1px solid var(--border-light)",
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "10px",
+                flexWrap: "wrap",
+              }}
+            >
+              {order.orderStatus === "DELIVERED" && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => (window.location.href = `/refunds?orderId=${order.id}`)}
+                  >
+                    <RotateCcw size={16} />
+                    <span>Yêu Cầu Trả Hàng / Hoàn Tiền</span>
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      const firstProdId = order.items?.[0]?.productId || "sp-01";
+                      window.location.href = `/product/${firstProdId}#reviews`;
+                    }}
+                  >
+                    Đánh Giá Sản Phẩm
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="secondary"
+                onClick={() => (window.location.href = "/orders")}
+              >
+                Quay Lại Đơn Mua
+              </Button>
             </div>
           </div>
         </div>
