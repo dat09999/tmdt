@@ -34,11 +34,11 @@ export default function ReviewSection({
   const [modalOpen, setModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
+  const [selectedImages, setSelectedImages] = useState([]); // Base64 data URLs
   const [reviewForm, setReviewForm] = useState({
     rating: 5,
     comment: "",
     variantName: "Tiêu chuẩn",
-    imageUrl: "",
   });
   const [hoverRating, setHoverRating] = useState(0);
 
@@ -65,6 +65,25 @@ export default function ReviewSection({
     await productService.markReviewHelpful(revId);
   };
 
+  const handleImageFileChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (loadEvt) => {
+        if (loadEvt.target?.result) {
+          setSelectedImages((prev) => [...prev, loadEvt.target.result]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleRemoveImage = (indexToRemove) => {
+    setSelectedImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  };
+
   const handleSubmitReview = async (e) => {
     e.preventDefault();
     if (!user) {
@@ -85,7 +104,7 @@ export default function ReviewSection({
         rating: reviewForm.rating,
         comment: reviewForm.comment.trim(),
         variantSku: reviewForm.variantName,
-        images: reviewForm.imageUrl ? [reviewForm.imageUrl] : [],
+        images: selectedImages,
       };
 
       const res = await productService.createReview(payload);
@@ -99,7 +118,7 @@ export default function ReviewSection({
         content: reviewForm.comment.trim(),
         variant: reviewForm.variantName,
         date: new Date().toISOString(),
-        images: reviewForm.imageUrl ? [reviewForm.imageUrl] : [],
+        images: selectedImages,
         helpfulCount: 0,
       };
 
@@ -109,11 +128,11 @@ export default function ReviewSection({
 
       showToast("🎉 Cảm ơn bạn! Đánh giá đã được gửi thành công!");
       setModalOpen(false);
+      setSelectedImages([]);
       setReviewForm({
         rating: 5,
         comment: "",
         variantName: "Tiêu chuẩn",
-        imageUrl: "",
       });
     } catch (err) {
       showToast(err.message || "Không thể gửi đánh giá. Vui lòng thử lại!");
@@ -518,17 +537,92 @@ export default function ReviewSection({
             />
           </div>
 
+          {/* Local Image File Upload */}
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-              Hình Ảnh Đánh Giá (URL):
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
+              Hình Ảnh Thực Tế (Tải lên từ máy / điện thoại):
             </label>
-            <input
-              type="url"
-              value={reviewForm.imageUrl}
-              onChange={(e) => setReviewForm({ ...reviewForm, imageUrl: e.target.value })}
-              placeholder="https://images.unsplash.com/..."
-              style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "4px" }}
-            />
+
+            {/* Thumbnail Previews */}
+            {selectedImages.length > 0 && (
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
+                {selectedImages.map((dataUrl, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      position: "relative",
+                      width: "72px",
+                      height: "72px",
+                      borderRadius: "6px",
+                      overflow: "hidden",
+                      border: "1.5px solid var(--border)",
+                    }}
+                  >
+                    <img
+                      src={dataUrl}
+                      alt={`Upload ${idx}`}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(idx)}
+                      style={{
+                        position: "absolute",
+                        top: "3px",
+                        right: "3px",
+                        width: "20px",
+                        height: "20px",
+                        borderRadius: "50%",
+                        backgroundColor: "rgba(0, 0, 0, 0.65)",
+                        color: "#fff",
+                        border: "none",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "11px",
+                        fontWeight: "900",
+                        padding: 0,
+                      }}
+                      title="Xóa ảnh này"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* File Upload Button */}
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 16px",
+                borderRadius: "var(--r-sm)",
+                border: "1px dashed var(--primary)",
+                backgroundColor: "var(--primary-light)",
+                color: "var(--primary)",
+                fontWeight: "700",
+                fontSize: "13px",
+                cursor: "pointer",
+                transition: "background 0.15s",
+              }}
+            >
+              <Camera size={16} />
+              <span>+ Chọn ảnh từ máy tính / điện thoại</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageFileChange}
+                style={{ display: "none" }}
+              />
+            </label>
+            <span style={{ fontSize: "11px", color: "var(--text-tertiary)", marginLeft: "10px" }}>
+              (Hỗ trợ định dạng JPG, PNG, WEBP)
+            </span>
           </div>
 
           <Button

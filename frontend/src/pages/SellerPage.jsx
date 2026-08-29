@@ -1322,14 +1322,78 @@ export default function SellerPage() {
             </div>
           </div>
           <div>
-            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>URL Hình Ảnh:</label>
-            <input
-              type="url"
-              value={productForm.imageUrl}
-              onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
-              placeholder="https://images.unsplash.com/..."
-              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
-            />
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
+              Hình Ảnh Sản Phẩm (Tải lên từ máy / điện thoại):
+            </label>
+
+            {productForm.imageUrl && (
+              <div style={{ position: "relative", width: "80px", height: "80px", marginBottom: "8px", borderRadius: "6px", overflow: "hidden", border: "1.5px solid var(--border)" }}>
+                <img
+                  src={productForm.imageUrl}
+                  alt="Product preview"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setProductForm({ ...productForm, imageUrl: "" })}
+                  style={{
+                    position: "absolute",
+                    top: "3px",
+                    right: "3px",
+                    width: "20px",
+                    height: "20px",
+                    borderRadius: "50%",
+                    backgroundColor: "rgba(0, 0, 0, 0.65)",
+                    color: "#fff",
+                    border: "none",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "11px",
+                    fontWeight: "900",
+                  }}
+                  title="Xóa ảnh này"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            <label
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 14px",
+                borderRadius: "var(--r-sm)",
+                border: "1px dashed var(--primary)",
+                backgroundColor: "var(--primary-light)",
+                color: "var(--primary)",
+                fontWeight: "700",
+                fontSize: "13px",
+                cursor: "pointer",
+              }}
+            >
+              <span>+ Chọn ảnh sản phẩm từ thiết bị</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (loadEvt) => {
+                      if (loadEvt.target?.result) {
+                        setProductForm((prev) => ({ ...prev, imageUrl: loadEvt.target.result }));
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+                style={{ display: "none" }}
+              />
+            </label>
           </div>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>Mô Tả Sản Phẩm:</label>
