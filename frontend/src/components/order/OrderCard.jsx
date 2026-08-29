@@ -168,8 +168,15 @@ export default function OrderCard({ order, onCancelOrder }) {
                 <RotateCcw size={14} />
                 <span>Trả hàng / Hoàn tiền</span>
               </Button>
-              <Button variant="secondary" size="sm">
-                Đánh giá
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  const targetProdId = order.items?.[0]?.productId || "sp-01";
+                  window.location.href = `/product/${targetProdId}#reviews`;
+                }}
+              >
+                Đánh giá sản phẩm
               </Button>
             </>
           )}

@@ -551,9 +551,17 @@ export default function ProductDetailPage() {
           {/* Customer Reviews Section */}
           <div style={{ marginBottom: "28px" }}>
             <ReviewSection
+              productId={product.id || productId}
               reviews={product.reviews || []}
               averageRating={product.rating || 5}
               totalReviews={product.reviewCount || (product.reviews || []).length}
+              onReviewAdded={(newRev) => {
+                setProduct((prev) => ({
+                  ...prev,
+                  reviews: [newRev, ...(prev.reviews || [])],
+                  reviewCount: (prev.reviewCount || (prev.reviews || []).length) + 1,
+                }));
+              }}
             />
           </div>
 

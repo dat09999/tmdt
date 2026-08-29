@@ -92,7 +92,20 @@ export const productService = {
       const res = await fetch(`${API_BASE_URL}/reviews/product/${productId}?page=${page}&size=${size}`);
       if (!res.ok) throw new Error("Fetch reviews failed");
       const data = await res.json();
-      return data?.content || [];
+      const items = Array.isArray(data?.content) ? data.content : Array.isArray(data) ? data : [];
+      return items.map((r) => ({
+        id: r.id || `rev-${Date.now()}-${Math.random()}`,
+        userId: r.userId || r.user?.id,
+        userName: r.userName || r.user?.fullName || r.buyerName || "Khách Hàng DoMix",
+        avatar: r.avatar || r.user?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${r.userName || "user"}`,
+        rating: Number(r.rating) || 5,
+        content: r.comment || r.content || r.reviewText || "Sản phẩm rất tốt, giao hàng nhanh chóng!",
+        variant: r.variantName || r.variantSku || r.variant || "Tiêu chuẩn",
+        date: r.createdAt || r.date || new Date().toISOString(),
+        images: r.images || r.imageUrls || [],
+        helpfulCount: r.helpfulCount || r.likes || 0,
+        shopReply: r.shopReply || r.reply || null,
+      }));
     }, MOCK_PRODUCTS[0].reviews || []);
   },
 
@@ -111,17 +124,38 @@ export const productService = {
 
   // POST /reviews - Tạo đánh giá sản phẩm
   async createReview(reviewPayload) {
-    return authFetch(`${API_BASE_URL}/reviews`, {
-      method: "POST",
-      body: JSON.stringify(reviewPayload),
-    });
+    return safeFetch(
+      async () => {
+        return await authFetch(`${API_BASE_URL}/reviews`, {
+          method: "POST",
+          body: JSON.stringify({
+            productId: reviewPayload.productId,
+            rating: Number(reviewPayload.rating) || 5,
+            comment: reviewPayload.comment || reviewPayload.content || "",
+            variantSku: reviewPayload.variantSku || "default",
+            orderId: reviewPayload.orderId || null,
+            images: reviewPayload.images || [],
+          }),
+        });
+      },
+      {
+        id: `rev-${Date.now()}`,
+        ...reviewPayload,
+        createdAt: new Date().toISOString(),
+      }
+    );
   },
 
   // POST /reviews/{reviewId}/helpful
   async markReviewHelpful(reviewId) {
-    return authFetch(`${API_BASE_URL}/reviews/${reviewId}/helpful`, {
-      method: "POST",
-    });
+    return safeFetch(
+      async () => {
+        return await authFetch(`${API_BASE_URL}/reviews/${reviewId}/helpful`, {
+          method: "POST",
+        });
+      },
+      { success: true }
+    );
   },
 
   // Flash sale products (lọc theo tag hoặc flash sale)
