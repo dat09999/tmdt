@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import RatingStars from "../common/RatingStars";
 import Button from "../common/Button";
 import Modal from "../common/Modal";
 import { productService } from "../../services/productService";
+import { orderService } from "../../services/orderService";
 import { useAuth } from "../../pages/Authcontext";
 import { formatDate } from "../../utils/formatters";
 import {
@@ -15,6 +16,10 @@ import {
   Store,
   ShieldCheck,
   Send,
+  AlertCircle,
+  ShoppingBag,
+  Truck,
+  LogIn,
 } from "lucide-react";
 
 export default function ReviewSection({
@@ -39,15 +44,29 @@ export default function ReviewSection({
     rating: 5,
     comment: "",
     variantName: "Tiêu chuẩn",
+    orderId: null,
   });
   const [hoverRating, setHoverRating] = useState(0);
 
+  // Ineligible to review modal
+  const [notEligibleModalOpen, setNotEligibleModalOpen] = useState(false);
+  const [notEligibleReason, setNotEligibleReason] = useState("NOT_PURCHASED"); // "NOT_LOGGED_IN" | "NOT_PURCHASED" | "ORDER_NOT_DELIVERED_YET"
+  const [checkingEligibility, setCheckingEligibility] = useState(false);
+
   // Sync if parent updates reviews
-  React.useEffect(() => {
+  useEffect(() => {
     if (reviews && reviews.length > 0) {
       setReviewsList(reviews);
     }
   }, [reviews]);
+
+  // Check URL hash if user clicked "Đánh giá" from OrdersPage
+  useEffect(() => {
+    if (window.location.hash.includes("reviews")) {
+      const el = document.getElementById("reviews-section");
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -84,10 +103,40 @@ export default function ReviewSection({
     setSelectedImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
+  // Open review modal with strict purchase check
+  const handleOpenWriteReview = async () => {
+    if (!user) {
+      setNotEligibleReason("NOT_LOGGED_IN");
+      setNotEligibleModalOpen(true);
+      return;
+    }
+
+    try {
+      setCheckingEligibility(true);
+      const eligibility = await orderService.checkCanReviewProduct(user.userId, productId);
+
+      if (eligibility.canReview) {
+        setReviewForm((prev) => ({
+          ...prev,
+          variantName: eligibility.variantName || "Tiêu chuẩn",
+          orderId: eligibility.orderId || null,
+        }));
+        setModalOpen(true);
+      } else {
+        setNotEligibleReason(eligibility.reason || "NOT_PURCHASED");
+        setNotEligibleModalOpen(true);
+      }
+    } catch {
+      setNotEligibleReason("NOT_PURCHASED");
+      setNotEligibleModalOpen(true);
+    } finally {
+      setCheckingEligibility(false);
+    }
+  };
+
   const handleSubmitReview = async (e) => {
     e.preventDefault();
     if (!user) {
-      alert("Vui lòng đăng nhập để gửi đánh giá sản phẩm!");
       window.location.href = "/login";
       return;
     }
@@ -104,6 +153,7 @@ export default function ReviewSection({
         rating: reviewForm.rating,
         comment: reviewForm.comment.trim(),
         variantSku: reviewForm.variantName,
+        orderId: reviewForm.orderId,
         images: selectedImages,
       };
 
@@ -133,6 +183,7 @@ export default function ReviewSection({
         rating: 5,
         comment: "",
         variantName: "Tiêu chuẩn",
+        orderId: null,
       });
     } catch (err) {
       showToast(err.message || "Không thể gửi đánh giá. Vui lòng thử lại!");
@@ -157,6 +208,7 @@ export default function ReviewSection({
 
   return (
     <div
+      id="reviews-section"
       className="card"
       style={{
         padding: "24px",
@@ -216,15 +268,10 @@ export default function ReviewSection({
         <Button
           variant="primary"
           icon={Plus}
-          onClick={() => {
-            if (!user) {
-              window.location.href = "/login";
-            } else {
-              setModalOpen(true);
-            }
-          }}
+          loading={checkingEligibility}
+          onClick={handleOpenWriteReview}
         >
-          Viết Đánh Giá Của Bạn
+          Viết Đánh Giá Sản Phẩm
         </Button>
       </div>
 
@@ -319,7 +366,7 @@ export default function ReviewSection({
         <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-secondary)" }}>
           <MessageSquare size={40} style={{ opacity: 0.3, margin: "0 auto 12px" }} />
           <p style={{ fontSize: "14px", fontWeight: "600" }}>Chưa có đánh giá nào cho phân loại này.</p>
-          <p style={{ fontSize: "12px", marginTop: "4px" }}>Hãy là người đầu tiên chia sẻ cảm nhận về sản phẩm!</p>
+          <p style={{ fontSize: "12px", marginTop: "4px" }}>Chỉ khách hàng đã mua sản phẩm mới có thể gửi đánh giá.</p>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -461,11 +508,11 @@ export default function ReviewSection({
         </div>
       )}
 
-      {/* Modal: Write Review */}
+      {/* Modal: Write Review (Only for verified buyers) */}
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title="Đánh Giá Sản Phẩm"
+        title="Đánh Giá Sản Phẩm Đã Mua"
       >
         <form onSubmit={handleSubmitReview} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           {/* Rating selector */}
@@ -637,6 +684,126 @@ export default function ReviewSection({
             Gửi Đánh Giá Ngay
           </Button>
         </form>
+      </Modal>
+
+      {/* Modal: Purchase Verification Ineligibility Alert */}
+      <Modal
+        isOpen={notEligibleModalOpen}
+        onClose={() => setNotEligibleModalOpen(false)}
+        title="Thông Báo Đánh Giá"
+      >
+        <div style={{ textAlign: "center", padding: "10px 0" }}>
+          {notEligibleReason === "NOT_LOGGED_IN" ? (
+            <>
+              <div
+                style={{
+                  width: "56px",
+                  height: "56px",
+                  borderRadius: "50%",
+                  backgroundColor: "var(--primary-light)",
+                  color: "var(--primary)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 16px",
+                }}
+              >
+                <LogIn size={28} />
+              </div>
+              <h4 style={{ fontSize: "16px", fontWeight: "800", marginBottom: "8px" }}>
+                Yêu Cầu Đăng Nhập
+              </h4>
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.6", marginBottom: "20px" }}>
+                Bạn cần đăng nhập vào tài khoản để hệ thống xác minh đơn hàng đã mua trước khi gửi đánh giá.
+              </p>
+              <Button
+                variant="primary"
+                size="md"
+                block
+                onClick={() => (window.location.href = "/login")}
+              >
+                Đăng Nhập Ngay
+              </Button>
+            </>
+          ) : notEligibleReason === "ORDER_NOT_DELIVERED_YET" ? (
+            <>
+              <div
+                style={{
+                  width: "56px",
+                  height: "56px",
+                  borderRadius: "50%",
+                  backgroundColor: "#e0f2fe",
+                  color: "#0284c7",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 16px",
+                }}
+              >
+                <Truck size={28} />
+              </div>
+              <h4 style={{ fontSize: "16px", fontWeight: "800", marginBottom: "8px" }}>
+                Đơn Hàng Chưa Hoàn Tất
+              </h4>
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.6", marginBottom: "20px" }}>
+                Bạn đã đặt mua sản phẩm này nhưng đơn hàng đang trong quá trình xử lý hoặc giao hàng. Bạn sẽ có thể gửi đánh giá ngay sau khi nhận hàng thành công!
+              </p>
+              <Button
+                variant="primary"
+                size="md"
+                block
+                onClick={() => (window.location.href = "/orders")}
+              >
+                Xem Tiến Trình Đơn Mua
+              </Button>
+            </>
+          ) : (
+            <>
+              <div
+                style={{
+                  width: "56px",
+                  height: "56px",
+                  borderRadius: "50%",
+                  backgroundColor: "#fef3c7",
+                  color: "#d97706",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 16px",
+                }}
+              >
+                <ShoppingBag size={28} />
+              </div>
+              <h4 style={{ fontSize: "16px", fontWeight: "800", marginBottom: "8px" }}>
+                Chỉ Người Đã Mua Mới Có Thể Đánh Giá
+              </h4>
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.6", marginBottom: "20px" }}>
+                Để đảm bảo tính khách quan và trung thực 100% cho cộng đồng, DoMix chỉ cho phép những khách hàng <strong>đã mua và nhận hàng thành công</strong> viết nhận xét cho sản phẩm này.
+              </p>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <Button
+                  variant="outline"
+                  size="md"
+                  block
+                  onClick={() => setNotEligibleModalOpen(false)}
+                >
+                  Đóng
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  block
+                  onClick={() => {
+                    setNotEligibleModalOpen(false);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
+                  Mua Sản Phẩm Này
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
       </Modal>
     </div>
   );

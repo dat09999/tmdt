@@ -5,14 +5,56 @@ import { MOCK_ORDERS } from "../mocks/mockOrders";
 export const orderService = {
   // GET /orders/buyer/{buyerId}
   async getBuyerOrders(buyerId) {
-    if (!buyerId) return MOCK_ORDERS;
+    if (!buyerId) return [];
     return safeFetch(
       async () => {
         const res = await authFetch(`${API_BASE_URL}/orders/buyer/${buyerId}`);
         return Array.isArray(res) ? res : [];
       },
-      MOCK_ORDERS
+      []
     );
+  },
+
+  // Check if buyer has purchased and received product
+  async checkCanReviewProduct(userId, productId) {
+    if (!userId) return { canReview: false, reason: "NOT_LOGGED_IN" };
+    if (!productId) return { canReview: false, reason: "NOT_PURCHASED" };
+
+    try {
+      const orders = await this.getBuyerOrders(userId);
+      const deliveredOrder = orders.find((o) => {
+        const isDelivered = ["DELIVERED", "COMPLETED"].includes((o.orderStatus || "").toUpperCase());
+        const hasProduct = (o.items || []).some(
+          (it) => it.productId === productId || it.id === productId || String(it.productId) === String(productId)
+        );
+        return isDelivered && hasProduct;
+      });
+
+      if (deliveredOrder) {
+        const matchedItem = deliveredOrder.items.find(
+          (it) => it.productId === productId || it.id === productId || String(it.productId) === String(productId)
+        );
+        return {
+          canReview: true,
+          orderId: deliveredOrder.id,
+          variantName: matchedItem?.variantName || matchedItem?.variantSku || "Tiêu chuẩn",
+        };
+      }
+
+      const pendingOrder = orders.find((o) =>
+        (o.items || []).some(
+          (it) => it.productId === productId || it.id === productId || String(it.productId) === String(productId)
+        )
+      );
+
+      if (pendingOrder) {
+        return { canReview: false, reason: "ORDER_NOT_DELIVERED_YET" };
+      }
+
+      return { canReview: false, reason: "NOT_PURCHASED" };
+    } catch {
+      return { canReview: false, reason: "NOT_PURCHASED" };
+    }
   },
 
   // GET /orders/{orderId}

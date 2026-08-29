@@ -74,7 +74,7 @@ public class ReviewServiceImpl implements ReviewService {
             throw new IllegalArgumentException("Đơn hàng không thuộc về bạn");
         }
 
-        if (!"COMPLETED".equalsIgnoreCase(String.valueOf(order.getOrderStatus()))) {
+        if (!"DELIVERED".equalsIgnoreCase(String.valueOf(order.getOrderStatus()))) {
             throw new IllegalStateException("Đơn hàng chưa giao thành công, chưa thể đánh giá");
         }
 

@@ -135,6 +135,7 @@ export const productService = {
             variantSku: reviewPayload.variantSku || "default",
             orderId: reviewPayload.orderId || null,
             images: reviewPayload.images || [],
+            imageUrls: reviewPayload.images || [],
           }),
         });
       },
