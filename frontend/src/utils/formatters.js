@@ -55,3 +55,18 @@ export function formatDate(dateInput, includeTime = false) {
     year: "numeric",
   });
 }
+
+// Format time ago (e.g. "Vừa xong", "5 phút trước", "2 giờ trước")
+export function formatTimeAgo(dateInput) {
+  if (!dateInput) return "Vừa xong";
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return "Vừa xong";
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return "Vừa xong";
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} phút trước`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} giờ trước`;
+  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
+  return formatDate(dateInput);
+}

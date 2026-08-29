@@ -10,16 +10,32 @@ import {
   RotateCcw,
   Bell,
   ChevronDown,
+  Truck,
+  Tag,
+  CheckCheck,
+  ExternalLink,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "../../pages/Authcontext";
 import { cartService } from "../../services/cartService";
+import { notificationService } from "../../services/notificationService";
+import { formatTimeAgo } from "../../utils/formatters";
 
 export default function Header({ onSearch, initialSearch = "" }) {
   const { user, logout } = useAuth();
   const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [cartCount, setCartCount] = useState(0);
+
+  // User Dropdown State
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const dropdownRef = useRef(null);
+
+  // Notification State & Realtime
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [recentNotifs, setRecentNotifs] = useState([]);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const [floatingToast, setFloatingToast] = useState(null);
+  const notifDropdownRef = useRef(null);
 
   useEffect(() => {
     setSearchTerm(initialSearch);
@@ -27,6 +43,10 @@ export default function Header({ onSearch, initialSearch = "" }) {
 
   // Load cart count
   useEffect(() => {
+    if (!user?.userId) {
+      setCartCount(0);
+      return;
+    }
     cartService
       .getCart(user?.userId)
       .then((cart) => {
@@ -39,11 +59,38 @@ export default function Header({ onSearch, initialSearch = "" }) {
       .catch(() => setCartCount(0));
   }, [user?.userId]);
 
-  // Close dropdown on outside click
+  // Realtime Notification Subscription & Polling
+  useEffect(() => {
+    const unsubscribe = notificationService.subscribe(({ notifications, unreadCount }) => {
+      setUnreadNotifCount(unreadCount);
+      setRecentNotifs(notifications || []);
+    });
+
+    // Realtime Floating Toast Listener
+    const handleNewNotif = (e) => {
+      const notif = e.detail;
+      if (notif) {
+        setFloatingToast(notif);
+        setTimeout(() => setFloatingToast(null), 6000);
+      }
+    };
+
+    window.addEventListener("DOMIX_NEW_NOTIFICATION", handleNewNotif);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener("DOMIX_NEW_NOTIFICATION", handleNewNotif);
+    };
+  }, [user?.userId]);
+
+  // Close dropdowns on outside click
   useEffect(() => {
     const handleOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setShowUserDropdown(false);
+      }
+      if (notifDropdownRef.current && !notifDropdownRef.current.contains(e.target)) {
+        setShowNotifDropdown(false);
       }
     };
     document.addEventListener("mousedown", handleOutside);
@@ -65,6 +112,21 @@ export default function Header({ onSearch, initialSearch = "" }) {
     window.location.href = "/login";
   };
 
+  const handleMarkAllNotifsRead = async (e) => {
+    e.stopPropagation();
+    await notificationService.markAllAsRead();
+  };
+
+  const handleNotificationClick = async (notif) => {
+    if (!notif.read) {
+      await notificationService.markAsRead(notif.id);
+    }
+    setShowNotifDropdown(false);
+    if (notif.link) {
+      window.location.href = notif.link;
+    }
+  };
+
   const displayName =
     user?.fullName || user?.name || user?.email?.split("@")[0] || "Tài khoản";
 
@@ -79,6 +141,68 @@ export default function Header({ onSearch, initialSearch = "" }) {
         boxShadow: "0 2px 10px rgba(238, 77, 45, 0.25)",
       }}
     >
+      {/* Floating Realtime Toast Alert */}
+      {floatingToast && (
+        <div
+          onClick={() => handleNotificationClick(floatingToast)}
+          style={{
+            position: "fixed",
+            top: "70px",
+            right: "24px",
+            zIndex: 99999,
+            backgroundColor: "#ffffff",
+            color: "var(--text)",
+            padding: "16px 20px",
+            borderRadius: "var(--r-lg)",
+            boxShadow: "0 10px 30px rgba(0, 0, 0, 0.18)",
+            borderLeft: "5px solid var(--primary)",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "12px",
+            maxWidth: "380px",
+            cursor: "pointer",
+            animation: "slideInRight 0.3s ease-out",
+          }}
+        >
+          <div
+            style={{
+              width: "36px",
+              height: "36px",
+              borderRadius: "50%",
+              backgroundColor: "var(--primary-light)",
+              color: "var(--primary)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <Bell size={20} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--primary)", textTransform: "uppercase" }}>
+              🔔 Thông Báo Mới Nhất
+            </div>
+            <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--text)", marginTop: "2px" }}>
+              {floatingToast.title}
+            </div>
+            <div
+              style={{
+                fontSize: "12px",
+                color: "var(--text-secondary)",
+                marginTop: "2px",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}
+            >
+              {floatingToast.content}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top micro bar for quick links */}
       <div
         className="hide-mobile"
@@ -117,20 +241,235 @@ export default function Header({ onSearch, initialSearch = "" }) {
             <span style={{ opacity: 0.9 }}>Kết nối: 📱 Facebook 📷 Instagram</span>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <a
-              href="/notifications"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                color: "#fff",
-                opacity: 0.95,
-              }}
+          <div style={{ display: "flex", alignItems: "center", gap: "18px" }}>
+            {/* Realtime Notification Bell with Popover Dropdown */}
+            <div
+              style={{ position: "relative" }}
+              ref={notifDropdownRef}
+              onMouseEnter={() => setShowNotifDropdown(true)}
             >
-              <Bell size={14} />
-              <span>Thông Báo</span>
-            </a>
+              <a
+                href="/notifications"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowNotifDropdown(!showNotifDropdown);
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  color: "#fff",
+                  opacity: 0.95,
+                  cursor: "pointer",
+                  position: "relative",
+                  padding: "2px 0",
+                }}
+              >
+                <div style={{ position: "relative" }}>
+                  <Bell size={15} />
+                  {unreadNotifCount > 0 && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: "-6px",
+                        right: "-8px",
+                        backgroundColor: "#ef4444",
+                        color: "#fff",
+                        fontSize: "10px",
+                        fontWeight: "800",
+                        padding: "1px 4px",
+                        borderRadius: "99px",
+                        border: "1.5px solid var(--primary)",
+                        lineHeight: 1,
+                        animation: "pulse 2s infinite",
+                      }}
+                    >
+                      {unreadNotifCount > 99 ? "99+" : unreadNotifCount}
+                    </span>
+                  )}
+                </div>
+                <span>Thông Báo</span>
+              </a>
+
+              {/* Notification Popover Dropdown */}
+              {showNotifDropdown && (
+                <div
+                  onMouseLeave={() => setShowNotifDropdown(false)}
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 4px)",
+                    right: 0,
+                    width: "360px",
+                    backgroundColor: "#ffffff",
+                    borderRadius: "var(--r-md)",
+                    boxShadow: "0 10px 30px rgba(0, 0, 0, 0.2)",
+                    border: "1px solid var(--border)",
+                    zIndex: 3000,
+                    color: "var(--text)",
+                    animation: "scaleIn 0.15s ease-out",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "12px 16px",
+                      borderBottom: "1px solid var(--border-light)",
+                      backgroundColor: "var(--surface-muted)",
+                    }}
+                  >
+                    <span style={{ fontWeight: "700", fontSize: "13px", color: "var(--text)" }}>
+                      Thông Báo Mới Nhận ({unreadNotifCount} chưa đọc)
+                    </span>
+                    {unreadNotifCount > 0 && (
+                      <button
+                        onClick={handleMarkAllNotifsRead}
+                        style={{
+                          fontSize: "11px",
+                          color: "var(--primary)",
+                          fontWeight: "600",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <CheckCheck size={14} />
+                        <span>Đọc tất cả</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* List items */}
+                  <div style={{ maxHeight: "320px", overflowY: "auto" }}>
+                    {recentNotifs.length === 0 ? (
+                      <div style={{ padding: "30px 16px", textAlign: "center", color: "var(--text-secondary)", fontSize: "13px" }}>
+                        <Bell size={28} color="var(--text-tertiary)" style={{ margin: "0 auto 8px" }} />
+                        <div>Chưa có thông báo nào</div>
+                      </div>
+                    ) : (
+                      recentNotifs.slice(0, 5).map((n) => {
+                        const isUnread = !n.read;
+                        return (
+                          <div
+                            key={n.id}
+                            onClick={() => handleNotificationClick(n)}
+                            style={{
+                              padding: "12px 16px",
+                              display: "flex",
+                              gap: "12px",
+                              alignItems: "flex-start",
+                              borderBottom: "1px solid var(--border-light)",
+                              backgroundColor: isUnread ? "rgba(238, 77, 45, 0.04)" : "#ffffff",
+                              cursor: "pointer",
+                              transition: "background 0.15s",
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--surface-muted)")}
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.backgroundColor = isUnread
+                                ? "rgba(238, 77, 45, 0.04)"
+                                : "#ffffff")
+                            }
+                          >
+                            <div
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "50%",
+                                backgroundColor:
+                                  n.type === "ORDER"
+                                    ? "#e0f2fe"
+                                    : n.type === "PROMO"
+                                    ? "#fef3c7"
+                                    : "var(--primary-light)",
+                                color:
+                                  n.type === "ORDER"
+                                    ? "#0284c7"
+                                    : n.type === "PROMO"
+                                    ? "#d97706"
+                                    : "var(--primary)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {n.type === "ORDER" ? <Truck size={16} /> : n.type === "PROMO" ? <Tag size={16} /> : <Bell size={16} />}
+                            </div>
+
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontSize: "13px",
+                                  fontWeight: isUnread ? "700" : "500",
+                                  color: isUnread ? "var(--text)" : "var(--text-secondary)",
+                                  marginBottom: "2px",
+                                }}
+                              >
+                                {n.title}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "12px",
+                                  color: "var(--text-tertiary)",
+                                  lineHeight: "1.4",
+                                  display: "-webkit-box",
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: "vertical",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                {n.content}
+                              </div>
+                              <div style={{ fontSize: "10px", color: "var(--text-tertiary)", marginTop: "4px" }}>
+                                {formatTimeAgo(n.time)}
+                              </div>
+                            </div>
+
+                            {isUnread && (
+                              <div
+                                style={{
+                                  width: "8px",
+                                  height: "8px",
+                                  borderRadius: "50%",
+                                  backgroundColor: "var(--primary)",
+                                  marginTop: "6px",
+                                  flexShrink: 0,
+                                }}
+                              />
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Footer link */}
+                  <a
+                    href="/notifications"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px",
+                      padding: "10px 16px",
+                      backgroundColor: "var(--surface)",
+                      borderTop: "1px solid var(--border-light)",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      color: "var(--primary)",
+                      textDecoration: "none",
+                    }}
+                  >
+                    <span>Xem tất cả thông báo</span>
+                    <ExternalLink size={12} />
+                  </a>
+                </div>
+              )}
+            </div>
+
             <a href="/refunds" style={{ color: "#fff", opacity: 0.95 }}>
               Đổi trả & Hoàn tiền
             </a>

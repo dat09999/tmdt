@@ -7,38 +7,34 @@ import Button from "../components/common/Button";
 import EmptyState from "../components/common/EmptyState";
 import { notificationService } from "../services/notificationService";
 import { useAuth } from "./Authcontext";
-import { Bell, CheckCheck, Tag, Truck, ShieldAlert } from "lucide-react";
+import { formatTimeAgo } from "../utils/formatters";
+import { Bell, CheckCheck, Tag, Truck, ShieldAlert, Sparkles, ExternalLink } from "lucide-react";
 
 export default function NotificationsPage() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [activeTab, setActiveTab] = useState("ALL");
   const [loading, setLoading] = useState(true);
 
-  const fetchNotifs = async () => {
-    try {
-      setLoading(true);
-      const data = await notificationService.getNotifications(user?.userId);
-      setNotifications(data || []);
-    } catch (err) {
-      console.error("Fetch notifications failed:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchNotifs();
+    setLoading(true);
+    const unsubscribe = notificationService.subscribe(({ notifications: list, unreadCount: count }) => {
+      setNotifications(list || []);
+      setUnreadCount(count || 0);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, [user?.userId]);
 
   const handleMarkAllRead = async () => {
-    const updated = await notificationService.markAllAsRead(user?.userId);
-    setNotifications([...updated]);
+    await notificationService.markAllAsRead();
   };
 
   const handleItemClick = async (notif) => {
     if (!notif.read) {
-      await notificationService.markAsRead(user?.userId, notif.id);
+      await notificationService.markAsRead(notif.id);
     }
     if (notif.link) {
       window.location.href = notif.link;
@@ -46,10 +42,10 @@ export default function NotificationsPage() {
   };
 
   const tabs = [
-    { id: "ALL", label: "Tất cả" },
-    { id: "ORDER", label: "Cập nhật đơn hàng" },
-    { id: "PROMO", label: "Khuyến mãi" },
-    { id: "SYSTEM", label: "Hệ thống" },
+    { id: "ALL", label: `Tất cả (${notifications.length})` },
+    { id: "ORDER", label: `Cập nhật đơn hàng (${notifications.filter((n) => n.type === "ORDER").length})` },
+    { id: "PROMO", label: `Khuyến mãi (${notifications.filter((n) => n.type === "PROMO").length})` },
+    { id: "SYSTEM", label: `Hệ thống (${notifications.filter((n) => n.type === "SYSTEM").length})` },
   ];
 
   const filteredNotifs = notifications.filter((n) => {
@@ -71,27 +67,49 @@ export default function NotificationsPage() {
               alignItems: "center",
               justifyContent: "space-between",
               marginBottom: "16px",
+              flexWrap: "wrap",
+              gap: "10px",
             }}
           >
-            <h1 className="section-title" style={{ fontSize: "20px" }}>
-              THÔNG BÁO ({notifications.filter((n) => !n.read).length} chưa đọc)
-            </h1>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <h1 className="section-title" style={{ fontSize: "20px", margin: 0 }}>
+                THÔNG BÁO CỦA BẠN
+              </h1>
+              {unreadCount > 0 && (
+                <span
+                  style={{
+                    backgroundColor: "var(--primary-light)",
+                    color: "var(--primary)",
+                    fontSize: "12px",
+                    fontWeight: "800",
+                    padding: "2px 8px",
+                    borderRadius: "99px",
+                  }}
+                >
+                  {unreadCount} chưa đọc
+                </span>
+              )}
+            </div>
 
-            <button
-              onClick={handleMarkAllRead}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "6px",
-                fontSize: "13px",
-                color: "var(--primary)",
-                fontWeight: "600",
-                cursor: "pointer",
-              }}
-            >
-              <CheckCheck size={16} />
-              <span>Đánh dấu đã đọc tất cả</span>
-            </button>
+            {unreadCount > 0 && (
+              <button
+                onClick={handleMarkAllRead}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontSize: "13px",
+                  color: "var(--primary)",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  background: "transparent",
+                  border: "none",
+                }}
+              >
+                <CheckCheck size={16} />
+                <span>Đánh dấu đã đọc tất cả</span>
+              </button>
+            )}
           </div>
 
           {/* Tabs */}
@@ -119,7 +137,7 @@ export default function NotificationsPage() {
                     borderBottom: isActive ? "3px solid var(--primary)" : "3px solid transparent",
                     backgroundColor: "transparent",
                     color: isActive ? "var(--primary)" : "var(--text)",
-                    fontWeight: isActive ? "700" : "500",
+                    fontWeight: isActive ? "800" : "500",
                     fontSize: "13px",
                     cursor: "pointer",
                     whiteSpace: "nowrap",
@@ -148,76 +166,120 @@ export default function NotificationsPage() {
                 overflow: "hidden",
               }}
             >
-              {filteredNotifs.map((notif, idx) => (
-                <div
-                  key={notif.id}
-                  onClick={() => handleItemClick(notif)}
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: "14px",
-                    padding: "16px 20px",
-                    backgroundColor: notif.read ? "transparent" : "var(--primary-subtle)",
-                    borderBottom: idx === filteredNotifs.length - 1 ? "none" : "1px solid var(--border-light)",
-                    cursor: "pointer",
-                    transition: "background 0.15s",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--surface-muted)")}
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.backgroundColor = notif.read ? "transparent" : "var(--primary-subtle)")
-                  }
-                >
+              {filteredNotifs.map((n) => {
+                const isUnread = !n.read;
+                return (
                   <div
+                    key={n.id}
+                    onClick={() => handleItemClick(n)}
                     style={{
-                      width: "42px",
-                      height: "42px",
-                      borderRadius: "50%",
-                      backgroundColor: notif.type === "PROMO" ? "#fef3c7" : notif.type === "ORDER" ? "#e0e7ff" : "#fee2e2",
+                      padding: "18px 20px",
                       display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "20px",
-                      flexShrink: 0,
+                      gap: "16px",
+                      alignItems: "flex-start",
+                      borderBottom: "1px solid var(--border-light)",
+                      backgroundColor: isUnread ? "rgba(238, 77, 45, 0.04)" : "#ffffff",
+                      cursor: "pointer",
+                      transition: "background 0.15s",
                     }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--surface-muted)")}
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.backgroundColor = isUnread
+                        ? "rgba(238, 77, 45, 0.04)"
+                        : "#ffffff")
+                    }
                   >
-                    {notif.icon || "🔔"}
-                  </div>
-
-                  <div style={{ flex: 1 }}>
                     <div
                       style={{
+                        width: "42px",
+                        height: "42px",
+                        borderRadius: "50%",
+                        backgroundColor:
+                          n.type === "ORDER"
+                            ? "#e0f2fe"
+                            : n.type === "PROMO"
+                            ? "#fef3c7"
+                            : "var(--primary-light)",
+                        color:
+                          n.type === "ORDER"
+                            ? "#0284c7"
+                            : n.type === "PROMO"
+                            ? "#d97706"
+                            : "var(--primary)",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "space-between",
-                        marginBottom: "4px",
+                        justifyContent: "center",
+                        flexShrink: 0,
                       }}
                     >
-                      <strong style={{ fontSize: "14px", color: "var(--text)" }}>
-                        {notif.title}
-                      </strong>
-                      <span style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
-                        {notif.time}
-                      </span>
+                      {n.type === "ORDER" ? (
+                        <Truck size={20} />
+                      ) : n.type === "PROMO" ? (
+                        <Tag size={20} />
+                      ) : (
+                        <Bell size={20} />
+                      )}
                     </div>
 
-                    <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.5" }}>
-                      {notif.body}
-                    </p>
-                  </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: "14px",
+                          fontWeight: isUnread ? "800" : "600",
+                          color: isUnread ? "var(--text)" : "var(--text-secondary)",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        {n.title}
+                      </div>
 
-                  {!notif.read && (
-                    <span
-                      style={{
-                        width: "8px",
-                        height: "8px",
-                        borderRadius: "50%",
-                        backgroundColor: "var(--primary)",
-                        marginTop: "6px",
-                      }}
-                    />
-                  )}
-                </div>
-              ))}
+                      <div
+                        style={{
+                          fontSize: "13px",
+                          color: "var(--text-secondary)",
+                          lineHeight: "1.5",
+                        }}
+                      >
+                        {n.content}
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "var(--text-tertiary)",
+                          marginTop: "8px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <span>{formatTimeAgo(n.time)}</span>
+                        {n.link && (
+                          <>
+                            <span>•</span>
+                            <span style={{ color: "var(--primary)", fontWeight: "600" }}>
+                              Xem chi tiết →
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {isUnread && (
+                      <div
+                        style={{
+                          width: "10px",
+                          height: "10px",
+                          borderRadius: "50%",
+                          backgroundColor: "var(--primary)",
+                          marginTop: "6px",
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
