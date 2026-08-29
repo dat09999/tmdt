@@ -50,6 +50,7 @@ import java.util.Map;
  *  replyToReview() và hideReview(): cũng đổi sang atomic $set cho nhất quán, dù rủi ro thấp
  *      hơn (thường chỉ 1 admin/shop thao tác, ít khi trùng thời điểm).
  */
+// chay
 @Service
 @RequiredArgsConstructor
 public class ReviewServiceImpl implements ReviewService {
