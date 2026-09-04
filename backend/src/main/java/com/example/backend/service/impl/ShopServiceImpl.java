@@ -284,13 +284,41 @@ public class ShopServiceImpl implements ShopService {
     }
 
     @Override
-    public List<DailyRevenueResponse> getRevenueAnalytics(String shopId, int days) {
+    public List<DailyRevenueResponse> getRevenueAnalytics(String shopId, String startDate, String endDate, Integer days) {
         getShopOrThrow(shopId);
-        int validDays = (days <= 0 || days > 90) ? 7 : days;
 
-        LocalDate today = LocalDate.now();
-        LocalDate startDate = today.minusDays(validDays - 1);
-        Date startDateTime = Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+        LocalDate start;
+        LocalDate end;
+
+        if (startDate != null && !startDate.isBlank() && endDate != null && !endDate.isBlank()) {
+            try {
+                start = LocalDate.parse(startDate.trim());
+                end = LocalDate.parse(endDate.trim());
+            } catch (Exception e) {
+                int validDays = (days != null && days > 0 && days <= 90) ? days : 10;
+                end = LocalDate.now();
+                start = end.minusDays(validDays - 1);
+            }
+        } else {
+            int validDays = (days != null && days > 0 && days <= 90) ? days : 10;
+            end = LocalDate.now();
+            start = end.minusDays(validDays - 1);
+        }
+
+        // Đảm bảo start <= end
+        if (start.isAfter(end)) {
+            LocalDate temp = start;
+            start = end;
+            end = temp;
+        }
+
+        // Giới hạn tối đa 90 ngày để bảo vệ tài nguyên
+        if (java.time.temporal.ChronoUnit.DAYS.between(start, end) > 90) {
+            start = end.minusDays(89);
+        }
+
+        Date startDateTime = Date.from(start.atStartOfDay(ZoneId.systemDefault()).toInstant());
+        Date endDateTime = Date.from(end.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant());
 
         List<com.example.backend.module.Order> shopOrders =
                 orderRepository.findByShopIdOrderByCreatedAtDesc(shopId);
@@ -298,15 +326,18 @@ public class ShopServiceImpl implements ShopService {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 
         Map<String, List<com.example.backend.module.Order>> ordersByDate = shopOrders.stream()
-                .filter(o -> o.getCreatedAt() != null && !o.getCreatedAt().before(startDateTime))
+                .filter(o -> o.getCreatedAt() != null
+                        && !o.getCreatedAt().before(startDateTime)
+                        && o.getCreatedAt().before(endDateTime))
                 .filter(o -> "COMPLETED".equalsIgnoreCase(o.getOrderStatus()))
                 .collect(Collectors.groupingBy(o -> sdf.format(o.getCreatedAt())));
 
+        long totalDays = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1;
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         List<DailyRevenueResponse> result = new ArrayList<>();
 
-        for (int i = 0; i < validDays; i++) {
-            LocalDate d = startDate.plusDays(i);
+        for (int i = 0; i < totalDays; i++) {
+            LocalDate d = start.plusDays(i);
             String dateStr = d.format(dtf);
             List<com.example.backend.module.Order> dailyOrders = ordersByDate.getOrDefault(dateStr, Collections.emptyList());
 
@@ -413,10 +444,10 @@ public class ShopServiceImpl implements ShopService {
     }
 
     @Override
-    public ShopDashboardResponse getDashboardOverview(String shopId, int days) {
+    public ShopDashboardResponse getDashboardOverview(String shopId, String startDate, String endDate, Integer days) {
         return ShopDashboardResponse.builder()
                 .summary(getShopStatistics(shopId))
-                .revenueChart(getRevenueAnalytics(shopId, days))
+                .revenueChart(getRevenueAnalytics(shopId, startDate, endDate, days))
                 .orderStatusDistribution(getOrderStatusAnalytics(shopId))
                 .topProducts(getTopSellingProducts(shopId, 5))
                 .lowStockAlerts(getLowStockAlerts(shopId, 5))

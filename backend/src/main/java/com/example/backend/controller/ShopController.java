@@ -62,13 +62,17 @@ public class ShopController {
 
     /**
      * Biểu đồ doanh thu và số đơn theo ngày.
-     * GET /shops/{shopId}/analytics/revenue?days=7
+     * Hỗ trợ chọn khoảng ngày tùy chọn (startDate -> endDate) hoặc số ngày gần nhất (days, mặc định 10).
+     * Ví dụ: GET /shops/{shopId}/analytics/revenue?startDate=2026-08-01&endDate=2026-08-10
+     * Hoặc:  GET /shops/{shopId}/analytics/revenue?days=10
      */
     @GetMapping("/{shopId}/analytics/revenue")
     public ResponseEntity<List<DailyRevenueResponse>> getRevenueAnalytics(
             @PathVariable String shopId,
-            @RequestParam(defaultValue = "7") int days) {
-        return ResponseEntity.ok(shopService.getRevenueAnalytics(shopId, days));
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(defaultValue = "10") int days) {
+        return ResponseEntity.ok(shopService.getRevenueAnalytics(shopId, startDate, endDate, days));
     }
 
     /**
@@ -105,13 +109,17 @@ public class ShopController {
 
     /**
      * Tổng hợp toàn bộ dữ liệu Dashboard cho trang bán hàng trong 1 lần gọi.
-     * GET /shops/{shopId}/analytics/overview?days=7
+     * Hỗ trợ chọn khoảng ngày tùy chọn (startDate -> endDate) hoặc số ngày gần nhất (days, mặc định 10).
+     * GET /shops/{shopId}/analytics/overview?startDate=2026-08-01&endDate=2026-08-10
+     * Hoặc:  GET /shops/{shopId}/analytics/overview?days=10
      */
     @GetMapping("/{shopId}/analytics/overview")
     public ResponseEntity<ShopDashboardResponse> getDashboardOverview(
             @PathVariable String shopId,
-            @RequestParam(defaultValue = "7") int days) {
-        return ResponseEntity.ok(shopService.getDashboardOverview(shopId, days));
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(defaultValue = "10") int days) {
+        return ResponseEntity.ok(shopService.getDashboardOverview(shopId, startDate, endDate, days));
     }
 
     @GetMapping("/{shopId}/follow")

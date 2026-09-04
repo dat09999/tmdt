@@ -95,8 +95,8 @@ public interface ShopService {
      */
     ShopStatisticsResponse getShopStatistics(String shopId);
 
-    /** Biểu đồ doanh thu và số đơn theo ngày (ví dụ 7 ngày, 30 ngày qua). */
-    List<DailyRevenueResponse> getRevenueAnalytics(String shopId, int days);
+    /** Biểu đồ doanh thu và số đơn theo ngày (hỗ trợ chọn khoảng ngày startDate -> endDate hoặc theo số ngày days). */
+    List<DailyRevenueResponse> getRevenueAnalytics(String shopId, String startDate, String endDate, Integer days);
 
     /** Biểu đồ tròn phân bố trạng thái đơn hàng (PENDING, PROCESSING, SHIPPING, COMPLETED, CANCELED). */
     OrderStatusDistributionResponse getOrderStatusAnalytics(String shopId);
@@ -108,7 +108,7 @@ public interface ShopService {
     List<LowStockResponse> getLowStockAlerts(String shopId, int threshold);
 
     /** Tổng hợp toàn bộ dữ liệu dashboard và biểu đồ trong 1 API duy nhất. */
-    ShopDashboardResponse getDashboardOverview(String shopId, int days);
+    ShopDashboardResponse getDashboardOverview(String shopId, String startDate, String endDate, Integer days);
 
 
     // =========================================================

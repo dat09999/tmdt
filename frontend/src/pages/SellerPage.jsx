@@ -38,7 +38,15 @@ import {
   Flame,
   ArrowUpRight,
   RefreshCw,
+  Calendar,
 } from "lucide-react";
+
+const getTodayStr = () => new Date().toISOString().split("T")[0];
+const getNDaysAgoStr = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() - (n - 1));
+  return d.toISOString().split("T")[0];
+};
 
 export default function SellerPage() {
   const { user } = useAuth();
@@ -54,8 +62,11 @@ export default function SellerPage() {
   const [loading, setLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
-  // Analytics & Charts State
-  const [analyticsDays, setAnalyticsDays] = useState(7); // 7 or 30
+  // Analytics & Date Range State
+  const [dateFilterMode, setDateFilterMode] = useState("PRESET"); // "PRESET" | "CUSTOM"
+  const [analyticsDays, setAnalyticsDays] = useState(10); // 7, 10, 30
+  const [customStartDate, setCustomStartDate] = useState(getNDaysAgoStr(10));
+  const [customEndDate, setCustomEndDate] = useState(getTodayStr());
   const [analyticsData, setAnalyticsData] = useState(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [hoveredBar, setHoveredBar] = useState(null);
@@ -98,11 +109,19 @@ export default function SellerPage() {
     setTimeout(() => setToastMessage(""), 3500);
   };
 
-  const fetchAnalytics = async (shopId, days = analyticsDays) => {
+  const fetchAnalytics = async (shopId, filterParams = null) => {
     if (!shopId) return;
     try {
       setLoadingAnalytics(true);
-      const data = await sellerService.getAnalyticsOverview(shopId, days);
+      let params = filterParams;
+      if (!params) {
+        if (dateFilterMode === "CUSTOM" && customStartDate && customEndDate) {
+          params = { startDate: customStartDate, endDate: customEndDate };
+        } else {
+          params = { days: analyticsDays };
+        }
+      }
+      const data = await sellerService.getAnalyticsOverview(shopId, params);
       setAnalyticsData(data);
     } catch (err) {
       console.error("Fetch analytics overview failed:", err);
@@ -130,7 +149,7 @@ export default function SellerPage() {
           sellerService.getProducts(userShop.id),
           sellerService.getOrders(userShop.id),
           sellerService.getCoupons(userShop.id),
-          sellerService.getAnalyticsOverview(userShop.id, analyticsDays),
+          sellerService.getAnalyticsOverview(userShop.id, { days: analyticsDays }),
         ]);
         setStats(sData);
         setProducts(pData || []);
@@ -154,9 +173,26 @@ export default function SellerPage() {
   }, [user?.userId]);
 
   const handleDaysChange = (days) => {
+    setDateFilterMode("PRESET");
     setAnalyticsDays(days);
     if (shop?.id) {
-      fetchAnalytics(shop.id, days);
+      fetchAnalytics(shop.id, { days });
+    }
+  };
+
+  const handleCustomRangeApply = (e) => {
+    if (e) e.preventDefault();
+    if (!customStartDate || !customEndDate) {
+      showToast("Vui lòng chọn ngày bắt đầu và ngày kết thúc!");
+      return;
+    }
+    if (new Date(customStartDate) > new Date(customEndDate)) {
+      showToast("Ngày bắt đầu không được lớn hơn ngày kết thúc!");
+      return;
+    }
+    setDateFilterMode("CUSTOM");
+    if (shop?.id) {
+      fetchAnalytics(shop.id, { startDate: customStartDate, endDate: customEndDate });
     }
   };
 
@@ -687,44 +723,83 @@ export default function SellerPage() {
                       </div>
                     </div>
 
-                    {/* Time Range Filter Toggle */}
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {/* Time Range Filter Controls */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      {/* Preset Buttons */}
                       <button
                         onClick={() => handleDaysChange(7)}
                         style={{
-                          padding: "6px 14px",
+                          padding: "6px 12px",
                           borderRadius: "var(--r-sm)",
-                          border: analyticsDays === 7 ? "1.5px solid var(--primary)" : "1px solid var(--border)",
-                          backgroundColor: analyticsDays === 7 ? "var(--primary-light)" : "var(--surface)",
-                          color: analyticsDays === 7 ? "var(--primary)" : "var(--text)",
-                          fontWeight: analyticsDays === 7 ? "700" : "500",
-                          fontSize: "12.5px",
+                          border: dateFilterMode === "PRESET" && analyticsDays === 7 ? "1.5px solid var(--primary)" : "1px solid var(--border)",
+                          backgroundColor: dateFilterMode === "PRESET" && analyticsDays === 7 ? "var(--primary-light)" : "var(--surface)",
+                          color: dateFilterMode === "PRESET" && analyticsDays === 7 ? "var(--primary)" : "var(--text)",
+                          fontWeight: dateFilterMode === "PRESET" && analyticsDays === 7 ? "700" : "500",
+                          fontSize: "12px",
                           cursor: "pointer",
                           transition: "all 0.15s",
                         }}
                       >
-                        7 Ngày Gần Nhất
+                        7 Ngày
+                      </button>
+
+                      <button
+                        onClick={() => handleDaysChange(10)}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "var(--r-sm)",
+                          border: dateFilterMode === "PRESET" && analyticsDays === 10 ? "1.5px solid var(--primary)" : "1px solid var(--border)",
+                          backgroundColor: dateFilterMode === "PRESET" && analyticsDays === 10 ? "var(--primary-light)" : "var(--surface)",
+                          color: dateFilterMode === "PRESET" && analyticsDays === 10 ? "var(--primary)" : "var(--text)",
+                          fontWeight: dateFilterMode === "PRESET" && analyticsDays === 10 ? "700" : "500",
+                          fontSize: "12px",
+                          cursor: "pointer",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        10 Ngày (Khuyên dùng)
                       </button>
 
                       <button
                         onClick={() => handleDaysChange(30)}
                         style={{
-                          padding: "6px 14px",
+                          padding: "6px 12px",
                           borderRadius: "var(--r-sm)",
-                          border: analyticsDays === 30 ? "1.5px solid var(--primary)" : "1px solid var(--border)",
-                          backgroundColor: analyticsDays === 30 ? "var(--primary-light)" : "var(--surface)",
-                          color: analyticsDays === 30 ? "var(--primary)" : "var(--text)",
-                          fontWeight: analyticsDays === 30 ? "700" : "500",
-                          fontSize: "12.5px",
+                          border: dateFilterMode === "PRESET" && analyticsDays === 30 ? "1.5px solid var(--primary)" : "1px solid var(--border)",
+                          backgroundColor: dateFilterMode === "PRESET" && analyticsDays === 30 ? "var(--primary-light)" : "var(--surface)",
+                          color: dateFilterMode === "PRESET" && analyticsDays === 30 ? "var(--primary)" : "var(--text)",
+                          fontWeight: dateFilterMode === "PRESET" && analyticsDays === 30 ? "700" : "500",
+                          fontSize: "12px",
                           cursor: "pointer",
                           transition: "all 0.15s",
                         }}
                       >
-                        30 Ngày Gần Nhất
+                        30 Ngày
                       </button>
 
                       <button
-                        onClick={() => shop?.id && fetchAnalytics(shop.id, analyticsDays)}
+                        onClick={() => setDateFilterMode(dateFilterMode === "CUSTOM" ? "PRESET" : "CUSTOM")}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                          padding: "6px 12px",
+                          borderRadius: "var(--r-sm)",
+                          border: dateFilterMode === "CUSTOM" ? "1.5px solid var(--primary)" : "1px solid var(--border)",
+                          backgroundColor: dateFilterMode === "CUSTOM" ? "var(--primary-light)" : "var(--surface)",
+                          color: dateFilterMode === "CUSTOM" ? "var(--primary)" : "var(--text)",
+                          fontWeight: dateFilterMode === "CUSTOM" ? "700" : "500",
+                          fontSize: "12px",
+                          cursor: "pointer",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        <Calendar size={13} />
+                        <span>Tùy Chọn Ngày</span>
+                      </button>
+
+                      <button
+                        onClick={() => shop?.id && fetchAnalytics(shop.id)}
                         title="Làm mới số liệu"
                         style={{
                           padding: "7px 10px",
@@ -742,6 +817,75 @@ export default function SellerPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Custom Date Range Picker Form (when expanded) */}
+                  {dateFilterMode === "CUSTOM" && (
+                    <form
+                      onSubmit={handleCustomRangeApply}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        padding: "12px 18px",
+                        backgroundColor: "#fff7ed",
+                        borderRadius: "var(--r-md)",
+                        border: "1px solid #fed7aa",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: "600", color: "#9a3412" }}>
+                        <Calendar size={15} color="#ea580c" />
+                        <span>Chọn Khoảng Thời Gian:</span>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
+                        <span style={{ color: "var(--text-secondary)" }}>Từ:</span>
+                        <input
+                          type="date"
+                          value={customStartDate}
+                          onChange={(e) => setCustomStartDate(e.target.value)}
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: "4px",
+                            border: "1px solid var(--border)",
+                            fontSize: "12px",
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
+                        <span style={{ color: "var(--text-secondary)" }}>Đến:</span>
+                        <input
+                          type="date"
+                          value={customEndDate}
+                          onChange={(e) => setCustomEndDate(e.target.value)}
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: "4px",
+                            border: "1px solid var(--border)",
+                            fontSize: "12px",
+                          }}
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={loadingAnalytics}
+                        style={{
+                          padding: "5px 14px",
+                          borderRadius: "4px",
+                          backgroundColor: "var(--primary)",
+                          color: "#fff",
+                          fontWeight: "700",
+                          fontSize: "12px",
+                          border: "none",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {loadingAnalytics ? "Đang tải..." : "Áp Dụng Lọc"}
+                      </button>
+                    </form>
+                  )}
 
                   {/* Summary Metric Cards */}
                   <div
@@ -769,7 +913,7 @@ export default function SellerPage() {
                       </div>
                       <div style={{ fontSize: "11px", color: "#059669", marginTop: "4px", display: "flex", alignItems: "center", gap: "3px" }}>
                         <TrendingUp size={12} />
-                        <span>Trong {analyticsDays} ngày qua</span>
+                        <span>{dateFilterMode === "CUSTOM" ? `Từ ${customStartDate} đến ${customEndDate}` : `Trong ${analyticsDays} ngày qua`}</span>
                       </div>
                     </div>
 
@@ -973,191 +1117,356 @@ export default function SellerPage() {
                     </div>
                   </div>
 
-                  {/* CHARTS SECTION (2 COLUMNS: REVENUE TREND + ORDER STATUS BREAKDOWN) */}
+                  {/* SECTION 1: FULL-WIDTH LARGE REVENUE & ORDER TREND CHART */}
                   <div
+                    className="card"
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))",
-                      gap: "20px",
+                      padding: "24px",
+                      backgroundColor: "var(--surface)",
+                      borderRadius: "var(--r-lg)",
+                      border: "1px solid var(--border-light)",
+                      display: "flex",
+                      flexDirection: "column",
                     }}
                   >
-                    {/* CHART 1: Biểu đồ Doanh Thu & Số Đơn Theo Ngày */}
+                    {/* Chart Header */}
                     <div
-                      className="card"
                       style={{
-                        padding: "22px",
-                        backgroundColor: "var(--surface)",
-                        borderRadius: "var(--r-lg)",
-                        border: "1px solid var(--border-light)",
                         display: "flex",
-                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginBottom: "20px",
+                        flexWrap: "wrap",
+                        gap: "10px",
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <BarChart2 size={18} color="var(--primary)" />
-                          <strong style={{ fontSize: "15px", color: "var(--text)" }}>
-                            Biểu Đồ Doanh Thu & Đơn Hàng ({analyticsDays} Ngày)
-                          </strong>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div
+                          style={{
+                            width: "36px",
+                            height: "36px",
+                            borderRadius: "8px",
+                            backgroundColor: "var(--primary-light)",
+                            color: "var(--primary)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <BarChart2 size={20} />
                         </div>
-                        <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", fontWeight: "600" }}>
-                          Cột: Doanh thu | Chấm: Đơn
+                        <div>
+                          <strong style={{ fontSize: "16px", color: "var(--text)" }}>
+                            Biểu Đồ Doanh Thu & Lượng Đơn Theo Ngày
+                          </strong>
+                          <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                            {dateFilterMode === "CUSTOM"
+                              ? `Khoảng thời gian: Từ ${customStartDate} đến ${customEndDate}`
+                              : `Dữ liệu ${analyticsDays} ngày gần nhất (tự động lấp đầy ngày 0đ)`}
+                          </div>
                         </div>
                       </div>
 
-                      {/* SVG Bar & Trend Chart */}
-                      {(() => {
-                        const chartList = analyticsData?.revenueChart || [];
-                        if (chartList.length === 0) {
-                          return (
-                            <div style={{ padding: "60px 0", textAlign: "center", color: "var(--text-tertiary)", fontSize: "13px" }}>
-                              Chưa có dữ liệu giao dịch trong khoảng thời gian này.
-                            </div>
-                          );
-                        }
+                      <div style={{ display: "flex", alignItems: "center", gap: "16px", fontSize: "12px", color: "var(--text-secondary)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <div style={{ width: "12px", height: "12px", borderRadius: "3px", backgroundColor: "var(--primary)" }} />
+                          <span>Doanh thu (VNĐ)</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <div style={{ width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#f59e0b" }} />
+                          <span>Số đơn hàng</span>
+                        </div>
+                      </div>
+                    </div>
 
-                        const maxRevenue = Math.max(...chartList.map((d) => d.revenue || 0), 1000000);
-                        const totalPeriodRevenue = chartList.reduce((sum, d) => sum + (d.revenue || 0), 0);
-                        const totalPeriodOrders = chartList.reduce((sum, d) => sum + (d.orderCount || 0), 0);
-
+                    {/* Chart Body with Y-Axis & Horizontal Scrollable Bars Area */}
+                    {(() => {
+                      const chartList = analyticsData?.revenueChart || [];
+                      if (chartList.length === 0) {
                         return (
-                          <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-                            {/* Chart Bars Grid */}
+                          <div style={{ padding: "80px 0", textAlign: "center", color: "var(--text-tertiary)", fontSize: "14px" }}>
+                            Chưa có dữ liệu giao dịch trong khoảng thời gian này.
+                          </div>
+                        );
+                      }
+
+                      const maxRevenue = Math.max(...chartList.map((d) => d.revenue || 0), 1000000);
+                      const totalPeriodRevenue = chartList.reduce((sum, d) => sum + (d.revenue || 0), 0);
+                      const totalPeriodOrders = chartList.reduce((sum, d) => sum + (d.orderCount || 0), 0);
+
+                      const formatShort = (val) => {
+                        if (!val || val === 0) return "0 đ";
+                        if (val >= 1000000000) return `${(val / 1000000000).toFixed(1)}T`;
+                        if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+                        if (val >= 1000) return `${(val / 1000).toFixed(0)}k`;
+                        return `${val}đ`;
+                      };
+
+                      const ySteps = [
+                        maxRevenue,
+                        maxRevenue * 0.75,
+                        maxRevenue * 0.5,
+                        maxRevenue * 0.25,
+                        0,
+                      ];
+
+                      const minContentWidth = Math.max(760, chartList.length * 64);
+
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
+                          {/* Main Chart Container with Left Y-Axis */}
+                          <div style={{ display: "flex", gap: "12px", width: "100%", height: "290px", position: "relative" }}>
+                            {/* Y-Axis Value Labels on Left */}
                             <div
                               style={{
                                 display: "flex",
-                                alignItems: "flex-end",
-                                gap: "8px",
-                                height: "200px",
-                                padding: "10px 0 30px",
-                                borderBottom: "1px solid var(--border-light)",
-                                position: "relative",
+                                flexDirection: "column",
+                                justifyContent: "space-between",
+                                height: "240px",
+                                width: "60px",
+                                flexShrink: 0,
+                                textAlign: "right",
+                                paddingRight: "8px",
+                                fontSize: "11px",
+                                color: "var(--text-tertiary)",
+                                fontWeight: "600",
                               }}
                             >
-                              {chartList.map((item, idx) => {
-                                const rev = item.revenue || 0;
-                                const ordersCount = item.orderCount || 0;
-                                const heightPercent = Math.max(8, Math.round((rev / maxRevenue) * 100));
-                                const dateLabel = (item.date || "").split("-").slice(1).join("/");
-                                const isHovered = hoveredBar === idx;
+                              {ySteps.map((stepVal, sIdx) => (
+                                <span key={sIdx}>{formatShort(stepVal)}</span>
+                              ))}
+                            </div>
 
-                                return (
+                            {/* Scrollable Bars Area with Horizontal Grid Guidelines */}
+                            <div
+                              style={{
+                                flex: 1,
+                                overflowX: "auto",
+                                overflowY: "hidden",
+                                scrollbarWidth: "thin",
+                                position: "relative",
+                                paddingBottom: "10px",
+                              }}
+                            >
+                              {/* Inner fixed-width container for bars */}
+                              <div
+                                style={{
+                                  minWidth: `${minContentWidth}px`,
+                                  height: "240px",
+                                  position: "relative",
+                                  borderBottom: "2px solid var(--border)",
+                                }}
+                              >
+                                {/* Horizontal Dashed Grid Guidelines */}
+                                {[0, 25, 50, 75, 100].map((pct, gIdx) => (
                                   <div
-                                    key={idx}
-                                    onMouseEnter={() => setHoveredBar(idx)}
-                                    onMouseLeave={() => setHoveredBar(null)}
+                                    key={gIdx}
                                     style={{
-                                      flex: 1,
-                                      height: "100%",
-                                      display: "flex",
-                                      flexDirection: "column",
-                                      justifyContent: "flex-end",
-                                      alignItems: "center",
-                                      position: "relative",
-                                      cursor: "pointer",
+                                      position: "absolute",
+                                      left: 0,
+                                      right: 0,
+                                      bottom: `${pct}%`,
+                                      borderBottom: pct === 0 ? "none" : "1px dashed #e5e7eb",
+                                      zIndex: 1,
                                     }}
-                                  >
-                                    {/* Tooltip on hover */}
-                                    {isHovered && (
+                                  />
+                                ))}
+
+                                {/* Bars Flex Row */}
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "flex-end",
+                                    justifyContent: "space-around",
+                                    gap: "12px",
+                                    height: "100%",
+                                    position: "relative",
+                                    zIndex: 2,
+                                    padding: "0 10px",
+                                  }}
+                                >
+                                  {chartList.map((item, idx) => {
+                                    const rev = item.revenue || 0;
+                                    const ordersCount = item.orderCount || 0;
+                                    const heightPercent = Math.max(4, Math.round((rev / maxRevenue) * 100));
+                                    const isHovered = hoveredBar === idx;
+
+                                    // Format readable date: DD/MM (hoặc DD ThMM)
+                                    const parts = (item.date || "").split("-");
+                                    const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}` : item.date;
+
+                                    return (
                                       <div
+                                        key={idx}
+                                        onMouseEnter={() => setHoveredBar(idx)}
+                                        onMouseLeave={() => setHoveredBar(null)}
                                         style={{
-                                          position: "absolute",
-                                          bottom: `calc(${heightPercent}% + 12px)`,
-                                          backgroundColor: "rgba(17, 24, 39, 0.95)",
-                                          color: "#fff",
-                                          padding: "8px 12px",
-                                          borderRadius: "6px",
-                                          fontSize: "11px",
-                                          whiteSpace: "nowrap",
-                                          zIndex: 100,
-                                          boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
-                                          pointerEvents: "none",
-                                          textAlign: "center",
+                                          flex: 1,
+                                          minWidth: "48px",
+                                          maxWidth: "68px",
+                                          height: "100%",
+                                          display: "flex",
+                                          flexDirection: "column",
+                                          justifyContent: "flex-end",
+                                          alignItems: "center",
+                                          position: "relative",
+                                          cursor: "pointer",
                                         }}
                                       >
-                                        <div style={{ fontWeight: "700", color: "#fca5a5" }}>{item.date}</div>
-                                        <div>Doanh thu: <strong>{formatCurrency(rev)}</strong></div>
-                                        <div>Số đơn hàng: <strong>{ordersCount} đơn</strong></div>
+                                        {/* Floating Tooltip on hover */}
+                                        {isHovered && (
+                                          <div
+                                            style={{
+                                              position: "absolute",
+                                              bottom: `calc(${heightPercent}% + 20px)`,
+                                              backgroundColor: "#1f2937",
+                                              color: "#fff",
+                                              padding: "10px 14px",
+                                              borderRadius: "8px",
+                                              fontSize: "12px",
+                                              whiteSpace: "nowrap",
+                                              zIndex: 100,
+                                              boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
+                                              pointerEvents: "none",
+                                              textAlign: "center",
+                                              lineHeight: "1.5",
+                                            }}
+                                          >
+                                            <div style={{ fontWeight: "800", color: "#fca5a5", fontSize: "12.5px" }}>
+                                              📅 {item.date}
+                                            </div>
+                                            <div style={{ marginTop: "3px" }}>
+                                              Doanh thu: <strong style={{ color: "#fff" }}>{formatCurrency(rev)}</strong>
+                                            </div>
+                                            <div>
+                                              Đơn hoàn thành: <strong style={{ color: "#fbbf24" }}>{ordersCount} đơn</strong>
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {/* Value Label above the bar */}
+                                        <div
+                                          style={{
+                                            fontSize: "11px",
+                                            fontWeight: isHovered ? "800" : "600",
+                                            color: isHovered ? "var(--primary)" : rev > 0 ? "var(--text)" : "var(--text-tertiary)",
+                                            marginBottom: "4px",
+                                            whiteSpace: "nowrap",
+                                          }}
+                                        >
+                                          {formatShort(rev)}
+                                        </div>
+
+                                        {/* Order dot tag if any orders */}
+                                        {ordersCount > 0 && (
+                                          <div
+                                            style={{
+                                              padding: "1px 5px",
+                                              borderRadius: "99px",
+                                              backgroundColor: "#f59e0b",
+                                              color: "#fff",
+                                              fontSize: "9.5px",
+                                              fontWeight: "800",
+                                              marginBottom: "4px",
+                                              boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                                            }}
+                                            title={`${ordersCount} đơn hàng`}
+                                          >
+                                            {ordersCount}
+                                          </div>
+                                        )}
+
+                                        {/* Bar Pillar */}
+                                        <div
+                                          style={{
+                                            width: "100%",
+                                            maxWidth: "38px",
+                                            height: `${heightPercent}%`,
+                                            background: isHovered
+                                              ? "linear-gradient(180deg, #ea580c 0%, #ee4d2d 100%)"
+                                              : rev > 0
+                                              ? "linear-gradient(180deg, #ff784e 0%, #ee4d2d 100%)"
+                                              : "rgba(229, 231, 235, 0.8)",
+                                            borderRadius: "6px 6px 0 0",
+                                            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                                            transform: isHovered ? "scaleY(1.03)" : "scaleY(1)",
+                                            transformOrigin: "bottom",
+                                            boxShadow: isHovered ? "0 4px 12px rgba(238, 77, 45, 0.35)" : "none",
+                                          }}
+                                        />
+
+                                        {/* Date Label Below Bar */}
+                                        <div
+                                          style={{
+                                            position: "absolute",
+                                            bottom: "-28px",
+                                            fontSize: "11.5px",
+                                            fontWeight: isHovered ? "800" : "600",
+                                            color: isHovered ? "var(--primary)" : "var(--text-secondary)",
+                                            whiteSpace: "nowrap",
+                                          }}
+                                        >
+                                          {formattedDate}
+                                        </div>
                                       </div>
-                                    )}
-
-                                    {/* Order dot indicator */}
-                                    {ordersCount > 0 && (
-                                      <div
-                                        style={{
-                                          width: "8px",
-                                          height: "8px",
-                                          borderRadius: "50%",
-                                          backgroundColor: "#f59e0b",
-                                          marginBottom: "4px",
-                                          boxShadow: "0 0 0 2px #fff",
-                                        }}
-                                        title={`${ordersCount} đơn hàng`}
-                                      />
-                                    )}
-
-                                    {/* Bar Pillar */}
-                                    <div
-                                      style={{
-                                        width: "100%",
-                                        maxWidth: "36px",
-                                        height: `${heightPercent}%`,
-                                        backgroundColor: isHovered ? "var(--primary)" : "rgba(238, 77, 45, 0.75)",
-                                        borderRadius: "4px 4px 0 0",
-                                        transition: "all 0.2s",
-                                        transform: isHovered ? "scaleY(1.04)" : "scaleY(1)",
-                                        transformOrigin: "bottom",
-                                      }}
-                                    />
-
-                                    {/* Date Label */}
-                                    <span
-                                      style={{
-                                        position: "absolute",
-                                        bottom: "-24px",
-                                        fontSize: "10.5px",
-                                        fontWeight: isHovered ? "800" : "500",
-                                        color: isHovered ? "var(--primary)" : "var(--text-tertiary)",
-                                      }}
-                                    >
-                                      {dateLabel}
-                                    </span>
-                                  </div>
-                                );
-                              })}
+                                    );
+                                  })}
+                                </div>
+                              </div>
                             </div>
+                          </div>
 
-                            {/* Chart Footer stats */}
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                marginTop: "16px",
-                                paddingTop: "10px",
-                                fontSize: "12px",
-                                color: "var(--text-secondary)",
-                              }}
-                            >
+                          {/* Chart Summary Footer Bar */}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              marginTop: "20px",
+                              paddingTop: "14px",
+                              borderTop: "1px solid var(--border-light)",
+                              fontSize: "13px",
+                              color: "var(--text-secondary)",
+                              flexWrap: "wrap",
+                              gap: "12px",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
                               <div>
-                                <span>Tổng {analyticsDays} ngày: </span>
-                                <strong style={{ color: "var(--primary)", fontWeight: "800" }}>
+                                <span>Tổng doanh thu toàn kỳ: </span>
+                                <strong style={{ color: "var(--primary)", fontSize: "15px", fontWeight: "900" }}>
                                   {formatCurrency(totalPeriodRevenue)}
                                 </strong>
                               </div>
                               <div>
-                                <span>Tổng số đơn: </span>
-                                <strong style={{ color: "#0284c7", fontWeight: "800" }}>
-                                  {totalPeriodOrders} đơn
+                                <span>Trung bình mỗi ngày: </span>
+                                <strong style={{ color: "var(--text)", fontWeight: "700" }}>
+                                  {formatCurrency(Math.round(totalPeriodRevenue / (chartList.length || 1)))}/ngày
                                 </strong>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
 
-                    {/* CHART 2: Biểu Đồ Phân Bố Trạng Thái Đơn Hàng */}
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                              <span>Tổng đơn hoàn tất: </span>
+                              <strong style={{ color: "#0284c7", fontSize: "14px", fontWeight: "800" }}>
+                                {totalPeriodOrders} đơn hàng
+                              </strong>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* SECTION 2: INSIGHTS ROW (3 BALANCED COLUMNS) */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
+                      gap: "20px",
+                    }}
+                  >
+                    {/* CARD 1: Biểu Đồ Phân Bố Trạng Thái Đơn Hàng */}
                     <div
                       className="card"
                       style={{
@@ -1247,17 +1556,8 @@ export default function SellerPage() {
                         );
                       })()}
                     </div>
-                  </div>
 
-                  {/* INSIGHTS SECTION (2 COLUMNS: TOP PRODUCTS LEADERBOARD + LOW STOCK ALERTS) */}
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr)))",
-                      gap: "20px",
-                    }}
-                  >
-                    {/* COLUMN 1: Top 5 Sản Phẩm Bán Chạy Nhất */}
+                    {/* CARD 2: Top 5 Sản Phẩm Bán Chạy Nhất */}
                     <div
                       className="card"
                       style={{

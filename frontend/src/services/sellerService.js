@@ -28,12 +28,23 @@ export const sellerService = {
     );
   },
 
-  // GET /shops/{shopId}/analytics/overview?days=7
-  async getAnalyticsOverview(shopId, days = 7) {
+  // GET /shops/{shopId}/analytics/overview?startDate=...&endDate=... OR ?days=10
+  async getAnalyticsOverview(shopId, params = 10) {
     if (!shopId) return null;
+    let query = "days=10";
+    if (typeof params === "object" && params !== null) {
+      if (params.startDate && params.endDate) {
+        query = `startDate=${encodeURIComponent(params.startDate)}&endDate=${encodeURIComponent(params.endDate)}`;
+      } else if (params.days) {
+        query = `days=${params.days}`;
+      }
+    } else if (params) {
+      query = `days=${params}`;
+    }
+
     return safeFetch(
       async () => {
-        const res = await authFetch(`${API_BASE_URL}/shops/${shopId}/analytics/overview?days=${days}`);
+        const res = await authFetch(`${API_BASE_URL}/shops/${shopId}/analytics/overview?${query}`);
         return res;
       },
       {
@@ -46,13 +57,16 @@ export const sellerService = {
           revenue: 52400000,
         },
         revenueChart: [
-          { date: "2026-08-29", revenue: 3500000, orderCount: 12 },
-          { date: "2026-08-30", revenue: 7200000, orderCount: 21 },
-          { date: "2026-08-31", revenue: 4100000, orderCount: 15 },
-          { date: "2026-09-01", revenue: 8900000, orderCount: 28 },
-          { date: "2026-09-02", revenue: 6300000, orderCount: 19 },
-          { date: "2026-09-03", revenue: 10500000, orderCount: 33 },
-          { date: "2026-09-04", revenue: 11900000, orderCount: 30 },
+          { date: "2026-08-01", revenue: 1500000, orderCount: 4 },
+          { date: "2026-08-02", revenue: 2200000, orderCount: 7 },
+          { date: "2026-08-03", revenue: 800000,  orderCount: 3 },
+          { date: "2026-08-04", revenue: 0,       orderCount: 0 },
+          { date: "2026-08-05", revenue: 3400000, orderCount: 9 },
+          { date: "2026-08-06", revenue: 1900000, orderCount: 6 },
+          { date: "2026-08-07", revenue: 2700000, orderCount: 8 },
+          { date: "2026-08-08", revenue: 4500000, orderCount: 14 },
+          { date: "2026-08-09", revenue: 3800000, orderCount: 11 },
+          { date: "2026-08-10", revenue: 5100000, orderCount: 15 },
         ],
         orderStatusDistribution: {
           statusCounts: {
@@ -105,12 +119,23 @@ export const sellerService = {
     );
   },
 
-  // GET /shops/{shopId}/analytics/revenue?days=7
-  async getRevenueChart(shopId, days = 7) {
+  // GET /shops/{shopId}/analytics/revenue?startDate=...&endDate=... OR ?days=10
+  async getRevenueChart(shopId, params = 10) {
     if (!shopId) return [];
+    let query = "days=10";
+    if (typeof params === "object" && params !== null) {
+      if (params.startDate && params.endDate) {
+        query = `startDate=${encodeURIComponent(params.startDate)}&endDate=${encodeURIComponent(params.endDate)}`;
+      } else if (params.days) {
+        query = `days=${params.days}`;
+      }
+    } else if (params) {
+      query = `days=${params}`;
+    }
+
     return safeFetch(
       async () => {
-        const res = await authFetch(`${API_BASE_URL}/shops/${shopId}/analytics/revenue?days=${days}`);
+        const res = await authFetch(`${API_BASE_URL}/shops/${shopId}/analytics/revenue?${query}`);
         return Array.isArray(res) ? res : [];
       },
       []

@@ -288,6 +288,12 @@ public class OrderServiceImpl implements OrderService {
         // Tính phí ship động dựa trên khoảng cách Shop → Người mua
         Shop shop = shopRepository.findById(shopId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy shop: " + shopId));
+
+        // Chặn chủ shop tự mua sản phẩm của chính shop mình
+        if (Objects.equals(shop.getOwnerId(), buyerId)) {
+            throw new RuntimeException("Bạn không thể tự đặt mua sản phẩm từ chính shop của mình");
+        }
+
         long shippingFee = shippingService.calculateShippingFee(shop.getAddress(), shippingAddress);
 
         long totalAmount = Math.max(0, built.subtotal + shippingFee - discountAmount);
