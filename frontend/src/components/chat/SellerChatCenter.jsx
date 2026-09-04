@@ -76,10 +76,23 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
   activeConvRef.current = activeConv;
 
   const messagesContainerRef = useRef(null);
-  const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const isNearBottomRef = useRef(true);
   const shouldForceScrollBottomRef = useRef(false);
+  const isNewMessageReceivedRef = useRef(false);
+
+  const scrollToContainerBottom = useCallback((behavior = "smooth") => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    if (behavior === "auto") {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, []);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -140,9 +153,12 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
           return prev;
         }
 
-        // Nếu có tin nhắn mới từ khách khi người dùng đang cuộn lên
-        if (prev.length > 0 && safeList.length > prev.length && !isNearBottomRef.current) {
-          setHasNewUnseenMessage(true);
+        // Có tin nhắn mới
+        if (safeList.length > prev.length) {
+          isNewMessageReceivedRef.current = true;
+          if (!isNearBottomRef.current) {
+            setHasNewUnseenMessage(true);
+          }
         }
 
         return safeList;
@@ -182,23 +198,27 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
     }
   };
 
-  // Cuộn thông minh: CHỈ cuộn khi vừa mở hội thoại, vừa gửi tin, hoặc người dùng đang ở sát đáy
+  // Cuộn thông minh CHỈ TRONG KHUNG CHAT: Tuyệt đối không gọi scrollIntoView làm nhảy trang web
   useEffect(() => {
     if (messages.length === 0) return;
 
     if (shouldForceScrollBottomRef.current) {
-      // Vừa mở chat hoặc vừa gửi tin: cuộn ngay lập tức
-      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      // Vừa mở chat hoặc vừa gửi tin: cuộn đáy khung tin nhắn
+      requestAnimationFrame(() => {
+        scrollToContainerBottom("auto");
+      });
       shouldForceScrollBottomRef.current = false;
-    } else if (isNearBottomRef.current) {
-      // Đang ở sát đáy và có tin mới: cuộn mượt
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      isNewMessageReceivedRef.current = false;
+    } else if (isNearBottomRef.current && isNewMessageReceivedRef.current) {
+      // Đang ở sát đáy và có tin nhắn mới thật sự: cuộn mượt
+      scrollToContainerBottom("smooth");
+      isNewMessageReceivedRef.current = false;
     }
-    // NẾU NGƯỜI DÙNG ĐANG CUỘN LÊN ĐỌC LỊCH SỬ -> TUYỆT ĐỐI KHÔNG TỰ CUỘN XUỐNG!
-  }, [messages]);
+    // Người dùng đang cuộn xem lịch sử hoặc polling định kỳ -> giữ nguyên vị trí, không chạm vào cuộn
+  }, [messages, scrollToContainerBottom]);
 
   const scrollToBottomExplicit = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollToContainerBottom("smooth");
     isNearBottomRef.current = true;
     setHasNewUnseenMessage(false);
   };
