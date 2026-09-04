@@ -188,7 +188,17 @@ export default function SellerPage() {
     };
     fetchChatUnread();
     const interval = setInterval(fetchChatUnread, 8000);
-    return () => clearInterval(interval);
+
+    // Lắng nghe sự kiện khi một hội thoại được đọc
+    const handleChatRead = () => {
+      fetchChatUnread();
+    };
+    window.addEventListener("domix:chat-read", handleChatRead);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("domix:chat-read", handleChatRead);
+    };
   }, [shop?.id]);
 
   const handleDaysChange = (days) => {

@@ -202,26 +202,34 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public void markConversationAsRead(String conversationId) {
         Conversation conversation = getConversationEntity(conversationId);
-        SenderContext sender = resolveSender(conversation, SecurityUtils.getCurrentUserId());
+        String currentUserId = SecurityUtils.getCurrentUserId();
 
-        String unreadField = "USER".equals(sender.senderRole()) ? "unreadCountForUser" : "unreadCountForShop";
-        String otherRole = "USER".equals(sender.senderRole()) ? "SHOP" : "USER";
+        Shop shop = shopRepository.findById(conversation.getShopId()).orElse(null);
+        boolean isShopOwner = shop != null && shop.getOwnerId() != null && shop.getOwnerId().equals(currentUserId);
+        boolean isBuyer = conversation.getUserId() != null && conversation.getUserId().equals(currentUserId);
 
-        mongoTemplate.updateFirst(
-                Query.query(Criteria.where("id").is(conversationId)),
-                new Update().set(unreadField, 0),
-                Conversation.class
-        );
+        if (!isShopOwner && !isBuyer) {
+            throw new ForbiddenException("Bạn không thuộc đoạn chat này");
+        }
+
+        if (isShopOwner) {
+            conversation.setUnreadCountForShop(0);
+        }
+        if (isBuyer) {
+            conversation.setUnreadCountForUser(0);
+        }
+
+        conversationRepository.save(conversation);
 
         mongoTemplate.updateMulti(
                 Query.query(Criteria.where("conversationId").is(conversationId)
-                        .and("senderRole").is(otherRole)
                         .and("isRead").is(false)),
                 new Update().set("isRead", true),
                 Message.class
         );
 
-        messagingTemplate.convertAndSend("/topic/conversations/" + conversationId + "/read", sender.senderRole());
+        String role = isShopOwner ? "SHOP" : "USER";
+        messagingTemplate.convertAndSend("/topic/conversations/" + conversationId + "/read", role);
     }
 
     @Override

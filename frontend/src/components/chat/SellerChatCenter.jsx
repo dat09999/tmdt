@@ -161,13 +161,19 @@ function SellerChatCenterInner({ shop, initialSelectedConvId = null }) {
     shouldForceScrollBottomRef.current = true;
     isNearBottomRef.current = true;
 
-    try {
-      await chatService.markAsRead(conv.id);
-    } catch {}
-
+    // Cập nhật UI ngay lập tức: xóa badge chưa đọc của hội thoại này
     setConversations((prev) =>
       prev.map((c) => (c.id === conv.id ? { ...c, unreadCountForShop: 0 } : c))
     );
+
+    // Thông báo cho SellerPage cập nhật badge số tin chưa đọc trên tab
+    window.dispatchEvent(new CustomEvent("domix:chat-read", { detail: { conversationId: conv.id } }));
+
+    try {
+      await chatService.markAsRead(conv.id);
+    } catch (err) {
+      console.warn("Failed to mark as read:", err);
+    }
   }, []);
 
   // 2. Tải danh sách hội thoại của Shop
@@ -178,7 +184,16 @@ function SellerChatCenterInner({ shop, initialSelectedConvId = null }) {
       try {
         const list = await chatService.getShopConversations(shopId);
         const safeList = Array.isArray(list) ? list : [];
-        setConversations(safeList);
+        
+        // Đảm bảo hội thoại đang mở luôn có unreadCountForShop = 0
+        const updatedList = safeList.map((c) => {
+          if (activeConvRef.current && c.id === activeConvRef.current.id) {
+            return { ...c, unreadCountForShop: 0 };
+          }
+          return c;
+        });
+
+        setConversations(updatedList);
 
         // Tự động chọn cuộc trò chuyện nếu chưa chọn cuộc nào
         if (!activeConvRef.current && safeList.length > 0) {
