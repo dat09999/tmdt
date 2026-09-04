@@ -339,9 +339,9 @@ img {
 .gap-4 { gap: 16px; }
 
 .hide-mobile { display: block; }
-.show-mobile { display: none; }
+.show-mobile { display: none !important; }
 
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
-  .show-mobile { display: block !important; }
+  .show-mobile { display: flex !important; }
 }

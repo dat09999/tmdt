@@ -77,7 +77,7 @@ export default function App() {
   return (
     <>
       {page}
-      <ChatWidget />
+      {!path.startsWith("/seller") && <ChatWidget />}
     </>
   );
 }
