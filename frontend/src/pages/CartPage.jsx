@@ -8,28 +8,57 @@ import Button from "../components/common/Button";
 import EmptyState from "../components/common/EmptyState";
 import { cartService } from "../services/cartService";
 import { couponService } from "../services/couponService";
+import { sellerService } from "../services/sellerService";
 import { useAuth } from "./Authcontext";
 import { formatCurrency } from "../utils/formatters";
-import { ShoppingBag, ArrowRight, Tag, ShieldCheck, Trash2 } from "lucide-react";
+import { ShoppingBag, ArrowRight, Tag, ShieldCheck, ShieldAlert, Trash2 } from "lucide-react";
 
 export default function CartPage() {
   const { user } = useAuth();
   const [cart, setCart] = useState({ items: [] });
   const [selectedKeys, setSelectedKeys] = useState(new Set());
   const [loading, setLoading] = useState(true);
+  const [userShop, setUserShop] = useState(null);
   const [voucherCode, setVoucherCode] = useState("");
   const [appliedDiscount, setAppliedDiscount] = useState(0);
   const [toastMessage, setToastMessage] = useState("");
 
   const itemKey = (item) => `${item.productId}__${item.variantSku || ""}`;
 
-  const fetchCart = async () => {
+  const isOwnShopItem = (item) => {
+    if (!user?.userId) return false;
+    if (userShop?.id && (String(item.shopId) === String(userShop.id) || String(item.shop?.id) === String(userShop.id))) {
+      return true;
+    }
+    if (item.ownerId && String(item.ownerId) === String(user.userId)) {
+      return true;
+    }
+    if (item.shop?.ownerId && String(item.shop.ownerId) === String(user.userId)) {
+      return true;
+    }
+    return false;
+  };
+
+  const fetchCart = async (currentShop = userShop) => {
     try {
       setLoading(true);
       const data = await cartService.getCart(user?.userId);
       setCart(data || { items: [] });
-      // Select all by default
-      const keys = new Set((data?.items || []).map(itemKey));
+
+      const checkItemIsOwn = (item) => {
+        if (!user?.userId) return false;
+        if (currentShop?.id && (String(item.shopId) === String(currentShop.id) || String(item.shop?.id) === String(currentShop.id))) return true;
+        if (item.ownerId && String(item.ownerId) === String(user.userId)) return true;
+        if (item.shop?.ownerId && String(item.shop.ownerId) === String(user.userId)) return true;
+        return false;
+      };
+
+      // Select all valid (non-own-shop) items by default
+      const keys = new Set(
+        (data?.items || [])
+          .filter((i) => !checkItemIsOwn(i))
+          .map(itemKey)
+      );
       setSelectedKeys(keys);
     } catch (err) {
       console.error("Fetch cart error:", err);
@@ -39,7 +68,19 @@ export default function CartPage() {
   };
 
   useEffect(() => {
-    fetchCart();
+    if (user?.userId) {
+      sellerService
+        .getShopByOwnerId(user.userId)
+        .then((s) => {
+          setUserShop(s);
+          fetchCart(s);
+        })
+        .catch(() => {
+          fetchCart(null);
+        });
+    } else {
+      fetchCart(null);
+    }
   }, [user?.userId]);
 
   const showToast = (msg) => {
@@ -73,17 +114,26 @@ export default function CartPage() {
 
   const totalAmount = Math.max(0, subtotal - appliedDiscount);
 
-  const allSelected = allItems.length > 0 && selectedItems.length === allItems.length;
+  const selectableItems = allItems.filter((i) => !isOwnShopItem(i));
+  const allSelected = selectableItems.length > 0 && selectedItems.length === selectableItems.length;
 
   const handleToggleSelectAll = (checked) => {
     if (checked) {
-      setSelectedKeys(new Set(allItems.map(itemKey)));
+      const validItems = allItems.filter((i) => !isOwnShopItem(i));
+      setSelectedKeys(new Set(validItems.map(itemKey)));
+      if (validItems.length < allItems.length) {
+        showToast("ℹ️ Đã tự động bỏ qua các sản phẩm từ chính shop của bạn");
+      }
     } else {
       setSelectedKeys(new Set());
     }
   };
 
   const handleSelectItem = (item, checked) => {
+    if (checked && isOwnShopItem(item)) {
+      showToast("🚫 Bạn không thể chọn sản phẩm từ chính shop của mình để mua hàng!");
+      return;
+    }
     setSelectedKeys((prev) => {
       const next = new Set(prev);
       const k = itemKey(item);
@@ -93,11 +143,17 @@ export default function CartPage() {
   };
 
   const handleSelectShop = (shopItems, checked) => {
+    if (checked && shopItems.some(isOwnShopItem)) {
+      showToast("🚫 Bạn không thể chọn sản phẩm từ chính shop của mình để mua hàng!");
+      return;
+    }
     setSelectedKeys((prev) => {
       const next = new Set(prev);
       shopItems.forEach((item) => {
-        const k = itemKey(item);
-        checked ? next.add(k) : next.delete(k);
+        if (!isOwnShopItem(item)) {
+          const k = itemKey(item);
+          checked ? next.add(k) : next.delete(k);
+        }
       });
       return next;
     });
@@ -109,13 +165,13 @@ export default function CartPage() {
       variantSku: item.variantSku,
       quantity: newQty,
     });
-    await fetchCart();
+    await fetchCart(userShop);
   };
 
   const handleRemoveItem = async (item) => {
     await cartService.removeItem(user?.userId, item);
     showToast("Đã xóa sản phẩm khỏi giỏ hàng");
-    await fetchCart();
+    await fetchCart(userShop);
   };
 
   const handleDeleteSelected = async () => {
@@ -123,7 +179,7 @@ export default function CartPage() {
       await cartService.removeItem(user?.userId, item);
     }
     showToast(`Đã xóa ${selectedItems.length} sản phẩm`);
-    await fetchCart();
+    await fetchCart(userShop);
   };
 
   const handleApplyVoucher = async (e) => {
@@ -144,9 +200,17 @@ export default function CartPage() {
 
   const handleProceedCheckout = () => {
     if (selectedItems.length === 0) {
-      showToast("Vui lòng chọn ít nhất một sản phẩm để thanh toán!");
+      showToast("Vui lòng chọn ít nhất một sản phẩm hợp lệ để thanh toán!");
       return;
     }
+
+    const ownItems = selectedItems.filter(isOwnShopItem);
+    if (ownItems.length > 0) {
+      const prodName = ownItems[0].productName || ownItems[0].name || "sản phẩm";
+      showToast(`🚫 Không thể đặt mua sản phẩm từ chính shop của bạn ("${prodName}"). Vui lòng bỏ chọn sản phẩm này để tiếp tục!`);
+      return;
+    }
+
     // Save selected items in session storage for checkout page
     sessionStorage.setItem("checkout_items", JSON.stringify(selectedItems));
     sessionStorage.setItem("checkout_discount", JSON.stringify(appliedDiscount));
@@ -205,6 +269,30 @@ export default function CartPage() {
             >
               {/* Left Column: Cart items table */}
               <div>
+                {/* Notice if cart has own shop items */}
+                {allItems.some(isOwnShopItem) && (
+                  <div
+                    style={{
+                      backgroundColor: "#fff7ed",
+                      border: "1px solid #fed7aa",
+                      borderRadius: "var(--r-md)",
+                      padding: "12px 16px",
+                      marginBottom: "16px",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "10px",
+                      fontSize: "13px",
+                      color: "#9a3412",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    <ShieldAlert size={18} style={{ color: "#ea580c", flexShrink: 0, marginTop: "2px" }} />
+                    <div>
+                      <strong>Quy định mua hàng:</strong> Giỏ hàng của bạn có chứa sản phẩm thuộc chính gian hàng bạn đang quản lý. Các sản phẩm này đã được hệ thống tự động vô hiệu hóa chọn thanh toán (nhằm ngăn chặn tự buff đơn, lạm dụng voucher và tự đánh giá). Toàn bộ trạng thái giỏ hàng vẫn được lưu giữ nguyên vẹn.
+                    </div>
+                  </div>
+                )}
+
                 {/* Select all bar */}
                 <div
                   className="card"
@@ -263,6 +351,7 @@ export default function CartPage() {
                     shopName={group.shopName}
                     items={group.items}
                     selectedKeys={selectedKeys}
+                    isOwnShopItem={isOwnShopItem}
                     onSelectItem={handleSelectItem}
                     onSelectShop={handleSelectShop}
                     onQuantityChange={handleQuantityChange}

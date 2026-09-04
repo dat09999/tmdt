@@ -18,6 +18,11 @@ import { useAuth } from "../../pages/Authcontext";
 export { openChatWithShop };
 
 export default function ChatWidget() {
+  const isSellerPage = window.location.pathname.startsWith("/seller");
+  if (isSellerPage) {
+    return null;
+  }
+
   const { user, isAuthenticated } = useAuth();
   const currentUserId = user?.userId;
 

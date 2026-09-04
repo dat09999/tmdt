@@ -7,7 +7,9 @@ import Button from "../components/common/Button";
 import Modal from "../components/common/Modal";
 import EmptyState from "../components/common/EmptyState";
 import AddressAutocomplete from "../components/common/AddressAutocomplete";
+import SellerChatCenter from "../components/chat/SellerChatCenter";
 import { sellerService } from "../services/sellerService";
+import { chatService } from "../services/chatService";
 import { useAuth } from "./Authcontext";
 import { formatCurrency, formatDate } from "../utils/formatters";
 import {
@@ -39,6 +41,7 @@ import {
   ArrowUpRight,
   RefreshCw,
   Calendar,
+  MessageCircle,
 } from "lucide-react";
 
 const getTodayStr = () => new Date().toISOString().split("T")[0];
@@ -53,7 +56,8 @@ export default function SellerPage() {
   const [shop, setShop] = useState(null);
   const [checkingShop, setCheckingShop] = useState(true);
 
-  const [activeTab, setActiveTab] = useState("dashboard"); // "dashboard" | "products" | "orders" | "coupons" | "settings"
+  const [activeTab, setActiveTab] = useState("dashboard"); // "dashboard" | "products" | "orders" | "coupons" | "chat" | "settings"
+  const [unreadShopChatCount, setUnreadShopChatCount] = useState(0);
   const [orderStatusFilter, setOrderStatusFilter] = useState("ALL"); // "ALL" | "PENDING" | "PROCESSING" | "SHIPPING" | "DELIVERED" | "CANCELLED"
   const [stats, setStats] = useState(null);
   const [products, setProducts] = useState([]);
@@ -171,6 +175,21 @@ export default function SellerPage() {
   useEffect(() => {
     loadShopAndData();
   }, [user?.userId]);
+
+  // Poll unread chat messages for shop
+  useEffect(() => {
+    if (!shop?.id) return;
+    const fetchChatUnread = async () => {
+      try {
+        const convs = await chatService.getShopConversations(shop.id);
+        const count = (convs || []).reduce((sum, c) => sum + (c.unreadCountForShop || 0), 0);
+        setUnreadShopChatCount(count);
+      } catch {}
+    };
+    fetchChatUnread();
+    const interval = setInterval(fetchChatUnread, 8000);
+    return () => clearInterval(interval);
+  }, [shop?.id]);
 
   const handleDaysChange = (days) => {
     setDateFilterMode("PRESET");
@@ -657,6 +676,29 @@ export default function SellerPage() {
                   { id: "products", label: `📦 Sản Phẩm (${products.length})`, icon: Package },
                   { id: "orders", label: `📑 Đơn Hàng (${orders.length})`, icon: ShoppingBag },
                   { id: "coupons", label: `🎟️ Mã Giảm Giá (${coupons.length})`, icon: Ticket },
+                  {
+                    id: "chat",
+                    label: (
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                        <span>💬 Chat Khách Hàng</span>
+                        {unreadShopChatCount > 0 && (
+                          <span
+                            style={{
+                              backgroundColor: "var(--primary)",
+                              color: "#ffffff",
+                              fontSize: "10px",
+                              fontWeight: "800",
+                              padding: "1px 6px",
+                              borderRadius: "10px",
+                            }}
+                          >
+                            {unreadShopChatCount}
+                          </span>
+                        )}
+                      </div>
+                    ),
+                    icon: MessageCircle,
+                  },
                   { id: "settings", label: "⚙️ Cài Đặt Shop", icon: Settings },
                 ].map((tab) => (
                   <button
@@ -674,6 +716,10 @@ export default function SellerPage() {
                       cursor: "pointer",
                       whiteSpace: "nowrap",
                       transition: "all 0.15s",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px",
                     }}
                   >
                     {tab.label}
@@ -2293,10 +2339,71 @@ export default function SellerPage() {
                   </div>
                 </div>
               )}
+
+              {/* TAB 6: SELLER CHAT CENTER */}
+              {activeTab === "chat" && (
+                <SellerChatCenter shop={shop} />
+              )}
             </>
           )}
         </div>
       </main>
+
+      {/* Floating Seller Quick Chat Button on other tabs */}
+      {shop && activeTab !== "chat" && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "24px",
+            right: "24px",
+            zIndex: 9999,
+          }}
+        >
+          <button
+            onClick={() => setActiveTab("chat")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              backgroundColor: "var(--primary)",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "30px",
+              padding: "12px 20px",
+              boxShadow: "0 6px 24px rgba(238, 77, 45, 0.4)",
+              fontWeight: "700",
+              fontSize: "14px",
+              cursor: "pointer",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              position: "relative",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
+            onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+          >
+            <MessageCircle size={20} />
+            <span>Chat Khách Hàng</span>
+            {unreadShopChatCount > 0 && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: "-4px",
+                  right: "-4px",
+                  backgroundColor: "#ffffff",
+                  color: "var(--primary)",
+                  borderRadius: "10px",
+                  padding: "1px 6px",
+                  fontSize: "11px",
+                  fontWeight: "800",
+                  border: "2px solid var(--primary)",
+                  boxShadow: "0 2px 5px rgba(0,0,0,0.2)",
+                }}
+              >
+                {unreadShopChatCount > 99 ? "99+" : unreadShopChatCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Modal Add/Edit Product */}
       <Modal

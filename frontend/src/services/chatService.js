@@ -1,6 +1,6 @@
 import { API_BASE_URL, authFetch } from "../utils/auth";
 import { safeFetch } from "./api";
-import { MOCK_CONVERSATIONS } from "../mocks/mockChat";
+import { MOCK_CONVERSATIONS, MOCK_SHOP_CONVERSATIONS } from "../mocks/mockChat";
 
 export function openChatWithShop(shopId) {
   window.dispatchEvent(new CustomEvent("domix:open-chat", { detail: { shopId } }));
@@ -27,7 +27,7 @@ export const chatService = {
         if (Array.isArray(res?.content)) return res.content;
         return Array.isArray(res) ? res : [];
       },
-      MOCK_CONVERSATIONS
+      MOCK_SHOP_CONVERSATIONS
     );
   },
 
@@ -59,7 +59,8 @@ export const chatService = {
         return [];
       },
       (() => {
-        const conv = MOCK_CONVERSATIONS.find((c) => c.id === conversationId);
+        const allConvs = [...MOCK_CONVERSATIONS, ...MOCK_SHOP_CONVERSATIONS];
+        const conv = allConvs.find((c) => c.id === conversationId);
         return conv?.messages || [];
       })()
     );

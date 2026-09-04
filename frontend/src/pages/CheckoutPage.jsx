@@ -8,6 +8,7 @@ import Modal from "../components/common/Modal";
 import AddressAutocomplete from "../components/common/AddressAutocomplete";
 import { orderService } from "../services/orderService";
 import { userService } from "../services/userService";
+import { sellerService } from "../services/sellerService";
 import { useAuth } from "./Authcontext";
 import { formatCurrency } from "../utils/formatters";
 import { PAYMENT_METHODS, SHIPPING_PROVIDERS } from "../utils/constants";
@@ -17,6 +18,7 @@ import {
   CreditCard,
   CheckCircle,
   ShieldCheck,
+  ShieldAlert,
   ChevronRight,
   AlertCircle,
   Plus,
@@ -26,12 +28,35 @@ export default function CheckoutPage() {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [discount, setDiscount] = useState(0);
+  const [userShop, setUserShop] = useState(null);
   const [selectedShipping, setSelectedShipping] = useState(SHIPPING_PROVIDERS[1]); // GHN default
   const [paymentMethod, setPaymentMethod] = useState("VNPAY");
   const [orderNote, setOrderNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [shippingEstimate, setShippingEstimate] = useState(null);
+
+  useEffect(() => {
+    if (user?.userId) {
+      sellerService.getShopByOwnerId(user.userId).then((s) => setUserShop(s)).catch(() => {});
+    }
+  }, [user?.userId]);
+
+  const isOwnShopItem = (item) => {
+    if (!user?.userId) return false;
+    if (userShop?.id && (String(item.shopId) === String(userShop.id) || String(item.shop?.id) === String(userShop.id))) {
+      return true;
+    }
+    if (item.ownerId && String(item.ownerId) === String(user.userId)) {
+      return true;
+    }
+    if (item.shop?.ownerId && String(item.shop.ownerId) === String(user.userId)) {
+      return true;
+    }
+    return false;
+  };
+
+  const hasOwnShopItems = items.some(isOwnShopItem);
 
   // Saved Addresses state
   const [addressModalOpen, setAddressModalOpen] = useState(false);
@@ -144,6 +169,11 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (hasOwnShopItems) {
+      setErrorMsg("🚫 Bạn không thể tự đặt mua sản phẩm từ chính shop của mình (Chống buff đơn ảo & gian lận).");
+      return;
+    }
+
     try {
       setLoading(true);
       setErrorMsg("");
@@ -187,7 +217,12 @@ export default function CheckoutPage() {
         window.location.href = `/orders/${primaryOrder.id || primaryOrder.orderCode}`;
       }
     } catch (err) {
-      setErrorMsg(err.message || "Đặt hàng thất bại. Vui lòng thử lại!");
+      const message = err.message || "Đặt hàng thất bại. Vui lòng thử lại!";
+      if (message.includes("chính shop của mình") || message.includes("tự đặt mua")) {
+        setErrorMsg("🚫 " + message + " (Chính sách chống buff đơn và gian lận của sàn).");
+      } else {
+        setErrorMsg(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -203,6 +238,43 @@ export default function CheckoutPage() {
           <h1 className="section-title" style={{ fontSize: "20px", marginBottom: "20px" }}>
             THANH TOÁN ĐƠN HÀNG
           </h1>
+
+          {hasOwnShopItems && (
+            <div
+              style={{
+                backgroundColor: "#fef2f2",
+                border: "1px solid #f87171",
+                borderRadius: "var(--r-md)",
+                padding: "16px 20px",
+                marginBottom: "20px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "16px",
+                color: "#991b1b",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <ShieldAlert size={26} style={{ color: "#dc2626", flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontWeight: "700", fontSize: "14px" }}>
+                    🚫 Bạn không thể tự đặt mua sản phẩm từ chính shop của mình!
+                  </div>
+                  <div style={{ fontSize: "13px", marginTop: "3px", color: "#b91c1c" }}>
+                    Đơn hàng này chứa sản phẩm thuộc quyền sở hữu của gian hàng bạn. Vui lòng quay lại Giỏ hàng để bỏ chọn sản phẩm của shop bạn trước khi tiếp tục.
+                  </div>
+                </div>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => (window.location.href = "/cart")}
+                style={{ flexShrink: 0, borderColor: "#dc2626", color: "#dc2626", fontWeight: "700" }}
+              >
+                Quay lại Giỏ hàng
+              </Button>
+            </div>
+          )}
 
           {errorMsg && (
             <div
@@ -563,8 +635,14 @@ export default function CheckoutPage() {
                 size="lg"
                 block
                 loading={loading}
+                disabled={loading || hasOwnShopItems}
                 onClick={handlePlaceOrder}
-                style={{ marginTop: "20px" }}
+                title={hasOwnShopItems ? "Không thể tự mua sản phẩm từ chính shop của mình" : ""}
+                style={{
+                  marginTop: "20px",
+                  opacity: hasOwnShopItems ? 0.6 : 1,
+                  cursor: hasOwnShopItems ? "not-allowed" : "pointer",
+                }}
               >
                 {paymentMethod === "VNPAY" ? "Thanh Toán Qua VNPAY" : "Đặt Hàng (COD)"}
               </Button>

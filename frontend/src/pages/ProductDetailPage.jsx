@@ -12,6 +12,7 @@ import RatingStars from "../components/common/RatingStars";
 import { productService } from "../services/productService";
 import { cartService } from "../services/cartService";
 import { wishlistService } from "../services/wishlistService";
+import { sellerService } from "../services/sellerService";
 import { openChatWithShop } from "../services/chatService";
 import { useAuth } from "./Authcontext";
 import { formatCurrency, formatSoldCount } from "../utils/formatters";
@@ -26,6 +27,8 @@ import {
   RotateCcw,
   Tag,
   Check,
+  AlertTriangle,
+  ShieldAlert,
 } from "lucide-react";
 
 export default function ProductDetailPage() {
@@ -40,6 +43,22 @@ export default function ProductDetailPage() {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [relatedProducts, setRelatedProducts] = useState([]);
+  const [userShop, setUserShop] = useState(null);
+
+  useEffect(() => {
+    if (user?.userId) {
+      sellerService.getShopByOwnerId(user.userId).then((s) => setUserShop(s)).catch(() => {});
+    }
+  }, [user?.userId]);
+
+  const isShopOwner = !!(
+    user?.userId && (
+      (product?.shop?.ownerId && String(product.shop.ownerId) === String(user.userId)) ||
+      (product?.ownerId && String(product.ownerId) === String(user.userId)) ||
+      (userShop?.id && product?.shopId && String(userShop.id) === String(product.shopId)) ||
+      (userShop?.id && product?.shop?.id && String(userShop.id) === String(product.shop.id))
+    )
+  );
 
   useEffect(() => {
     const loadDetail = async () => {
@@ -84,6 +103,11 @@ export default function ProductDetailPage() {
   };
 
   const handleAddToCart = async () => {
+    if (isShopOwner) {
+      showToast("🚫 Bạn không thể tự thêm sản phẩm của chính shop mình vào giỏ hàng!");
+      return;
+    }
+
     try {
       setAddingToCart(true);
       const cartItem = {
@@ -108,6 +132,11 @@ export default function ProductDetailPage() {
   };
 
   const handleBuyNow = async () => {
+    if (isShopOwner) {
+      showToast("🚫 Bạn không thể tự đặt mua sản phẩm từ chính shop của mình!");
+      return;
+    }
+
     await handleAddToCart();
     window.location.href = "/cart";
   };
@@ -148,7 +177,7 @@ export default function ProductDetailPage() {
             top: "80px",
             right: "20px",
             zIndex: 9999,
-            backgroundColor: "#10b981",
+            backgroundColor: toastMessage.includes("🚫") ? "#ef4444" : "#10b981",
             color: "#ffffff",
             padding: "12px 20px",
             borderRadius: "var(--r-md)",
@@ -161,7 +190,7 @@ export default function ProductDetailPage() {
             animation: "fadeIn 0.2s ease-out",
           }}
         >
-          <Check size={18} />
+          {toastMessage.includes("🚫") ? <ShieldAlert size={18} /> : <Check size={18} />}
           <span>{toastMessage}</span>
         </div>
       )}
@@ -391,24 +420,63 @@ export default function ProductDetailPage() {
                 maxStock={selectedVariant?.stock || 50}
               />
 
+              {/* Shop Owner Warning Alert Banner */}
+              {isShopOwner && (
+                <div
+                  style={{
+                    backgroundColor: "#fff7ed",
+                    border: "1px solid #f97316",
+                    borderRadius: "var(--r-md)",
+                    padding: "12px 16px",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "10px",
+                    color: "#c2410c",
+                    marginTop: "12px",
+                  }}
+                >
+                  <AlertTriangle size={20} style={{ flexShrink: 0, color: "#ea580c", marginTop: "2px" }} />
+                  <div>
+                    <div style={{ fontWeight: "700", fontSize: "13px" }}>
+                      🏪 Đây là sản phẩm thuộc gian hàng của bạn!
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#9a3412", marginTop: "2px", lineHeight: "1.4" }}>
+                      Hệ thống tự động chặn chủ shop tự mua sản phẩm của chính mình nhằm đảm bảo tính minh bạch, chống buff đơn ảo, gian lận voucher và tự đánh giá sản phẩm.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* CTA Action Buttons */}
               <div style={{ display: "flex", gap: "14px", marginTop: "10px" }}>
                 <Button
                   variant="secondary"
                   size="lg"
                   loading={addingToCart}
+                  disabled={isShopOwner}
                   icon={ShoppingCart}
                   onClick={handleAddToCart}
-                  style={{ flex: 1 }}
+                  title={isShopOwner ? "Bạn không thể tự mua sản phẩm từ chính shop của mình" : ""}
+                  style={{
+                    flex: 1,
+                    opacity: isShopOwner ? 0.6 : 1,
+                    cursor: isShopOwner ? "not-allowed" : "pointer",
+                  }}
                 >
                   Thêm Vào Giỏ Hàng
                 </Button>
                 <Button
                   variant="primary"
                   size="lg"
+                  disabled={isShopOwner}
                   icon={Zap}
                   onClick={handleBuyNow}
-                  style={{ flex: 1 }}
+                  title={isShopOwner ? "Bạn không thể tự mua sản phẩm từ chính shop của mình" : ""}
+                  style={{
+                    flex: 1,
+                    opacity: isShopOwner ? 0.6 : 1,
+                    cursor: isShopOwner ? "not-allowed" : "pointer",
+                  }}
                 >
                   Mua Ngay
                 </Button>

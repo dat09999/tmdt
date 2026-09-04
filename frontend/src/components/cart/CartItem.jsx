@@ -5,6 +5,7 @@ import { formatCurrency } from "../../utils/formatters";
 export default function CartItem({
   item,
   selected = false,
+  isOwnItem = false,
   onSelectChange,
   onQuantityChange,
   onRemove,
@@ -19,18 +20,22 @@ export default function CartItem({
         padding: "16px 0",
         borderBottom: "1px solid var(--border-light)",
         gap: "12px",
+        opacity: isOwnItem ? 0.75 : 1,
+        backgroundColor: isOwnItem ? "rgba(254, 243, 199, 0.2)" : "transparent",
       }}
     >
       {/* Checkbox */}
       <input
         type="checkbox"
-        checked={selected}
+        checked={!isOwnItem && selected}
+        disabled={isOwnItem}
         onChange={(e) => onSelectChange(e.target.checked)}
+        title={isOwnItem ? "Bạn không thể tự mua sản phẩm từ chính shop của mình" : ""}
         style={{
           width: "18px",
           height: "18px",
           accentColor: "var(--primary)",
-          cursor: "pointer",
+          cursor: isOwnItem ? "not-allowed" : "pointer",
         }}
       />
 
@@ -80,6 +85,25 @@ export default function CartItem({
             }}
           >
             Phân loại: {item.variantSku}
+          </div>
+        )}
+
+        {isOwnItem && (
+          <div
+            style={{
+              fontSize: "11px",
+              color: "#c2410c",
+              backgroundColor: "#ffedd5",
+              border: "1px solid #fed7aa",
+              padding: "2px 6px",
+              borderRadius: "4px",
+              fontWeight: "600",
+              display: "inline-block",
+              marginBottom: "6px",
+              marginLeft: item.variantSku ? "6px" : "0",
+            }}
+          >
+            🚫 Sản phẩm của shop bạn
           </div>
         )}
 

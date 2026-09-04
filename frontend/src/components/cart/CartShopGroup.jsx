@@ -7,6 +7,7 @@ export default function CartShopGroup({
   shopName = "Cửa hàng chính hãng",
   items = [],
   selectedKeys,
+  isOwnShopItem,
   onSelectItem,
   onSelectShop,
   onQuantityChange,
@@ -14,8 +15,11 @@ export default function CartShopGroup({
 }) {
   const itemKey = (item) => `${item.productId}__${item.variantSku || ""}`;
 
+  const isOwnShop = isOwnShopItem ? items.some(isOwnShopItem) : false;
+
+  const validItems = isOwnShopItem ? items.filter((item) => !isOwnShopItem(item)) : items;
   const allShopItemsSelected =
-    items.length > 0 && items.every((item) => selectedKeys.has(itemKey(item)));
+    validItems.length > 0 && validItems.every((item) => selectedKeys.has(itemKey(item)));
 
   return (
     <div
@@ -24,7 +28,7 @@ export default function CartShopGroup({
         marginBottom: "16px",
         background: "var(--surface)",
         borderRadius: "var(--r-md)",
-        border: "1px solid var(--border-light)",
+        border: isOwnShop ? "1px solid #fed7aa" : "1px solid var(--border-light)",
         padding: "16px",
       }}
     >
@@ -40,42 +44,62 @@ export default function CartShopGroup({
       >
         <input
           type="checkbox"
-          checked={allShopItemsSelected}
+          checked={!isOwnShop && allShopItemsSelected}
+          disabled={isOwnShop}
           onChange={(e) => onSelectShop(items, e.target.checked)}
+          title={isOwnShop ? "Không thể chọn sản phẩm từ shop của chính bạn" : ""}
           style={{
             width: "18px",
             height: "18px",
             accentColor: "var(--primary)",
-            cursor: "pointer",
+            cursor: isOwnShop ? "not-allowed" : "pointer",
           }}
         />
         <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: "700", fontSize: "14px" }}>
-          <Store size={16} color="var(--primary)" />
+          <Store size={16} color={isOwnShop ? "#ea580c" : "var(--primary)"} />
           <span>{shopName}</span>
         </div>
-        <span
-          style={{
-            fontSize: "10px",
-            background: "#d0011b",
-            color: "#fff",
-            fontWeight: "800",
-            padding: "1px 5px",
-            borderRadius: "2px",
-          }}
-        >
-          Mall
-        </span>
+        {isOwnShop ? (
+          <span
+            style={{
+              fontSize: "11px",
+              background: "#ffedd5",
+              color: "#c2410c",
+              border: "1px solid #fed7aa",
+              fontWeight: "700",
+              padding: "2px 8px",
+              borderRadius: "4px",
+            }}
+          >
+            🏪 Shop của bạn (Không thể tự mua)
+          </span>
+        ) : (
+          <span
+            style={{
+              fontSize: "10px",
+              background: "#d0011b",
+              color: "#fff",
+              fontWeight: "800",
+              padding: "1px 5px",
+              borderRadius: "2px",
+            }}
+          >
+            Mall
+          </span>
+        )}
       </div>
 
       {/* Items list */}
       <div style={{ display: "flex", flexDirection: "column" }}>
         {items.map((item) => {
           const key = itemKey(item);
+          const isOwn = isOwnShopItem ? isOwnShopItem(item) : false;
           return (
             <CartItem
               key={key}
               item={item}
               selected={selectedKeys.has(key)}
+              isOwnItem={isOwn}
               onSelectChange={(checked) => onSelectItem(item, checked)}
               onQuantityChange={(qty) => onQuantityChange(item, qty)}
               onRemove={() => onRemoveItem(item)}
