@@ -1,23 +1,54 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { Play } from "lucide-react";
+
+const isVideoMedia = (media) => {
+  if (!media) return false;
+  if (typeof media === "string") {
+    return /\.(mp4|webm|ogg|mov|m4v|mkv)(\?.*)?$/i.test(media) || media.startsWith("data:video/");
+  }
+  if (media.imageVideo === "VIDEO" || media.type === "video") return true;
+  if (media.url) {
+    return /\.(mp4|webm|ogg|mov|m4v|mkv)(\?.*)?$/i.test(media.url) || media.url.startsWith("data:video/");
+  }
+  return false;
+};
 
 export default function ProductGallery({ images = [], name = "" }) {
-  const imageList =
+  const mediaList =
     images && images.length > 0
-      ? images
+      ? images.map((item, idx) => {
+          const url = typeof item === "string" ? item : item.url;
+          const isVideo = isVideoMedia(item);
+          return {
+            id: item.id || item.key || idx,
+            url,
+            isMain: item.isMain,
+            isVideo,
+            original: item,
+          };
+        })
       : [
           {
             id: "default",
             url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
+            isVideo: false,
           },
         ];
 
-  const [activeImage, setActiveImage] = useState(
-    imageList.find((img) => img.isMain)?.url || imageList[0]?.url
-  );
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    if (mediaList.length > 0) {
+      const mainIdx = mediaList.findIndex((m) => m.isMain);
+      setActiveIndex(mainIdx >= 0 ? mainIdx : 0);
+    }
+  }, [images]);
+
+  const activeMedia = mediaList[activeIndex] || mediaList[0];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-      {/* Main Large Image */}
+      {/* Main Large Media */}
       <div
         className="card"
         style={{
@@ -30,31 +61,56 @@ export default function ProductGallery({ images = [], name = "" }) {
           border: "1px solid var(--border-light)",
         }}
       >
-        <img
-          src={activeImage}
-          alt={name}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "contain",
-            transition: "all 0.3s ease",
-          }}
-        />
+        {activeMedia.isVideo ? (
+          <video
+            key={activeMedia.url}
+            src={activeMedia.url}
+            controls
+            autoPlay
+            muted
+            loop
+            playsInline
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              backgroundColor: "#000",
+            }}
+          />
+        ) : (
+          <img
+            src={activeMedia.url}
+            alt={name}
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600";
+            }}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              transition: "all 0.3s ease",
+            }}
+          />
+        )}
       </div>
 
       {/* Thumbnails Row */}
-      {imageList.length > 1 && (
+      {mediaList.length > 1 && (
         <div style={{ display: "flex", gap: "10px", overflowX: "auto", paddingBottom: "4px" }}>
-          {imageList.map((img, idx) => {
-            const isCurrent = activeImage === img.url;
+          {mediaList.map((media, idx) => {
+            const isCurrent = activeIndex === idx;
             return (
               <button
-                key={img.id || idx}
-                onClick={() => setActiveImage(img.url)}
-                onMouseEnter={() => setActiveImage(img.url)}
+                key={media.id || idx}
+                onClick={() => setActiveIndex(idx)}
+                onMouseEnter={() => setActiveIndex(idx)}
                 style={{
                   width: "70px",
                   height: "70px",
@@ -66,13 +122,51 @@ export default function ProductGallery({ images = [], name = "" }) {
                   flexShrink: 0,
                   transition: "all 0.15s",
                   cursor: "pointer",
+                  position: "relative",
                 }}
               >
-                <img
-                  src={img.url}
-                  alt={`Thumbnail ${idx + 1}`}
-                  style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "4px" }}
-                />
+                {media.isVideo ? (
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      position: "relative",
+                      backgroundColor: "#111",
+                      borderRadius: "4px",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <video
+                      src={media.url}
+                      muted
+                      preload="metadata"
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        backgroundColor: "rgba(0, 0, 0, 0.4)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#fff",
+                      }}
+                    >
+                      <Play size={18} fill="#fff" />
+                    </div>
+                  </div>
+                ) : (
+                  <img
+                    src={media.url}
+                    alt={`Thumbnail ${idx + 1}`}
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100";
+                    }}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "4px" }}
+                  />
+                )}
               </button>
             );
           })}

@@ -65,7 +65,32 @@ export default function ProductDetailPage() {
       try {
         setLoading(true);
         const data = await productService.getProductById(productId);
-        setProduct(data);
+
+        if (data?.shopId) {
+          try {
+            const shopData = await sellerService.getShopById(data.shopId);
+            if (shopData) {
+              data.shop = {
+                id: shopData.id,
+                ownerId: shopData.ownerId,
+                name: shopData.shopName || shopData.name || "Gian Hàng DoMix",
+                shopName: shopData.shopName || shopData.name || "Gian Hàng DoMix",
+                avatar: shopData.logo || shopData.coverImage || "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=100&auto=format&fit=crop&q=60",
+                logo: shopData.logo,
+                rating: Number(shopData.rating) > 0 ? Number(shopData.rating).toFixed(1) : "5.0",
+                totalReviews: shopData.totalReviews || 0,
+                totalSales: shopData.totalSales || 0,
+                productsCount: 1,
+                responseTime: "trong vài phút",
+                responseRate: "100%",
+                description: shopData.description,
+              };
+            }
+          } catch (shopErr) {
+            console.warn("Could not fetch shop details:", shopErr);
+          }
+        }
+
         if (data?.variants?.length > 0) {
           setSelectedVariant(data.variants[0]);
         }
@@ -85,9 +110,19 @@ export default function ProductDetailPage() {
           data.reviewCount = ratingSummary.totalReviews;
         }
 
-        // Load related products
+        // Load related products & count shop products
         const allProds = await productService.getProducts();
-        setRelatedProducts((allProds || []).filter((p) => p.id !== productId).slice(0, 6));
+        if (Array.isArray(allProds)) {
+          setRelatedProducts(allProds.filter((p) => p.id !== productId).slice(0, 6));
+          if (data?.shop) {
+            const shopProds = allProds.filter((p) => p.shopId === data.shopId);
+            if (shopProds.length > 0) {
+              data.shop.productsCount = shopProds.length;
+            }
+          }
+        }
+
+        setProduct(data);
       } catch (err) {
         console.error("Failed to load product detail:", err);
       } finally {
@@ -503,8 +538,12 @@ export default function ProductDetailPage() {
             {/* Shop Avatar & Name */}
             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
               <img
-                src={product.shop?.avatar || "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=100&auto=format&fit=crop&q=60"}
-                alt={product.shop?.name}
+                src={product.shop?.avatar || product.shop?.logo || "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=100&auto=format&fit=crop&q=60"}
+                alt={product.shop?.name || product.shop?.shopName || "Shop"}
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=100&auto=format&fit=crop&q=60";
+                }}
                 style={{
                   width: "64px",
                   height: "64px",
@@ -516,7 +555,7 @@ export default function ProductDetailPage() {
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <strong style={{ fontSize: "16px", color: "var(--text)" }}>
-                    {product.shop?.name || "Cửa Hàng Chính Hãng"}
+                    {product.shop?.name || product.shop?.shopName || "Gian Hàng DoMix"}
                   </strong>
                   <span
                     style={{
@@ -549,7 +588,7 @@ export default function ProductDetailPage() {
                     variant="ghost"
                     size="sm"
                     icon={Store}
-                    onClick={() => (window.location.href = `/products?category=${product.categoryId}`)}
+                    onClick={() => (window.location.href = `/products?shopId=${product.shopId || product.shop?.id || ""}`)}
                   >
                     Xem Shop
                   </Button>
@@ -568,15 +607,15 @@ export default function ProductDetailPage() {
             >
               <div>
                 <span style={{ color: "var(--text-secondary)" }}>Đánh Giá: </span>
-                <strong style={{ color: "var(--primary)" }}>{product.shop?.rating || "4.9"} / 5</strong>
+                <strong style={{ color: "var(--primary)" }}>{product.shop?.rating || "5.0"} / 5</strong>
               </div>
               <div>
                 <span style={{ color: "var(--text-secondary)" }}>Sản Phẩm: </span>
-                <strong style={{ color: "var(--primary)" }}>{product.shop?.productsCount || 120}</strong>
+                <strong style={{ color: "var(--primary)" }}>{product.shop?.productsCount || 1}</strong>
               </div>
               <div>
                 <span style={{ color: "var(--text-secondary)" }}>Tỉ Lệ Phản Hồi: </span>
-                <strong style={{ color: "var(--primary)" }}>{product.shop?.responseRate || "99%"}</strong>
+                <strong style={{ color: "var(--primary)" }}>{product.shop?.responseRate || "100%"}</strong>
               </div>
             </div>
           </div>

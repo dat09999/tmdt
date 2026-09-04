@@ -15,6 +15,17 @@ export const sellerService = {
     );
   },
 
+  // GET /shops/{shopId}
+  async getShopById(shopId) {
+    if (!shopId) return null;
+    return safeFetch(
+      async () => {
+        return await authFetch(`${API_BASE_URL}/shops/${shopId}`);
+      },
+      null
+    );
+  },
+
   // POST /shops - Body: CreateShopRequest
   async createShop(shopData) {
     return safeFetch(
