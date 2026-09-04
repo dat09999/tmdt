@@ -60,6 +60,60 @@ public class ShopController {
         return ResponseEntity.ok(shopService.getShopStatistics(shopId));
     }
 
+    /**
+     * Biểu đồ doanh thu và số đơn theo ngày.
+     * GET /shops/{shopId}/analytics/revenue?days=7
+     */
+    @GetMapping("/{shopId}/analytics/revenue")
+    public ResponseEntity<List<DailyRevenueResponse>> getRevenueAnalytics(
+            @PathVariable String shopId,
+            @RequestParam(defaultValue = "7") int days) {
+        return ResponseEntity.ok(shopService.getRevenueAnalytics(shopId, days));
+    }
+
+    /**
+     * Biểu đồ tròn phân bố trạng thái đơn hàng (Pie/Donut chart).
+     * GET /shops/{shopId}/analytics/order-status
+     */
+    @GetMapping("/{shopId}/analytics/order-status")
+    public ResponseEntity<OrderStatusDistributionResponse> getOrderStatusAnalytics(
+            @PathVariable String shopId) {
+        return ResponseEntity.ok(shopService.getOrderStatusAnalytics(shopId));
+    }
+
+    /**
+     * Top sản phẩm bán chạy nhất của shop.
+     * GET /shops/{shopId}/analytics/top-products?limit=5
+     */
+    @GetMapping("/{shopId}/analytics/top-products")
+    public ResponseEntity<List<TopProductResponse>> getTopSellingProducts(
+            @PathVariable String shopId,
+            @RequestParam(defaultValue = "5") int limit) {
+        return ResponseEntity.ok(shopService.getTopSellingProducts(shopId, limit));
+    }
+
+    /**
+     * Cảnh báo sản phẩm / biến thể sắp hết hàng (tồn kho <= threshold).
+     * GET /shops/{shopId}/analytics/low-stock?threshold=5
+     */
+    @GetMapping("/{shopId}/analytics/low-stock")
+    public ResponseEntity<List<LowStockResponse>> getLowStockAlerts(
+            @PathVariable String shopId,
+            @RequestParam(defaultValue = "5") int threshold) {
+        return ResponseEntity.ok(shopService.getLowStockAlerts(shopId, threshold));
+    }
+
+    /**
+     * Tổng hợp toàn bộ dữ liệu Dashboard cho trang bán hàng trong 1 lần gọi.
+     * GET /shops/{shopId}/analytics/overview?days=7
+     */
+    @GetMapping("/{shopId}/analytics/overview")
+    public ResponseEntity<ShopDashboardResponse> getDashboardOverview(
+            @PathVariable String shopId,
+            @RequestParam(defaultValue = "7") int days) {
+        return ResponseEntity.ok(shopService.getDashboardOverview(shopId, days));
+    }
+
     @GetMapping("/{shopId}/follow")
     public ResponseEntity<FollowShopResponse> followStatus(@PathVariable String shopId, @RequestParam String userId) {
         return ResponseEntity.ok(shopService.getFollowStatus(userId, shopId));

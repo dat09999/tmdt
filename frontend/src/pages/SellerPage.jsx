@@ -31,6 +31,13 @@ import {
   ArrowRight,
   ShieldCheck,
   UserCheck,
+  BarChart2,
+  PieChart,
+  AlertTriangle,
+  Award,
+  Flame,
+  ArrowUpRight,
+  RefreshCw,
 } from "lucide-react";
 
 export default function SellerPage() {
@@ -46,6 +53,12 @@ export default function SellerPage() {
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
+
+  // Analytics & Charts State
+  const [analyticsDays, setAnalyticsDays] = useState(7); // 7 or 30
+  const [analyticsData, setAnalyticsData] = useState(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [hoveredBar, setHoveredBar] = useState(null);
 
   // Create Shop Onboarding Form
   const [creatingShop, setCreatingShop] = useState(false);
@@ -85,6 +98,19 @@ export default function SellerPage() {
     setTimeout(() => setToastMessage(""), 3500);
   };
 
+  const fetchAnalytics = async (shopId, days = analyticsDays) => {
+    if (!shopId) return;
+    try {
+      setLoadingAnalytics(true);
+      const data = await sellerService.getAnalyticsOverview(shopId, days);
+      setAnalyticsData(data);
+    } catch (err) {
+      console.error("Fetch analytics overview failed:", err);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
+
   // 1. Fetch user shop and shop data
   const loadShopAndData = async () => {
     if (!user?.userId) {
@@ -99,16 +125,18 @@ export default function SellerPage() {
       if (userShop && userShop.id) {
         setShop(userShop);
         setLoading(true);
-        const [sData, pData, oData, cData] = await Promise.all([
+        const [sData, pData, oData, cData, aData] = await Promise.all([
           sellerService.getDashboardStats(userShop.id),
           sellerService.getProducts(userShop.id),
           sellerService.getOrders(userShop.id),
           sellerService.getCoupons(userShop.id),
+          sellerService.getAnalyticsOverview(userShop.id, analyticsDays),
         ]);
         setStats(sData);
         setProducts(pData || []);
         setOrders(oData || []);
         setCoupons(cData || []);
+        setAnalyticsData(aData);
       } else {
         setShop(null);
       }
@@ -124,6 +152,13 @@ export default function SellerPage() {
   useEffect(() => {
     loadShopAndData();
   }, [user?.userId]);
+
+  const handleDaysChange = (days) => {
+    setAnalyticsDays(days);
+    if (shop?.id) {
+      fetchAnalytics(shop.id, days);
+    }
+  };
 
   // Handle Create Shop
   const handleCreateShop = async (e) => {
@@ -610,62 +645,215 @@ export default function SellerPage() {
                 ))}
               </div>
 
-              {/* TAB 1: DASHBOARD */}
+              {/* TAB 1: DASHBOARD & ANALYTICS */}
               {activeTab === "dashboard" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-                  {/* Stat Metric Cards */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                  {/* Dashboard Header with Time Filter */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                      gap: "12px",
+                      padding: "16px 20px",
+                      backgroundColor: "var(--surface)",
+                      borderRadius: "var(--r-lg)",
+                      border: "1px solid var(--border-light)",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div
+                        style={{
+                          width: "36px",
+                          height: "36px",
+                          borderRadius: "8px",
+                          backgroundColor: "var(--primary-light)",
+                          color: "var(--primary)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <BarChart2 size={20} />
+                      </div>
+                      <div>
+                        <h2 style={{ fontSize: "16px", fontWeight: "800", color: "var(--text)", margin: 0 }}>
+                          THỐNG KÊ HOẠT ĐỘNG GIAN HÀNG
+                        </h2>
+                        <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                          Cập nhật theo thời gian thực từ hệ thống
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Time Range Filter Toggle */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <button
+                        onClick={() => handleDaysChange(7)}
+                        style={{
+                          padding: "6px 14px",
+                          borderRadius: "var(--r-sm)",
+                          border: analyticsDays === 7 ? "1.5px solid var(--primary)" : "1px solid var(--border)",
+                          backgroundColor: analyticsDays === 7 ? "var(--primary-light)" : "var(--surface)",
+                          color: analyticsDays === 7 ? "var(--primary)" : "var(--text)",
+                          fontWeight: analyticsDays === 7 ? "700" : "500",
+                          fontSize: "12.5px",
+                          cursor: "pointer",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        7 Ngày Gần Nhất
+                      </button>
+
+                      <button
+                        onClick={() => handleDaysChange(30)}
+                        style={{
+                          padding: "6px 14px",
+                          borderRadius: "var(--r-sm)",
+                          border: analyticsDays === 30 ? "1.5px solid var(--primary)" : "1px solid var(--border)",
+                          backgroundColor: analyticsDays === 30 ? "var(--primary-light)" : "var(--surface)",
+                          color: analyticsDays === 30 ? "var(--primary)" : "var(--text)",
+                          fontWeight: analyticsDays === 30 ? "700" : "500",
+                          fontSize: "12.5px",
+                          cursor: "pointer",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        30 Ngày Gần Nhất
+                      </button>
+
+                      <button
+                        onClick={() => shop?.id && fetchAnalytics(shop.id, analyticsDays)}
+                        title="Làm mới số liệu"
+                        style={{
+                          padding: "7px 10px",
+                          borderRadius: "var(--r-sm)",
+                          border: "1px solid var(--border)",
+                          backgroundColor: "var(--surface)",
+                          color: "var(--text-secondary)",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <RefreshCw size={14} className={loadingAnalytics ? "spin" : ""} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Summary Metric Cards */}
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
                       gap: "16px",
                     }}
                   >
-                    <div className="card" style={{ padding: "20px", backgroundColor: "#fff" }}>
-                      <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600" }}>
-                        Doanh Thu
+                    {/* Revenue Card */}
+                    <div
+                      className="card"
+                      style={{
+                        padding: "20px",
+                        backgroundColor: "#fff",
+                        borderRadius: "var(--r-lg)",
+                        borderLeft: "4px solid var(--primary)",
+                      }}
+                    >
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textTransform: "uppercase" }}>
+                        Tổng Doanh Thu
                       </div>
-                      <div style={{ fontSize: "24px", fontWeight: "900", color: "var(--primary)", marginTop: "6px" }}>
-                        {formatCurrency(stats?.totalRevenue || 0)}
+                      <div style={{ fontSize: "22px", fontWeight: "900", color: "var(--primary)", marginTop: "6px" }}>
+                        {formatCurrency(analyticsData?.summary?.revenue ?? stats?.totalRevenue ?? 0)}
                       </div>
-                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
-                        Theo số liệu thực tế
+                      <div style={{ fontSize: "11px", color: "#059669", marginTop: "4px", display: "flex", alignItems: "center", gap: "3px" }}>
+                        <TrendingUp size={12} />
+                        <span>Trong {analyticsDays} ngày qua</span>
                       </div>
                     </div>
 
-                    <div className="card" style={{ padding: "20px", backgroundColor: "#fff" }}>
-                      <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600" }}>
+                    {/* Order Count Card */}
+                    <div
+                      className="card"
+                      style={{
+                        padding: "20px",
+                        backgroundColor: "#fff",
+                        borderRadius: "var(--r-lg)",
+                        borderLeft: "4px solid #0284c7",
+                      }}
+                    >
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textTransform: "uppercase" }}>
                         Tổng Số Đơn Hàng
                       </div>
-                      <div style={{ fontSize: "24px", fontWeight: "900", color: "var(--text)", marginTop: "6px" }}>
-                        {orders.length} đơn
+                      <div style={{ fontSize: "22px", fontWeight: "900", color: "#0284c7", marginTop: "6px" }}>
+                        {analyticsData?.summary?.orderCount ?? orders.length} đơn
                       </div>
                       <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
-                        {countPending} đơn đang chờ xác nhận
+                        {countPending} đơn đang chờ duyệt
                       </div>
                     </div>
 
-                    <div className="card" style={{ padding: "20px", backgroundColor: "#fff" }}>
-                      <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600" }}>
+                    {/* Total Sales Units Card */}
+                    <div
+                      className="card"
+                      style={{
+                        padding: "20px",
+                        backgroundColor: "#fff",
+                        borderRadius: "var(--r-lg)",
+                        borderLeft: "4px solid #8b5cf6",
+                      }}
+                    >
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textTransform: "uppercase" }}>
+                        Sản Phẩm Đã Bán
+                      </div>
+                      <div style={{ fontSize: "22px", fontWeight: "900", color: "#8b5cf6", marginTop: "6px" }}>
+                        {analyticsData?.summary?.totalSales ?? 0} sản phẩm
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
+                        Đã giao thành công
+                      </div>
+                    </div>
+
+                    {/* Shop Rating Card */}
+                    <div
+                      className="card"
+                      style={{
+                        padding: "20px",
+                        backgroundColor: "#fff",
+                        borderRadius: "var(--r-lg)",
+                        borderLeft: "4px solid #f59e0b",
+                      }}
+                    >
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textTransform: "uppercase" }}>
                         Đánh Giá Shop
                       </div>
-                      <div style={{ fontSize: "24px", fontWeight: "900", color: "#f59e0b", marginTop: "6px" }}>
-                        ⭐ {shop.rating || stats?.rating || 5.0} / 5.0
+                      <div style={{ fontSize: "22px", fontWeight: "900", color: "#f59e0b", marginTop: "6px" }}>
+                        ⭐ {Number(analyticsData?.summary?.averageRating ?? stats?.rating ?? 5.0).toFixed(1)} / 5.0
                       </div>
                       <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
                         Tỉ lệ phản hồi chat: {stats?.responseRate || "100%"}
                       </div>
                     </div>
 
-                    <div className="card" style={{ padding: "20px", backgroundColor: "#fff" }}>
-                      <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: "600" }}>
+                    {/* Active Products Card */}
+                    <div
+                      className="card"
+                      style={{
+                        padding: "20px",
+                        backgroundColor: "#fff",
+                        borderRadius: "var(--r-lg)",
+                        borderLeft: "4px solid #10b981",
+                      }}
+                    >
+                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textTransform: "uppercase" }}>
                         Sản Phẩm Đang Bán
                       </div>
-                      <div style={{ fontSize: "24px", fontWeight: "900", color: "var(--text)", marginTop: "6px" }}>
-                        {products.length} mặt hàng
+                      <div style={{ fontSize: "22px", fontWeight: "900", color: "#10b981", marginTop: "6px" }}>
+                        {analyticsData?.summary?.productCount ?? products.length} mặt hàng
                       </div>
                       <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
-                        {stats?.outOfStockProducts || 0} mặt hàng hết kho
+                        {analyticsData?.lowStockAlerts?.length || 0} biến thể sắp hết kho
                       </div>
                     </div>
                   </div>
@@ -674,20 +862,20 @@ export default function SellerPage() {
                   <div
                     className="card"
                     style={{
-                      padding: "24px",
+                      padding: "20px 24px",
                       backgroundColor: "var(--surface)",
                       borderRadius: "var(--r-lg)",
                       border: "1px solid var(--border-light)",
                     }}
                   >
-                    <h3 style={{ fontSize: "16px", fontWeight: "800", marginBottom: "16px" }}>
+                    <h3 style={{ fontSize: "15px", fontWeight: "800", marginBottom: "14px", color: "var(--text)" }}>
                       Danh Sách Việc Cần Làm (Bấm để xử lý ngay)
                     </h3>
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                        gap: "14px",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+                        gap: "12px",
                       }}
                     >
                       <div
@@ -696,7 +884,7 @@ export default function SellerPage() {
                           setActiveTab("orders");
                         }}
                         style={{
-                          padding: "16px",
+                          padding: "14px",
                           backgroundColor: "var(--primary-light)",
                           borderRadius: "8px",
                           border: "1px solid var(--border-primary)",
@@ -707,7 +895,7 @@ export default function SellerPage() {
                         onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.02)")}
                         onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                       >
-                        <strong style={{ fontSize: "24px", color: "var(--primary)", display: "block" }}>
+                        <strong style={{ fontSize: "22px", color: "var(--primary)", display: "block" }}>
                           {countPending}
                         </strong>
                         <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Chờ Xác Nhận</span>
@@ -720,7 +908,7 @@ export default function SellerPage() {
                           setActiveTab("orders");
                         }}
                         style={{
-                          padding: "16px",
+                          padding: "14px",
                           backgroundColor: "var(--surface-muted)",
                           borderRadius: "8px",
                           border: "1px solid var(--border)",
@@ -731,7 +919,7 @@ export default function SellerPage() {
                         onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.02)")}
                         onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                       >
-                        <strong style={{ fontSize: "24px", color: "var(--info)", display: "block" }}>
+                        <strong style={{ fontSize: "22px", color: "var(--info)", display: "block" }}>
                           {countProcessing}
                         </strong>
                         <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Đang Chuẩn Bị</span>
@@ -744,7 +932,7 @@ export default function SellerPage() {
                           setActiveTab("orders");
                         }}
                         style={{
-                          padding: "16px",
+                          padding: "14px",
                           backgroundColor: "#ecfdf5",
                           borderRadius: "8px",
                           border: "1px solid #a7f3d0",
@@ -755,7 +943,7 @@ export default function SellerPage() {
                         onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.02)")}
                         onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                       >
-                        <strong style={{ fontSize: "24px", color: "#059669", display: "block" }}>
+                        <strong style={{ fontSize: "22px", color: "#059669", display: "block" }}>
                           {countShipping}
                         </strong>
                         <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Đang Giao Hàng</span>
@@ -765,7 +953,7 @@ export default function SellerPage() {
                       <div
                         onClick={() => (window.location.href = "/refunds")}
                         style={{
-                          padding: "16px",
+                          padding: "14px",
                           backgroundColor: "#fff7ed",
                           borderRadius: "8px",
                           border: "1px solid #fed7aa",
@@ -776,10 +964,538 @@ export default function SellerPage() {
                         onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.02)")}
                         onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                       >
-                        <strong style={{ fontSize: "24px", color: "#ea580c", display: "block" }}>0</strong>
-                        <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Trả Hàng / Hoàn Tiền</span>
+                        <strong style={{ fontSize: "22px", color: "#ea580c", display: "block" }}>
+                          {analyticsData?.orderStatusDistribution?.statusCounts?.REFUNDED || 0}
+                        </strong>
+                        <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Yêu Cầu Hoàn Tiền</span>
                         <div style={{ fontSize: "11px", color: "#ea580c", marginTop: "2px" }}>Xử lý khiếu nại →</div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* CHARTS SECTION (2 COLUMNS: REVENUE TREND + ORDER STATUS BREAKDOWN) */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))",
+                      gap: "20px",
+                    }}
+                  >
+                    {/* CHART 1: Biểu đồ Doanh Thu & Số Đơn Theo Ngày */}
+                    <div
+                      className="card"
+                      style={{
+                        padding: "22px",
+                        backgroundColor: "var(--surface)",
+                        borderRadius: "var(--r-lg)",
+                        border: "1px solid var(--border-light)",
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <BarChart2 size={18} color="var(--primary)" />
+                          <strong style={{ fontSize: "15px", color: "var(--text)" }}>
+                            Biểu Đồ Doanh Thu & Đơn Hàng ({analyticsDays} Ngày)
+                          </strong>
+                        </div>
+                        <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", fontWeight: "600" }}>
+                          Cột: Doanh thu | Chấm: Đơn
+                        </div>
+                      </div>
+
+                      {/* SVG Bar & Trend Chart */}
+                      {(() => {
+                        const chartList = analyticsData?.revenueChart || [];
+                        if (chartList.length === 0) {
+                          return (
+                            <div style={{ padding: "60px 0", textAlign: "center", color: "var(--text-tertiary)", fontSize: "13px" }}>
+                              Chưa có dữ liệu giao dịch trong khoảng thời gian này.
+                            </div>
+                          );
+                        }
+
+                        const maxRevenue = Math.max(...chartList.map((d) => d.revenue || 0), 1000000);
+                        const totalPeriodRevenue = chartList.reduce((sum, d) => sum + (d.revenue || 0), 0);
+                        const totalPeriodOrders = chartList.reduce((sum, d) => sum + (d.orderCount || 0), 0);
+
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+                            {/* Chart Bars Grid */}
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "flex-end",
+                                gap: "8px",
+                                height: "200px",
+                                padding: "10px 0 30px",
+                                borderBottom: "1px solid var(--border-light)",
+                                position: "relative",
+                              }}
+                            >
+                              {chartList.map((item, idx) => {
+                                const rev = item.revenue || 0;
+                                const ordersCount = item.orderCount || 0;
+                                const heightPercent = Math.max(8, Math.round((rev / maxRevenue) * 100));
+                                const dateLabel = (item.date || "").split("-").slice(1).join("/");
+                                const isHovered = hoveredBar === idx;
+
+                                return (
+                                  <div
+                                    key={idx}
+                                    onMouseEnter={() => setHoveredBar(idx)}
+                                    onMouseLeave={() => setHoveredBar(null)}
+                                    style={{
+                                      flex: 1,
+                                      height: "100%",
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      justifyContent: "flex-end",
+                                      alignItems: "center",
+                                      position: "relative",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    {/* Tooltip on hover */}
+                                    {isHovered && (
+                                      <div
+                                        style={{
+                                          position: "absolute",
+                                          bottom: `calc(${heightPercent}% + 12px)`,
+                                          backgroundColor: "rgba(17, 24, 39, 0.95)",
+                                          color: "#fff",
+                                          padding: "8px 12px",
+                                          borderRadius: "6px",
+                                          fontSize: "11px",
+                                          whiteSpace: "nowrap",
+                                          zIndex: 100,
+                                          boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                                          pointerEvents: "none",
+                                          textAlign: "center",
+                                        }}
+                                      >
+                                        <div style={{ fontWeight: "700", color: "#fca5a5" }}>{item.date}</div>
+                                        <div>Doanh thu: <strong>{formatCurrency(rev)}</strong></div>
+                                        <div>Số đơn hàng: <strong>{ordersCount} đơn</strong></div>
+                                      </div>
+                                    )}
+
+                                    {/* Order dot indicator */}
+                                    {ordersCount > 0 && (
+                                      <div
+                                        style={{
+                                          width: "8px",
+                                          height: "8px",
+                                          borderRadius: "50%",
+                                          backgroundColor: "#f59e0b",
+                                          marginBottom: "4px",
+                                          boxShadow: "0 0 0 2px #fff",
+                                        }}
+                                        title={`${ordersCount} đơn hàng`}
+                                      />
+                                    )}
+
+                                    {/* Bar Pillar */}
+                                    <div
+                                      style={{
+                                        width: "100%",
+                                        maxWidth: "36px",
+                                        height: `${heightPercent}%`,
+                                        backgroundColor: isHovered ? "var(--primary)" : "rgba(238, 77, 45, 0.75)",
+                                        borderRadius: "4px 4px 0 0",
+                                        transition: "all 0.2s",
+                                        transform: isHovered ? "scaleY(1.04)" : "scaleY(1)",
+                                        transformOrigin: "bottom",
+                                      }}
+                                    />
+
+                                    {/* Date Label */}
+                                    <span
+                                      style={{
+                                        position: "absolute",
+                                        bottom: "-24px",
+                                        fontSize: "10.5px",
+                                        fontWeight: isHovered ? "800" : "500",
+                                        color: isHovered ? "var(--primary)" : "var(--text-tertiary)",
+                                      }}
+                                    >
+                                      {dateLabel}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Chart Footer stats */}
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                marginTop: "16px",
+                                paddingTop: "10px",
+                                fontSize: "12px",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              <div>
+                                <span>Tổng {analyticsDays} ngày: </span>
+                                <strong style={{ color: "var(--primary)", fontWeight: "800" }}>
+                                  {formatCurrency(totalPeriodRevenue)}
+                                </strong>
+                              </div>
+                              <div>
+                                <span>Tổng số đơn: </span>
+                                <strong style={{ color: "#0284c7", fontWeight: "800" }}>
+                                  {totalPeriodOrders} đơn
+                                </strong>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* CHART 2: Biểu Đồ Phân Bố Trạng Thái Đơn Hàng */}
+                    <div
+                      className="card"
+                      style={{
+                        padding: "22px",
+                        backgroundColor: "var(--surface)",
+                        borderRadius: "var(--r-lg)",
+                        border: "1px solid var(--border-light)",
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <PieChart size={18} color="#0284c7" />
+                          <strong style={{ fontSize: "15px", color: "var(--text)" }}>
+                            Phân Bố Trạng Thái Đơn Hàng
+                          </strong>
+                        </div>
+                        <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600" }}>
+                          Tổng {analyticsData?.orderStatusDistribution?.totalOrders || orders.length} đơn
+                        </span>
+                      </div>
+
+                      {/* Status Progress Bars */}
+                      {(() => {
+                        const statusCounts = analyticsData?.orderStatusDistribution?.statusCounts || {
+                          PENDING: countPending,
+                          PROCESSING: countProcessing,
+                          SHIPPING: countShipping,
+                          COMPLETED: orders.filter((o) => (o.orderStatus || "").toUpperCase() === "DELIVERED").length,
+                          CANCELED: orders.filter((o) => (o.orderStatus || "").toUpperCase() === "CANCELED").length,
+                          REFUNDED: 0,
+                        };
+
+                        const total = Object.values(statusCounts).reduce((a, b) => a + b, 0) || 1;
+
+                        const statusConfig = [
+                          { key: "COMPLETED", label: "Đã hoàn thành / Đã giao", color: "#10b981", bg: "#ecfdf5", count: statusCounts.COMPLETED || 0 },
+                          { key: "SHIPPING", label: "Đang giao hàng", color: "#0284c7", bg: "#e0f2fe", count: statusCounts.SHIPPING || 0 },
+                          { key: "PROCESSING", label: "Đang chuẩn bị hàng", color: "#6366f1", bg: "#eef2ff", count: statusCounts.PROCESSING || 0 },
+                          { key: "PENDING", label: "Chờ xác nhận", color: "#f59e0b", bg: "#fef3c7", count: statusCounts.PENDING || 0 },
+                          { key: "CANCELED", label: "Đã hủy", color: "#ef4444", bg: "#fef2f2", count: statusCounts.CANCELED || 0 },
+                          { key: "REFUNDED", label: "Trả hàng / Hoàn tiền", color: "#ea580c", bg: "#fff7ed", count: statusCounts.REFUNDED || 0 },
+                        ];
+
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "12px", flex: 1, justifyContent: "center" }}>
+                            {statusConfig.map((item) => {
+                              const pct = Math.round((item.count / total) * 100);
+                              return (
+                                <div
+                                  key={item.key}
+                                  onClick={() => {
+                                    setOrderStatusFilter(item.key === "COMPLETED" ? "DELIVERED" : item.key);
+                                    setActiveTab("orders");
+                                  }}
+                                  style={{ cursor: "pointer", transition: "transform 0.1s" }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.transform = "translateX(4px)")}
+                                  onMouseLeave={(e) => (e.currentTarget.style.transform = "translateX(0)")}
+                                >
+                                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px", marginBottom: "4px" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                      <div style={{ width: "10px", height: "10px", borderRadius: "50%", backgroundColor: item.color }} />
+                                      <span style={{ fontWeight: "600", color: "var(--text)" }}>{item.label}</span>
+                                    </div>
+                                    <div style={{ fontWeight: "700", color: "var(--text)" }}>
+                                      {item.count} đơn <span style={{ color: "var(--text-tertiary)", fontWeight: "400" }}>({pct}%)</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Progress bar line */}
+                                  <div style={{ width: "100%", height: "7px", borderRadius: "99px", backgroundColor: "var(--border-light)", overflow: "hidden" }}>
+                                    <div
+                                      style={{
+                                        width: `${pct}%`,
+                                        height: "100%",
+                                        backgroundColor: item.color,
+                                        borderRadius: "99px",
+                                        transition: "width 0.5s ease-out",
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* INSIGHTS SECTION (2 COLUMNS: TOP PRODUCTS LEADERBOARD + LOW STOCK ALERTS) */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr)))",
+                      gap: "20px",
+                    }}
+                  >
+                    {/* COLUMN 1: Top 5 Sản Phẩm Bán Chạy Nhất */}
+                    <div
+                      className="card"
+                      style={{
+                        padding: "22px",
+                        backgroundColor: "var(--surface)",
+                        borderRadius: "var(--r-lg)",
+                        border: "1px solid var(--border-light)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <Flame size={18} color="var(--primary)" />
+                          <strong style={{ fontSize: "15px", color: "var(--text)" }}>
+                            Top 5 Sản Phẩm Bán Chạy Nhất
+                          </strong>
+                        </div>
+                        <span style={{ fontSize: "11.5px", color: "var(--primary)", fontWeight: "700" }}>
+                          Xếp hạng theo lượt bán
+                        </span>
+                      </div>
+
+                      {/* Top Products Table / List */}
+                      {(() => {
+                        const topList = analyticsData?.topProducts || [];
+                        if (topList.length === 0) {
+                          return (
+                            <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-tertiary)", fontSize: "13px" }}>
+                              Chưa có sản phẩm nào phát sinh lượt bán.
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                            {topList.map((prod, idx) => {
+                              const rankMedal = idx === 0 ? "🥇 #1" : idx === 1 ? "🥈 #2" : idx === 2 ? "🥉 #3" : `#${idx + 1}`;
+                              const rankBg = idx === 0 ? "#fef3c7" : idx === 1 ? "#f3f4f6" : idx === 2 ? "#fed7aa" : "var(--surface-muted)";
+                              const rankColor = idx === 0 ? "#b45309" : idx === 1 ? "#4b5563" : idx === 2 ? "#c2410c" : "var(--text-secondary)";
+
+                              return (
+                                <div
+                                  key={prod.productId || idx}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "12px",
+                                    padding: "10px 14px",
+                                    backgroundColor: "var(--surface)",
+                                    borderRadius: "8px",
+                                    border: "1px solid var(--border-light)",
+                                    transition: "background 0.15s",
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--surface-muted)")}
+                                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "var(--surface)")}
+                                >
+                                  {/* Rank Badge */}
+                                  <span
+                                    style={{
+                                      padding: "3px 8px",
+                                      borderRadius: "6px",
+                                      fontSize: "11px",
+                                      fontWeight: "800",
+                                      backgroundColor: rankBg,
+                                      color: rankColor,
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {rankMedal}
+                                  </span>
+
+                                  {/* Product Thumbnail */}
+                                  <img
+                                    src={prod.imageUrl || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100"}
+                                    alt={prod.productName}
+                                    style={{
+                                      width: "44px",
+                                      height: "44px",
+                                      borderRadius: "6px",
+                                      objectFit: "cover",
+                                      border: "1px solid var(--border)",
+                                      flexShrink: 0,
+                                    }}
+                                  />
+
+                                  {/* Product Name & Price */}
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div
+                                      style={{
+                                        fontSize: "13px",
+                                        fontWeight: "700",
+                                        color: "var(--text)",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {prod.productName}
+                                    </div>
+                                    <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                      Giá: {formatCurrency(prod.basePrice || 0)}
+                                    </div>
+                                  </div>
+
+                                  {/* Sold Count & Revenue */}
+                                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                    <div style={{ fontSize: "13px", fontWeight: "800", color: "var(--primary)" }}>
+                                      {prod.soldCount || 0} đã bán
+                                    </div>
+                                    <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "2px" }}>
+                                      Doanh thu: {formatCurrency(prod.revenue || 0)}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* COLUMN 2: Cảnh Báo Tồn Kho Sắp Hết (Low Stock Alerts) */}
+                    <div
+                      className="card"
+                      style={{
+                        padding: "22px",
+                        backgroundColor: "var(--surface)",
+                        borderRadius: "var(--r-lg)",
+                        border: "1px solid var(--border-light)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <AlertTriangle size={18} color="#eab308" />
+                          <strong style={{ fontSize: "15px", color: "var(--text)" }}>
+                            Cảnh Báo Tồn Kho Sắp Hết (≤ 5 Cái)
+                          </strong>
+                        </div>
+                        <span
+                          style={{
+                            padding: "2px 8px",
+                            borderRadius: "99px",
+                            backgroundColor: "#fef3c7",
+                            color: "#b45309",
+                            fontSize: "11px",
+                            fontWeight: "800",
+                          }}
+                        >
+                          {analyticsData?.lowStockAlerts?.length || 0} cảnh báo
+                        </span>
+                      </div>
+
+                      {/* Low Stock Items List */}
+                      {(() => {
+                        const lowStockList = analyticsData?.lowStockAlerts || [];
+                        if (lowStockList.length === 0) {
+                          return (
+                            <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-secondary)", fontSize: "13px" }}>
+                              <CheckCircle size={32} color="#10b981" style={{ margin: "0 auto 8px" }} />
+                              <div>Tất cả các biến thể kho hàng đều đang có số lượng dồi dào!</div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                            {lowStockList.map((item, idx) => {
+                              const isOutOfStock = Number(item.stock) === 0;
+
+                              return (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    padding: "12px 14px",
+                                    backgroundColor: isOutOfStock ? "#fef2f2" : "#fffbeb",
+                                    borderRadius: "8px",
+                                    border: isOutOfStock ? "1px solid #fecaca" : "1px solid #fef08a",
+                                  }}
+                                >
+                                  <div style={{ minWidth: 0, flex: 1, paddingRight: "10px" }}>
+                                    <div
+                                      style={{
+                                        fontSize: "13px",
+                                        fontWeight: "700",
+                                        color: "var(--text)",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {item.productName}
+                                    </div>
+                                    <div style={{ fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "3px" }}>
+                                      SKU: <strong style={{ color: "var(--text)" }}>{item.sku || "Mặc định"}</strong>
+                                      {item.color && <span> | Màu: {item.color}</span>}
+                                      {item.size && <span> | Size: {item.size}</span>}
+                                    </div>
+                                  </div>
+
+                                  <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+                                    <span
+                                      style={{
+                                        padding: "4px 8px",
+                                        borderRadius: "6px",
+                                        fontSize: "11.5px",
+                                        fontWeight: "800",
+                                        backgroundColor: isOutOfStock ? "#ef4444" : "#f59e0b",
+                                        color: "#fff",
+                                      }}
+                                    >
+                                      {isOutOfStock ? "HẾT HÀNG" : `Còn ${item.stock} cái`}
+                                    </span>
+
+                                    <button
+                                      onClick={() => {
+                                        setActiveTab("products");
+                                      }}
+                                      style={{
+                                        fontSize: "11.5px",
+                                        fontWeight: "700",
+                                        color: "var(--primary)",
+                                        backgroundColor: "transparent",
+                                        border: "none",
+                                        cursor: "pointer",
+                                        textDecoration: "underline",
+                                      }}
+                                    >
+                                      Nhập kho →
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

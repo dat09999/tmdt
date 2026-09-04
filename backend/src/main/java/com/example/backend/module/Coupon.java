@@ -6,12 +6,18 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.util.Date;
 import java.util.List;
 
 @Document(collection = "coupons")
+@CompoundIndexes({
+        @CompoundIndex(name = "coupon_shop_active_idx", def = "{'shopId': 1, 'active': 1}")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -25,6 +31,7 @@ public class Coupon {
     private String shopId;          // null = coupon toàn hệ thống, có giá trị = coupon của shop
     private String scope;           // PLATFORM, SHOP
 
+    @Indexed(unique = true)
     private String code;
     private String discountType;    // PERCENT, FIXED
     private Long discountValue;

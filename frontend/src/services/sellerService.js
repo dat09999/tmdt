@@ -28,7 +28,131 @@ export const sellerService = {
     );
   },
 
-  // GET /shops/{shopId}/statistics
+  // GET /shops/{shopId}/analytics/overview?days=7
+  async getAnalyticsOverview(shopId, days = 7) {
+    if (!shopId) return null;
+    return safeFetch(
+      async () => {
+        const res = await authFetch(`${API_BASE_URL}/shops/${shopId}/analytics/overview?days=${days}`);
+        return res;
+      },
+      {
+        summary: {
+          shopId,
+          productCount: 24,
+          orderCount: 158,
+          totalSales: 340,
+          averageRating: 4.85,
+          revenue: 52400000,
+        },
+        revenueChart: [
+          { date: "2026-08-29", revenue: 3500000, orderCount: 12 },
+          { date: "2026-08-30", revenue: 7200000, orderCount: 21 },
+          { date: "2026-08-31", revenue: 4100000, orderCount: 15 },
+          { date: "2026-09-01", revenue: 8900000, orderCount: 28 },
+          { date: "2026-09-02", revenue: 6300000, orderCount: 19 },
+          { date: "2026-09-03", revenue: 10500000, orderCount: 33 },
+          { date: "2026-09-04", revenue: 11900000, orderCount: 30 },
+        ],
+        orderStatusDistribution: {
+          statusCounts: {
+            PENDING: 4,
+            PROCESSING: 8,
+            SHIPPING: 15,
+            COMPLETED: 125,
+            CANCELED: 5,
+            REFUNDED: 1,
+          },
+          totalOrders: 158,
+        },
+        topProducts: [
+          {
+            productId: "p-1",
+            productName: "Áo Thun Unisex Cotton 100% Form Rộng",
+            imageUrl: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=100",
+            basePrice: 199000,
+            soldCount: 85,
+            revenue: 16915000,
+          },
+          {
+            productId: "p-2",
+            productName: "Quần Jean Baggy Nam Nữ Ống Rộng",
+            imageUrl: "https://images.unsplash.com/photo-1542272604-780c96856592?w=100",
+            basePrice: 350000,
+            soldCount: 42,
+            revenue: 14700000,
+          },
+        ],
+        lowStockAlerts: [
+          {
+            productId: "p-1",
+            productName: "Áo Thun Unisex Cotton 100% Form Rộng",
+            sku: "AT-DEN-XL",
+            color: "Đen",
+            size: "XL",
+            stock: 2,
+          },
+          {
+            productId: "p-2",
+            productName: "Quần Jean Baggy Nam Nữ Ống Rộng",
+            sku: "QJ-XANH-M",
+            color: "Xanh nhạt",
+            size: "M",
+            stock: 0,
+          },
+        ],
+      }
+    );
+  },
+
+  // GET /shops/{shopId}/analytics/revenue?days=7
+  async getRevenueChart(shopId, days = 7) {
+    if (!shopId) return [];
+    return safeFetch(
+      async () => {
+        const res = await authFetch(`${API_BASE_URL}/shops/${shopId}/analytics/revenue?days=${days}`);
+        return Array.isArray(res) ? res : [];
+      },
+      []
+    );
+  },
+
+  // GET /shops/{shopId}/analytics/order-status
+  async getOrderStatusDistribution(shopId) {
+    if (!shopId) return null;
+    return safeFetch(
+      async () => {
+        return await authFetch(`${API_BASE_URL}/shops/${shopId}/analytics/order-status`);
+      },
+      null
+    );
+  },
+
+  // GET /shops/{shopId}/analytics/top-products?limit=5
+  async getTopProducts(shopId, limit = 5) {
+    if (!shopId) return [];
+    return safeFetch(
+      async () => {
+        const res = await authFetch(`${API_BASE_URL}/shops/${shopId}/analytics/top-products?limit=${limit}`);
+        return Array.isArray(res) ? res : [];
+      },
+      []
+    );
+  },
+
+  // GET /shops/{shopId}/analytics/low-stock?threshold=5
+  async getLowStockAlerts(shopId, threshold = 5) {
+    if (!shopId) return [];
+    return safeFetch(
+      async () => {
+        const res = await authFetch(`${API_BASE_URL}/shops/${shopId}/analytics/low-stock?threshold=${threshold}`);
+        return Array.isArray(res) ? res : [];
+      },
+      []
+    );
+  },
+
+  // GET /shops/{shopId}/statistics (Legacy support)
   async getDashboardStats(shopId) {
     if (!shopId) {
       return {

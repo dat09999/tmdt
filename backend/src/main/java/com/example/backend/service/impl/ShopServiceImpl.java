@@ -1,13 +1,10 @@
 package com.example.backend.service.impl;
 
 import com.example.backend.DTO.common.ActionResponse;
-import com.example.backend.DTO.shop.CreateShopRequest;
-import com.example.backend.DTO.shop.FollowShopResponse;
-import com.example.backend.DTO.shop.ShopOwnershipResponse;
-import com.example.backend.DTO.shop.ShopResponse;
-import com.example.backend.DTO.shop.ShopStatisticsResponse;
-import com.example.backend.DTO.shop.ShopSummaryResponse;
+import com.example.backend.DTO.shop.*;
 import com.example.backend.mapper.ShopMapper;
+import com.example.backend.module.Product;
+import com.example.backend.module.ProductVariant;
 import com.example.backend.module.Shop;
 import com.example.backend.module.ShopFollow;
 import com.example.backend.repository.OrderRepository;
@@ -26,8 +23,12 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
-import java.util.Date;
-import java.util.List;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * ĐÃ SỬA CÁC LỖI CONCURRENCY / LOST UPDATE SO VỚI BẢN GỐC:
@@ -279,6 +280,146 @@ public class ShopServiceImpl implements ShopService {
                 .totalSales(shop.getTotalSales() == null ? 0 : shop.getTotalSales())
                 .averageRating(shop.getRating() == null ? 0 : shop.getRating())
                 .revenue(revenue)
+                .build();
+    }
+
+    @Override
+    public List<DailyRevenueResponse> getRevenueAnalytics(String shopId, int days) {
+        getShopOrThrow(shopId);
+        int validDays = (days <= 0 || days > 90) ? 7 : days;
+
+        LocalDate today = LocalDate.now();
+        LocalDate startDate = today.minusDays(validDays - 1);
+        Date startDateTime = Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+
+        List<com.example.backend.module.Order> shopOrders =
+                orderRepository.findByShopIdOrderByCreatedAtDesc(shopId);
+
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+        Map<String, List<com.example.backend.module.Order>> ordersByDate = shopOrders.stream()
+                .filter(o -> o.getCreatedAt() != null && !o.getCreatedAt().before(startDateTime))
+                .filter(o -> "COMPLETED".equalsIgnoreCase(o.getOrderStatus()))
+                .collect(Collectors.groupingBy(o -> sdf.format(o.getCreatedAt())));
+
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        List<DailyRevenueResponse> result = new ArrayList<>();
+
+        for (int i = 0; i < validDays; i++) {
+            LocalDate d = startDate.plusDays(i);
+            String dateStr = d.format(dtf);
+            List<com.example.backend.module.Order> dailyOrders = ordersByDate.getOrDefault(dateStr, Collections.emptyList());
+
+            long dailyRevenue = dailyOrders.stream()
+                    .mapToLong(o -> o.getTotalAmount() == null ? 0 : o.getTotalAmount())
+                    .sum();
+
+            result.add(DailyRevenueResponse.builder()
+                    .date(dateStr)
+                    .revenue(dailyRevenue)
+                    .orderCount(dailyOrders.size())
+                    .build());
+        }
+
+        return result;
+    }
+
+    @Override
+    public OrderStatusDistributionResponse getOrderStatusAnalytics(String shopId) {
+        getShopOrThrow(shopId);
+        List<com.example.backend.module.Order> shopOrders =
+                orderRepository.findByShopIdOrderByCreatedAtDesc(shopId);
+
+        Map<String, Long> counts = new LinkedHashMap<>();
+        counts.put("PENDING", 0L);
+        counts.put("PROCESSING", 0L);
+        counts.put("SHIPPING", 0L);
+        counts.put("COMPLETED", 0L);
+        counts.put("CANCELED", 0L);
+        counts.put("REFUNDED", 0L);
+
+        for (com.example.backend.module.Order order : shopOrders) {
+            String status = order.getOrderStatus() != null ? order.getOrderStatus().toUpperCase() : "PENDING";
+            counts.put(status, counts.getOrDefault(status, 0L) + 1);
+        }
+
+        return OrderStatusDistributionResponse.builder()
+                .statusCounts(counts)
+                .totalOrders(shopOrders.size())
+                .build();
+    }
+
+    @Override
+    public List<TopProductResponse> getTopSellingProducts(String shopId, int limit) {
+        getShopOrThrow(shopId);
+        int validLimit = (limit <= 0 || limit > 50) ? 5 : limit;
+
+        List<Product> products = productRepository.findByShopId(shopId);
+
+        return products.stream()
+                .sorted((p1, p2) -> {
+                    int s1 = p1.getSoldCount() != null ? p1.getSoldCount() : 0;
+                    int s2 = p2.getSoldCount() != null ? p2.getSoldCount() : 0;
+                    return Integer.compare(s2, s1);
+                })
+                .limit(validLimit)
+                .map(p -> {
+                    String img = null;
+                    if (p.getImages() != null && !p.getImages().isEmpty()) {
+                        img = p.getImages().get(0).getUrl();
+                    }
+                    int sold = p.getSoldCount() != null ? p.getSoldCount() : 0;
+                    long price = p.getBasePrice() != null ? p.getBasePrice() : 0;
+                    return TopProductResponse.builder()
+                            .productId(p.getId())
+                            .productName(p.getName())
+                            .imageUrl(img)
+                            .basePrice(price)
+                            .soldCount(sold)
+                            .revenue(sold * price)
+                            .build();
+                })
+                .toList();
+    }
+
+    @Override
+    public List<LowStockResponse> getLowStockAlerts(String shopId, int threshold) {
+        getShopOrThrow(shopId);
+        int validThreshold = (threshold < 0) ? 5 : threshold;
+
+        List<Product> products = productRepository.findByShopId(shopId);
+        List<LowStockResponse> alerts = new ArrayList<>();
+
+        for (Product product : products) {
+            if (product.getVariants() != null) {
+                for (ProductVariant variant : product.getVariants()) {
+                    int stock = variant.getStock() != null ? variant.getStock() : 0;
+                    if (stock <= validThreshold) {
+                        alerts.add(LowStockResponse.builder()
+                                .productId(product.getId())
+                                .productName(product.getName())
+                                .sku(variant.getSku())
+                                .color(variant.getColor())
+                                .size(variant.getSize())
+                                .stock(stock)
+                                .build());
+                    }
+                }
+            }
+        }
+
+        alerts.sort(Comparator.comparingInt(LowStockResponse::getStock));
+        return alerts;
+    }
+
+    @Override
+    public ShopDashboardResponse getDashboardOverview(String shopId, int days) {
+        return ShopDashboardResponse.builder()
+                .summary(getShopStatistics(shopId))
+                .revenueChart(getRevenueAnalytics(shopId, days))
+                .orderStatusDistribution(getOrderStatusAnalytics(shopId))
+                .topProducts(getTopSellingProducts(shopId, 5))
+                .lowStockAlerts(getLowStockAlerts(shopId, 5))
                 .build();
     }
 

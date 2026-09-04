@@ -6,12 +6,21 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.util.Date;
 import java.util.List;
 
 @Document(collection = "orders")
+@CompoundIndexes({
+        @CompoundIndex(name = "order_buyer_created_idx", def = "{'buyerId': 1, 'createdAt': -1}"),
+        @CompoundIndex(name = "order_shop_created_idx", def = "{'shopId': 1, 'createdAt': -1}"),
+        @CompoundIndex(name = "order_status_created_idx", def = "{'orderStatus': 1, 'createdAt': 1}"),
+        @CompoundIndex(name = "order_verified_purchase_idx", def = "{'buyerId': 1, 'orderStatus': 1, 'items.productId': 1}")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -24,6 +33,8 @@ public class Order {
 
     private String buyerId;
     private String shopId;          // mỗi order thuộc 1 shop
+
+    @Indexed(unique = true)
     private String orderCode;
 
     private Address shippingAddress;

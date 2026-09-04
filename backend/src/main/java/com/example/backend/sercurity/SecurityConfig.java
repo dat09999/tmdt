@@ -64,10 +64,12 @@ public class SecurityConfig {
                         "/ws/**",
                         "/v3/api-docs/**",
                         "/swagger-ui/**",
-                        "/swagger-ui.html"
+                        "/swagger-ui.html",
+                        "/api/payment/vnpay/**", // IPN webhook từ VNPay server và Return URL
+                        "/api/geo/**"            // Tra cứu địa chỉ & tọa độ
                 ).permitAll()
-                // Xem danh sách sản phẩm, danh mục, shop thì ai cũng xem được (GET)
-                .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/shops/**", "/reviews/**").permitAll()
+                // Xem danh sách sản phẩm, danh mục, shop, link ảnh thì ai cũng xem được (GET)
+                .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/shops/**", "/reviews/**", "/api/links/**").permitAll()
                 // Ước tính phí ship trước khi đặt hàng - không cần đăng nhập
                 .requestMatchers(HttpMethod.POST, "/shipping/estimate").permitAll()
 

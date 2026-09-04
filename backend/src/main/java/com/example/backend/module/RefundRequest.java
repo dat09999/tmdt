@@ -6,12 +6,19 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.util.Date;
 import java.util.List;
 
 @Document(collection = "refund_requests")
+@CompoundIndexes({
+        @CompoundIndex(name = "refund_user_created_idx", def = "{'userId': 1, 'createdAt': -1}"),
+        @CompoundIndex(name = "refund_shop_created_idx", def = "{'shopId': 1, 'createdAt': -1}")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,6 +29,7 @@ public class RefundRequest {
     @Id
     private String id;
 
+    @Indexed
     private String orderId;
     private String userId;
     private String shopId;

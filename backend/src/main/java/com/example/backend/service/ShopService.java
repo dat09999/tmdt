@@ -5,8 +5,7 @@ import com.example.backend.DTO.shop.CreateShopRequest;
 import com.example.backend.DTO.shop.FollowShopResponse;
 import com.example.backend.DTO.shop.ShopOwnershipResponse;
 import com.example.backend.DTO.shop.ShopResponse;
-import com.example.backend.DTO.shop.ShopStatisticsResponse;
-import com.example.backend.DTO.shop.ShopSummaryResponse;
+import com.example.backend.DTO.shop.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -95,6 +94,21 @@ public interface ShopService {
      * doanh thu hoàn thành, tổng đã bán và rating.
      */
     ShopStatisticsResponse getShopStatistics(String shopId);
+
+    /** Biểu đồ doanh thu và số đơn theo ngày (ví dụ 7 ngày, 30 ngày qua). */
+    List<DailyRevenueResponse> getRevenueAnalytics(String shopId, int days);
+
+    /** Biểu đồ tròn phân bố trạng thái đơn hàng (PENDING, PROCESSING, SHIPPING, COMPLETED, CANCELED). */
+    OrderStatusDistributionResponse getOrderStatusAnalytics(String shopId);
+
+    /** Top sản phẩm bán chạy nhất của shop. */
+    List<TopProductResponse> getTopSellingProducts(String shopId, int limit);
+
+    /** Cảnh báo sản phẩm / biến thể sắp hết hàng (tồn kho <= threshold). */
+    List<LowStockResponse> getLowStockAlerts(String shopId, int threshold);
+
+    /** Tổng hợp toàn bộ dữ liệu dashboard và biểu đồ trong 1 API duy nhất. */
+    ShopDashboardResponse getDashboardOverview(String shopId, int days);
 
 
     // =========================================================
