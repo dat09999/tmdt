@@ -42,7 +42,21 @@ import {
   RefreshCw,
   Calendar,
   MessageCircle,
+  Layers,
 } from "lucide-react";
+
+const CATEGORY_OPTIONS = [
+  { id: "dien-thoai", name: "Điện thoại & Phụ kiện" },
+  { id: "laptop", name: "Laptop & Thiết bị tin học" },
+  { id: "thoi-trang-nam", name: "Thời trang nam" },
+  { id: "thoi-trang-nu", name: "Thời trang nữ" },
+  { id: "giay-dep", name: "Giày dép & Túi xách" },
+  { id: "dien-gia-dung", name: "Điện gia dụng" },
+  { id: "sac-dep", name: "Sức khỏe & Sắc đẹp" },
+  { id: "nha-cua", name: "Nhà cửa & Đời sống" },
+  { id: "the-thao", name: "Thể thao & Du lịch" },
+  { id: "khac", name: "Danh mục khác" },
+];
 
 const getTodayStr = () => new Date().toISOString().split("T")[0];
 const getNDaysAgoStr = (n) => {
@@ -97,6 +111,7 @@ export default function SellerPage() {
     stock: 50,
     description: "",
     imageUrl: "",
+    variants: [],
   });
 
   // Coupon Modal
@@ -253,20 +268,173 @@ export default function SellerPage() {
     }
   };
 
+  // Open Create Product Modal
+  const handleOpenCreateProduct = () => {
+    setEditingProduct(null);
+    setProductForm({
+      name: "",
+      categoryId: "dien-thoai",
+      basePrice: "",
+      originalPrice: "",
+      stock: 50,
+      description: "",
+      imageUrl: "",
+      variants: [],
+    });
+    setProductModalOpen(true);
+  };
+
+  // Open Edit Product Modal
+  const handleOpenEditProduct = (p) => {
+    setEditingProduct(p);
+    const totalStock = p.variants?.reduce((sum, v) => sum + (Number(v.stock) || 0), 0) ?? (p.stock || 50);
+    setProductForm({
+      name: p.name || "",
+      categoryId: p.categoryId || "dien-thoai",
+      basePrice: p.basePrice ?? "",
+      originalPrice: p.originalPrice || p.basePrice || "",
+      stock: totalStock,
+      description: p.description || "",
+      imageUrl: p.images?.[0]?.url || "",
+      variants: (p.variants && p.variants.length > 0)
+        ? p.variants.map((v) => ({
+            sku: v.sku || "",
+            color: v.color || "",
+            size: v.size || "",
+            price: v.price ?? p.basePrice ?? "",
+            discountPrice: v.discountPrice ?? "",
+            stock: v.stock !== undefined ? v.stock : 0,
+            active: v.active !== false,
+          }))
+        : [],
+    });
+    setProductModalOpen(true);
+  };
+
+  // Variant Management Handlers
+  const handleAddVariant = () => {
+    const nextIdx = (productForm.variants?.length || 0) + 1;
+    const cleanName = (productForm.name || "SP")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "-")
+      .replace(/-+/g, "-")
+      .slice(0, 10);
+    const newSku = `${cleanName}-${nextIdx}-${Date.now().toString().slice(-4)}`.toUpperCase();
+
+    setProductForm((prev) => ({
+      ...prev,
+      variants: [
+        ...(prev.variants || []),
+        {
+          sku: newSku,
+          color: "",
+          size: "",
+          price: prev.basePrice || "",
+          discountPrice: "",
+          stock: prev.stock || 50,
+          active: true,
+        },
+      ],
+    }));
+  };
+
+  const handleRemoveVariant = (index) => {
+    setProductForm((prev) => ({
+      ...prev,
+      variants: (prev.variants || []).filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleVariantChange = (index, field, value) => {
+    setProductForm((prev) => {
+      const updated = [...(prev.variants || [])];
+      updated[index] = { ...updated[index], [field]: value };
+      return { ...prev, variants: updated };
+    });
+  };
+
+  const handleSyncDefaultsToVariants = () => {
+    if (!productForm.variants?.length) return;
+    setProductForm((prev) => ({
+      ...prev,
+      variants: prev.variants.map((v) => ({
+        ...v,
+        price: v.price || prev.basePrice,
+        stock: v.stock !== "" && v.stock !== undefined ? v.stock : prev.stock,
+      })),
+    }));
+    showToast("Đã đồng bộ giá và kho mặc định vào các phân loại!");
+  };
+
   // Handle Save Product
   const handleSaveProduct = async (e) => {
     e.preventDefault();
-    if (!productForm.name || !productForm.basePrice || !shop?.id) {
+    if (!productForm.name?.trim() || !productForm.basePrice || !shop?.id) {
       showToast("Vui lòng nhập tên và giá sản phẩm!");
       return;
     }
 
+    const basePriceNum = Number(productForm.basePrice);
+    if (isNaN(basePriceNum) || basePriceNum < 0) {
+      showToast("Giá bán sản phẩm phải lớn hơn hoặc bằng 0!");
+      return;
+    }
+
+    // Process and validate variants
+    let variantsToSave = [];
+    if (productForm.variants && productForm.variants.length > 0) {
+      const seenSkus = new Set();
+      for (let i = 0; i < productForm.variants.length; i++) {
+        const v = productForm.variants[i];
+        let sku = (v.sku || "").trim();
+        if (!sku) {
+          sku = `SKU-${Date.now().toString().slice(-4)}-${i + 1}`;
+        }
+        while (seenSkus.has(sku)) {
+          sku = `${sku}-${i + 1}`;
+        }
+        seenSkus.add(sku);
+
+        const vPrice = Number(v.price) >= 0 ? Number(v.price) : basePriceNum;
+        const vStock = v.stock !== "" && !isNaN(Number(v.stock)) && Number(v.stock) >= 0 ? Number(v.stock) : 0;
+        const vDiscount = v.discountPrice && Number(v.discountPrice) >= 0 ? Number(v.discountPrice) : null;
+
+        if (vDiscount !== null && vDiscount > vPrice) {
+          showToast(`Giá khuyến mãi của phân loại "${v.color || v.size || sku}" không được lớn hơn giá bán!`);
+          return;
+        }
+
+        variantsToSave.push({
+          sku,
+          color: (v.color || "").trim() || "Mặc định",
+          size: (v.size || "").trim() || "Tiêu chuẩn",
+          price: vPrice,
+          discountPrice: vDiscount,
+          stock: vStock,
+          active: v.active !== false,
+        });
+      }
+    } else {
+      const defaultSku = `SKU-${(productForm.name || "sp").toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 10)}-${Date.now().toString().slice(-4)}`.toUpperCase();
+      variantsToSave = [
+        {
+          sku: defaultSku,
+          color: "Mặc định",
+          size: "Tiêu chuẩn",
+          price: basePriceNum,
+          discountPrice: productForm.originalPrice && Number(productForm.originalPrice) > basePriceNum ? basePriceNum : null,
+          stock: Number(productForm.stock) || 50,
+          active: true,
+        },
+      ];
+    }
+
     const payload = {
-      name: productForm.name,
-      categoryId: productForm.categoryId,
-      basePrice: Number(productForm.basePrice),
-      originalPrice: Number(productForm.originalPrice) || Number(productForm.basePrice),
-      description: productForm.description,
+      name: productForm.name.trim(),
+      categoryId: productForm.categoryId || "dien-thoai",
+      basePrice: basePriceNum,
+      originalPrice: Number(productForm.originalPrice) || basePriceNum,
+      description: productForm.description || "",
       images: [
         {
           id: "img-1",
@@ -274,28 +442,24 @@ export default function SellerPage() {
           isMain: true,
         },
       ],
-      variants: [
-        {
-          sku: `SKU-${Date.now().toString().slice(-4)}`,
-          name: "Tiêu chuẩn",
-          price: Number(productForm.basePrice),
-          stock: Number(productForm.stock) || 50,
-          active: true,
-        },
-      ],
+      variants: variantsToSave,
     };
 
-    if (editingProduct) {
-      await sellerService.updateProduct(shop.id, editingProduct.id, payload);
-      showToast("Đã cập nhật sản phẩm thành công!");
-    } else {
-      await sellerService.createProduct(shop.id, payload);
-      showToast("Đã thêm sản phẩm mới thành công!");
-    }
+    try {
+      if (editingProduct) {
+        await sellerService.updateProduct(shop.id, editingProduct.id, payload);
+        showToast("Đã cập nhật sản phẩm và phân loại thành công!");
+      } else {
+        await sellerService.createProduct(shop.id, payload);
+        showToast("Đã thêm sản phẩm mới thành công!");
+      }
 
-    setProductModalOpen(false);
-    setEditingProduct(null);
-    await loadShopAndData();
+      setProductModalOpen(false);
+      setEditingProduct(null);
+      await loadShopAndData();
+    } catch (err) {
+      showToast(err.message || "Có lỗi xảy ra khi lưu sản phẩm!");
+    }
   };
 
   const handleDeleteProduct = async (id) => {
@@ -651,19 +815,7 @@ export default function SellerPage() {
                 <Button
                   variant="primary"
                   icon={Plus}
-                  onClick={() => {
-                    setEditingProduct(null);
-                    setProductForm({
-                      name: "",
-                      categoryId: "dien-thoai",
-                      basePrice: "",
-                      originalPrice: "",
-                      stock: 50,
-                      description: "",
-                      imageUrl: "",
-                    });
-                    setProductModalOpen(true);
-                  }}
+                  onClick={handleOpenCreateProduct}
                 >
                   Thêm Sản Phẩm Mới
                 </Button>
@@ -1882,19 +2034,7 @@ export default function SellerPage() {
                       variant="primary"
                       size="sm"
                       icon={Plus}
-                      onClick={() => {
-                        setEditingProduct(null);
-                        setProductForm({
-                          name: "",
-                          categoryId: "dien-thoai",
-                          basePrice: "",
-                          originalPrice: "",
-                          stock: 50,
-                          description: "",
-                          imageUrl: "",
-                        });
-                        setProductModalOpen(true);
-                      }}
+                      onClick={handleOpenCreateProduct}
                     >
                       Thêm Sản Phẩm
                     </Button>
@@ -1939,7 +2079,20 @@ export default function SellerPage() {
                               <td style={{ padding: "12px 16px", fontWeight: "700", color: "var(--primary)" }}>
                                 {formatCurrency(p.basePrice)}
                               </td>
-                              <td style={{ padding: "12px 16px" }}>{p.variants?.[0]?.stock || p.stock || 50}</td>
+                              <td style={{ padding: "12px 16px" }}>
+                                <div>
+                                  <strong>
+                                    {p.variants && p.variants.length > 0
+                                      ? p.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+                                      : (p.stock || 50)}
+                                  </strong>
+                                  {p.variants && p.variants.length > 1 && (
+                                    <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                                      ({p.variants.length} phân loại)
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
                               <td style={{ padding: "12px 16px" }}>{p.soldCount || 0}</td>
                               <td style={{ padding: "12px 16px" }}>
                                 <span
@@ -1958,19 +2111,7 @@ export default function SellerPage() {
                               <td style={{ padding: "12px 16px", textAlign: "right" }}>
                                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
                                   <button
-                                    onClick={() => {
-                                      setEditingProduct(p);
-                                      setProductForm({
-                                        name: p.name,
-                                        categoryId: p.categoryId || "dien-thoai",
-                                        basePrice: p.basePrice,
-                                        originalPrice: p.originalPrice || p.basePrice,
-                                        stock: p.variants?.[0]?.stock || 50,
-                                        description: p.description || "",
-                                        imageUrl: p.images?.[0]?.url || "",
-                                      });
-                                      setProductModalOpen(true);
-                                    }}
+                                    onClick={() => handleOpenEditProduct(p)}
                                     style={{ padding: "6px", color: "var(--text-secondary)" }}
                                     title="Chỉnh sửa"
                                   >
@@ -2416,44 +2557,266 @@ export default function SellerPage() {
       )}
 
       {/* Modal Add/Edit Product */}
+      {/* Modal Add / Edit Product with Variants */}
       <Modal
         isOpen={productModalOpen}
         onClose={() => setProductModalOpen(false)}
-        title={editingProduct ? "Chỉnh Sửa Sản Phẩm" : "Thêm Sản Phẩm Mới"}
+        title={editingProduct ? "Chỉnh Sửa Sản Phẩm & Phân Loại" : "Thêm Sản Phẩm Mới"}
+        maxWidth="840px"
       >
-        <form onSubmit={handleSaveProduct} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <div>
-            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>Tên Sản Phẩm:</label>
-            <input
-              type="text"
-              value={productForm.name}
-              onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
-              required
-            />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+        <form onSubmit={handleSaveProduct} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          {/* Thông tin cơ bản */}
+          <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: "12px" }}>
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>Giá Bán (VNĐ):</label>
+              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                Tên Sản Phẩm: <span style={{ color: "var(--error)" }}>*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="VD: Áo Thun Unisex Cotton 100%..."
+                value={productForm.name}
+                onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}
+                required
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                Ngành Hàng / Danh Mục:
+              </label>
+              <select
+                value={productForm.categoryId || "dien-thoai"}
+                onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px", backgroundColor: "var(--surface)" }}
+              >
+                {CATEGORY_OPTIONS.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                Giá Bán Cơ Bản (VNĐ): <span style={{ color: "var(--error)" }}>*</span>
+              </label>
               <input
                 type="number"
+                placeholder="VD: 150000"
                 value={productForm.basePrice}
                 onChange={(e) => setProductForm({ ...productForm, basePrice: e.target.value })}
-                style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}
                 required
+                min={0}
               />
             </div>
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>Số Lượng Kho:</label>
+              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                Giá Gốc / Niêm Yết (VNĐ):
+              </label>
               <input
                 type="number"
+                placeholder="VD: 200000"
+                value={productForm.originalPrice}
+                onChange={(e) => setProductForm({ ...productForm, originalPrice: e.target.value })}
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}
+                min={0}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                Kho Hàng Mặc Định: <span style={{ color: "var(--error)" }}>*</span>
+              </label>
+              <input
+                type="number"
+                placeholder="VD: 50"
                 value={productForm.stock}
                 onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
-                style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}
                 required
+                min={0}
               />
             </div>
           </div>
+
+          {/* Phân loại & Biến thể */}
+          <div
+            style={{
+              padding: "14px",
+              backgroundColor: "var(--surface-muted)",
+              borderRadius: "8px",
+              border: "1px solid var(--border-light)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <Layers size={17} color="var(--primary)" />
+                <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>
+                  Phân Loại / Biến Thể Sản Phẩm ({productForm.variants?.length || 0})
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                {productForm.variants?.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleSyncDefaultsToVariants}
+                    style={{
+                      padding: "5px 10px",
+                      borderRadius: "6px",
+                      border: "1px solid var(--border)",
+                      backgroundColor: "var(--surface)",
+                      color: "var(--text-secondary)",
+                      fontSize: "11px",
+                      fontWeight: "600",
+                      cursor: "pointer",
+                    }}
+                    title="Sao chép Giá Bán và Kho mặc định vào các phân loại"
+                  >
+                    ⚡ Đồng bộ giá & kho chung
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleAddVariant}
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--primary)",
+                    backgroundColor: "var(--primary-light)",
+                    color: "var(--primary)",
+                    fontSize: "12px",
+                    fontWeight: "700",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <Plus size={14} /> Thêm phân loại
+                </button>
+              </div>
+            </div>
+
+            {(!productForm.variants || productForm.variants.length === 0) ? (
+              <div
+                style={{
+                  padding: "12px 14px",
+                  backgroundColor: "var(--surface)",
+                  borderRadius: "6px",
+                  border: "1px dashed var(--border)",
+                  fontSize: "12px",
+                  color: "var(--text-secondary)",
+                  lineHeight: "1.5",
+                }}
+              >
+                💡 Hiện tại sản phẩm đang sử dụng <strong>1 phân loại tiêu chuẩn</strong> với Giá bán ({formatCurrency(Number(productForm.basePrice) || 0)}) và Kho hàng ({productForm.stock || 0}).
+                Nếu sản phẩm có nhiều phiên bản (như Màu sắc, Kích cỡ, Dung lượng...), hãy bấm <strong>+ Thêm phân loại</strong> để quản lý riêng giá và tồn kho cho từng phiên bản!
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto", backgroundColor: "var(--surface)", borderRadius: "6px", border: "1px solid var(--border)" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                  <thead>
+                    <tr style={{ backgroundColor: "var(--surface-muted)", borderBottom: "1px solid var(--border)", textAlign: "left" }}>
+                      <th style={{ padding: "8px 10px", minWidth: "110px" }}>Màu sắc</th>
+                      <th style={{ padding: "8px 10px", minWidth: "110px" }}>Size / Bản</th>
+                      <th style={{ padding: "8px 10px", minWidth: "120px" }}>Giá bán (VNĐ) *</th>
+                      <th style={{ padding: "8px 10px", minWidth: "110px" }}>Giá KM (VNĐ)</th>
+                      <th style={{ padding: "8px 10px", minWidth: "90px" }}>Kho *</th>
+                      <th style={{ padding: "8px 10px", minWidth: "110px" }}>SKU</th>
+                      <th style={{ padding: "8px 10px", textAlign: "center", width: "40px" }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productForm.variants.map((v, idx) => (
+                      <tr key={idx} style={{ borderBottom: idx < productForm.variants.length - 1 ? "1px solid var(--border-light)" : "none" }}>
+                        <td style={{ padding: "6px 8px" }}>
+                          <input
+                            type="text"
+                            placeholder="VD: Đen, Trắng..."
+                            value={v.color || ""}
+                            onChange={(e) => handleVariantChange(idx, "color", e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", border: "1px solid var(--border)", borderRadius: "4px", fontSize: "12px" }}
+                          />
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>
+                          <input
+                            type="text"
+                            placeholder="VD: 128GB, L..."
+                            value={v.size || ""}
+                            onChange={(e) => handleVariantChange(idx, "size", e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", border: "1px solid var(--border)", borderRadius: "4px", fontSize: "12px" }}
+                          />
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>
+                          <input
+                            type="number"
+                            placeholder={productForm.basePrice || "0"}
+                            value={v.price}
+                            onChange={(e) => handleVariantChange(idx, "price", e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", border: "1px solid var(--border)", borderRadius: "4px", fontSize: "12px" }}
+                            required
+                            min={0}
+                          />
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>
+                          <input
+                            type="number"
+                            placeholder="Tùy chọn"
+                            value={v.discountPrice || ""}
+                            onChange={(e) => handleVariantChange(idx, "discountPrice", e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", border: "1px solid var(--border)", borderRadius: "4px", fontSize: "12px" }}
+                            min={0}
+                          />
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>
+                          <input
+                            type="number"
+                            placeholder="50"
+                            value={v.stock}
+                            onChange={(e) => handleVariantChange(idx, "stock", e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", border: "1px solid var(--border)", borderRadius: "4px", fontSize: "12px" }}
+                            required
+                            min={0}
+                          />
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>
+                          <input
+                            type="text"
+                            placeholder="Tự sinh..."
+                            value={v.sku || ""}
+                            onChange={(e) => handleVariantChange(idx, "sku", e.target.value)}
+                            style={{ width: "100%", padding: "6px 8px", border: "1px solid var(--border)", borderRadius: "4px", fontSize: "11px", fontFamily: "monospace" }}
+                          />
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "center" }}>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveVariant(idx)}
+                            style={{
+                              padding: "5px",
+                              borderRadius: "4px",
+                              border: "none",
+                              backgroundColor: "transparent",
+                              color: "var(--error)",
+                              cursor: "pointer",
+                            }}
+                            title="Xóa phân loại này"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Hình ảnh */}
           <div>
             <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
               Hình Ảnh Sản Phẩm (Tải lên từ máy / điện thoại):
@@ -2528,17 +2891,21 @@ export default function SellerPage() {
               />
             </label>
           </div>
+
+          {/* Mô tả */}
           <div>
             <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>Mô Tả Sản Phẩm:</label>
             <textarea
               rows={3}
+              placeholder="Nhập thông tin chi tiết về sản phẩm, đặc điểm nổi bật..."
               value={productForm.description}
               onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-              style={{ width: "100%", padding: "8px", border: "1px solid var(--border)", borderRadius: "4px" }}
+              style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}
             />
           </div>
-          <Button variant="primary" type="submit" block style={{ marginTop: "6px" }}>
-            {editingProduct ? "Lưu Thay Đổi" : "Đăng Sản Phẩm"}
+
+          <Button variant="primary" type="submit" block style={{ marginTop: "8px", padding: "10px" }}>
+            {editingProduct ? "Lưu Thay Đổi Sản Phẩm & Phân Loại" : "Đăng Sản Phẩm Mới"}
           </Button>
         </form>
       </Modal>

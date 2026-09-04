@@ -79,7 +79,7 @@ export default function VariantPicker({
                     transition: "all 0.15s",
                   }}
                 >
-                  <span>{v.name}</span>
+                  <span>{v.name || [v.color, v.size].filter(Boolean).join(" - ") || v.sku || "Tiêu chuẩn"}</span>
                   {v.price && (
                     <span style={{ fontSize: "11px", opacity: 0.85 }}>
                       ({formatCurrency(v.discountPrice ?? v.price)})

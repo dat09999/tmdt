@@ -114,7 +114,7 @@ export default function ProductDetailPage() {
         productId: product.id,
         productName: product.name,
         variantSku: selectedVariant?.sku || "",
-        variantName: selectedVariant?.name || "",
+        variantName: selectedVariant?.name || [selectedVariant?.color, selectedVariant?.size].filter(Boolean).join(" - ") || "Tiêu chuẩn",
         price: selectedVariant?.discountPrice ?? selectedVariant?.price ?? product.basePrice,
         quantity,
         image: product.images?.[0]?.url || "",
