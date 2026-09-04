@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, Component } from "react";
 import {
   MessageCircle,
   Search,
@@ -8,13 +8,68 @@ import {
   RefreshCw,
   X,
   Loader2,
-  CheckCheck,
-  User,
-  ShoppingBag,
+  AlertCircle,
   ArrowDown,
 } from "lucide-react";
 import { chatService } from "../../services/chatService";
 import { useAuth } from "../../pages/Authcontext";
+
+// Error Boundary bảo vệ: Không bao giờ bị màn hình trắng kể cả khi dữ liệu có lỗi
+class SellerChatCenterErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("[SellerChatCenter] Lỗi hiển thị giao diện:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          style={{
+            padding: "48px 24px",
+            textAlign: "center",
+            backgroundColor: "#ffffff",
+            borderRadius: "14px",
+            border: "1px solid #fee2e2",
+            margin: "16px 0",
+          }}
+        >
+          <AlertCircle size={44} color="#ef4444" style={{ margin: "0 auto 12px" }} />
+          <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#111827", marginBottom: "6px" }}>
+            Đã xảy ra sự cố khi tải trung tâm chat
+          </h3>
+          <p style={{ fontSize: "13px", color: "#6b7280", marginBottom: "16px" }}>
+            {this.state.error?.message || "Vui lòng tải lại hoặc thử lại sau."}
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            style={{
+              padding: "8px 18px",
+              backgroundColor: "#ee4d2d",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "8px",
+              fontWeight: "700",
+              cursor: "pointer",
+              fontSize: "13px",
+            }}
+          >
+            Thử tải lại
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const QUICK_REPLIES = [
   "Dạ chào bạn, sản phẩm bên shop vẫn còn sẵn hàng ạ! 🥰",
@@ -53,7 +108,7 @@ const formatTime = (timeVal) => {
   }
 };
 
-export default function SellerChatCenter({ shop, initialSelectedConvId = null }) {
+function SellerChatCenterInner({ shop, initialSelectedConvId = null }) {
   const { user } = useAuth();
   const shopId = shop?.id || "shop-official";
 
@@ -81,25 +136,41 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
   const shouldForceScrollBottomRef = useRef(false);
   const isNewMessageReceivedRef = useRef(false);
 
-  const scrollToContainerBottom = useCallback((behavior = "smooth") => {
-    const el = messagesContainerRef.current;
-    if (!el) return;
-    if (behavior === "auto") {
-      el.scrollTop = el.scrollHeight;
-    } else {
-      el.scrollTo({
-        top: el.scrollHeight,
-        behavior: "smooth",
-      });
-    }
-  }, []);
-
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 3000);
   };
 
-  // 1. Tải danh sách hội thoại của Shop
+  // Cuộn đáy trực tiếp trên element của khung tin nhắn — Tuyệt đối không làm giật cuộn trang web
+  const scrollToContainerBottom = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    try {
+      el.scrollTop = el.scrollHeight;
+    } catch {}
+  }, []);
+
+  // 1. Hàm chọn hội thoại (Được định nghĩa TRƯỚC để loadConversations có thể gọi an toàn)
+  const handleSelectConversation = useCallback(async (conv) => {
+    if (!conv) return;
+    setActiveConv(conv);
+    setDraft("");
+    setPendingImages([]);
+    setImagePreviews([]);
+    setHasNewUnseenMessage(false);
+    shouldForceScrollBottomRef.current = true;
+    isNearBottomRef.current = true;
+
+    try {
+      await chatService.markAsRead(conv.id);
+    } catch {}
+
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conv.id ? { ...c, unreadCountForShop: 0 } : c))
+    );
+  }, []);
+
+  // 2. Tải danh sách hội thoại của Shop
   const loadConversations = useCallback(
     async (silent = false) => {
       if (!shopId) return;
@@ -124,7 +195,7 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
         if (!silent) setLoadingList(false);
       }
     },
-    [shopId, initialSelectedConvId]
+    [shopId, initialSelectedConvId, handleSelectConversation]
   );
 
   useEffect(() => {
@@ -135,7 +206,7 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
     return () => clearInterval(interval);
   }, [loadConversations]);
 
-  // 2. Tải tin nhắn của hội thoại đang chọn
+  // 3. Tải tin nhắn của hội thoại đang chọn
   const loadMessages = useCallback(async (convId, silent = false) => {
     if (!convId) return;
     if (!silent) setLoadingMsg(true);
@@ -153,7 +224,7 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
           return prev;
         }
 
-        // Có tin nhắn mới
+        // Có tin nhắn mới từ khách
         if (safeList.length > prev.length) {
           isNewMessageReceivedRef.current = true;
           if (!isNearBottomRef.current) {
@@ -189,7 +260,6 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
     const el = messagesContainerRef.current;
     if (!el) return;
     const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    // Được coi là đang ở đáy nếu cách đáy <= 80px
     const isAtBottom = distanceToBottom <= 80;
     isNearBottomRef.current = isAtBottom;
 
@@ -198,49 +268,26 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
     }
   };
 
-  // Cuộn thông minh CHỈ TRONG KHUNG CHAT: Tuyệt đối không gọi scrollIntoView làm nhảy trang web
+  // Cuộn thông minh CHỈ TRONG KHUNG TIN NHẮN (không chạm tới window)
   useEffect(() => {
     if (messages.length === 0) return;
 
     if (shouldForceScrollBottomRef.current) {
-      // Vừa mở chat hoặc vừa gửi tin: cuộn đáy khung tin nhắn
       requestAnimationFrame(() => {
-        scrollToContainerBottom("auto");
+        scrollToContainerBottom();
       });
       shouldForceScrollBottomRef.current = false;
       isNewMessageReceivedRef.current = false;
     } else if (isNearBottomRef.current && isNewMessageReceivedRef.current) {
-      // Đang ở sát đáy và có tin nhắn mới thật sự: cuộn mượt
-      scrollToContainerBottom("smooth");
+      scrollToContainerBottom();
       isNewMessageReceivedRef.current = false;
     }
-    // Người dùng đang cuộn xem lịch sử hoặc polling định kỳ -> giữ nguyên vị trí, không chạm vào cuộn
   }, [messages, scrollToContainerBottom]);
 
   const scrollToBottomExplicit = () => {
-    scrollToContainerBottom("smooth");
+    scrollToContainerBottom();
     isNearBottomRef.current = true;
     setHasNewUnseenMessage(false);
-  };
-
-  // Chọn hội thoại
-  const handleSelectConversation = async (conv) => {
-    if (!conv) return;
-    setActiveConv(conv);
-    setDraft("");
-    setPendingImages([]);
-    setImagePreviews([]);
-    setHasNewUnseenMessage(false);
-    shouldForceScrollBottomRef.current = true;
-    isNearBottomRef.current = true;
-
-    try {
-      await chatService.markAsRead(conv.id);
-    } catch {}
-
-    setConversations((prev) =>
-      prev.map((c) => (c.id === conv.id ? { ...c, unreadCountForShop: 0 } : c))
-    );
   };
 
   // Làm mới tin nhắn thủ công
@@ -281,7 +328,6 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
       const currentSenderId = user?.userId || shop?.ownerId || "seller";
       const imagesToSend = [...pendingImages];
 
-      // Reset input ngay để trải nghiệm gõ mượt mà
       setDraft("");
       setPendingImages([]);
       setImagePreviews([]);
@@ -300,7 +346,6 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
         setMessages((prev) => [...prev, sentMsg]);
       }
 
-      // Cập nhật tin nhắn gần nhất trong danh sách bên trái
       setConversations((prev) =>
         prev.map((c) =>
           c.id === activeConv.id
@@ -319,22 +364,28 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
     }
   };
 
-  // Danh sách đã lọc
-  const filteredConversations = conversations.filter((c) => {
-    const buyerDisplayName = c.buyerName || c.userName || c.userId || "Khách Hàng";
+  // Danh sách đã lọc (Phòng vệ dữ liệu an toàn, không bao giờ crash)
+  const safeConversations = Array.isArray(conversations) ? conversations : [];
+  const searchLower = String(searchKeyword || "").trim().toLowerCase();
+
+  const filteredConversations = safeConversations.filter((c) => {
+    const buyerDisplayName = String(c.buyerName || c.userName || c.userId || "Khách Hàng").toLowerCase();
+    const lastMsg = typeof c.lastMessage === "string" ? c.lastMessage.toLowerCase() : "";
+
     const matchesSearch =
-      buyerDisplayName.toLowerCase().includes(searchKeyword.toLowerCase()) ||
-      (c.lastMessage && c.lastMessage.toLowerCase().includes(searchKeyword.toLowerCase()));
+      !searchLower ||
+      buyerDisplayName.includes(searchLower) ||
+      lastMsg.includes(searchLower);
 
     if (!matchesSearch) return false;
     if (filterType === "UNREAD") {
-      return (c.unreadCountForShop || 0) > 0;
+      return (Number(c.unreadCountForShop) || 0) > 0;
     }
     return true;
   });
 
-  const totalUnreadCount = conversations.reduce(
-    (sum, c) => sum + (c.unreadCountForShop || 0),
+  const totalUnreadCount = safeConversations.reduce(
+    (sum, c) => sum + (Number(c.unreadCountForShop) || 0),
     0
   );
 
@@ -509,7 +560,7 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
                 transition: "all 0.15s",
               }}
             >
-              Tất cả ({conversations.length})
+              Tất cả ({safeConversations.length})
             </button>
             <button
               onClick={() => setFilterType("UNREAD")}
@@ -533,7 +584,7 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
 
         {/* Danh sách các cuộc trò chuyện (cuộn độc lập) */}
         <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
-          {loadingList && conversations.length === 0 && (
+          {loadingList && safeConversations.length === 0 && (
             <div style={{ padding: "40px 16px", textAlign: "center", color: "#6b7280" }}>
               <Loader2 size={24} className="animate-spin" style={{ margin: "0 auto 8px", color: "#ee4d2d" }} />
               <div style={{ fontSize: "13px" }}>Đang tải danh sách hội thoại...</div>
@@ -565,9 +616,10 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
 
           {filteredConversations.map((conv) => {
             const isSelected = activeConv?.id === conv.id;
-            const unread = conv.unreadCountForShop || 0;
-            const buyerDisplayName =
-              conv.buyerName || conv.userName || (conv.userId ? `Khách #${String(conv.userId).slice(-4)}` : "Khách Hàng");
+            const unread = Number(conv.unreadCountForShop) || 0;
+            const buyerDisplayName = String(
+              conv.buyerName || conv.userName || (conv.userId ? `Khách #${String(conv.userId).slice(-4)}` : "Khách Hàng")
+            );
 
             return (
               <div
@@ -681,7 +733,7 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {conv.lastMessage || "Đã kết nối cuộc trò chuyện"}
+                    {String(conv.lastMessage || "Đã kết nối cuộc trò chuyện")}
                   </div>
                 </div>
 
@@ -756,7 +808,7 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
               </div>
               <div>
                 <div style={{ fontWeight: "700", fontSize: "15px", color: "#111827", lineHeight: "1.3" }}>
-                  {activeConv.buyerName || activeConv.userName || "Khách Hàng"}
+                  {String(activeConv.buyerName || activeConv.userName || (activeConv.userId ? `Khách #${String(activeConv.userId).slice(-4)}` : "Khách Hàng"))}
                 </div>
                 <div style={{ fontSize: "12px", color: "#10b981", display: "flex", alignItems: "center", gap: "5px" }}>
                   <span style={{ width: "7px", height: "7px", borderRadius: "50%", backgroundColor: "#10b981" }} />
@@ -842,95 +894,97 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
               </div>
             )}
 
-            {messages.map((msg, index) => {
-              const isShop =
-                msg.senderRole === "SHOP" ||
-                msg.senderRole === "SELLER" ||
-                msg.sender === "shop" ||
-                (user?.userId && msg.senderId === String(user.userId)) ||
-                (shop?.ownerId && msg.senderId === String(shop.ownerId));
+            {Array.isArray(messages) &&
+              messages.map((msg, index) => {
+                const isShop =
+                  msg.senderRole === "SHOP" ||
+                  msg.senderRole === "SELLER" ||
+                  msg.sender === "shop" ||
+                  (user?.userId && String(msg.senderId) === String(user.userId)) ||
+                  (shop?.ownerId && String(msg.senderId) === String(shop.ownerId));
 
-              const senderLabel = isShop ? "Shop của bạn" : activeConv.buyerName || "Khách hàng";
-              const timeDisplay = formatTime(msg.sentAt || msg.time);
-              const messageText = msg.content || msg.text || "";
+                const senderLabel = isShop ? "Shop của bạn" : String(activeConv.buyerName || activeConv.userName || "Khách hàng");
+                const timeDisplay = formatTime(msg.sentAt || msg.time);
+                const messageText = typeof msg.content === "string" ? msg.content : typeof msg.text === "string" ? msg.text : "";
 
-              return (
-                <div
-                  key={msg.id || `msg-${index}`}
-                  style={{
-                    alignSelf: isShop ? "flex-end" : "flex-start",
-                    maxWidth: "72%",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: isShop ? "flex-end" : "flex-start",
-                  }}
-                >
-                  {/* Tên người gửi & Giờ */}
+                return (
                   <div
+                    key={msg.id || `msg-${index}`}
                     style={{
-                      fontSize: "11px",
-                      color: "#94a3b8",
-                      marginBottom: "4px",
+                      alignSelf: isShop ? "flex-end" : "flex-start",
+                      maxWidth: "72%",
                       display: "flex",
-                      alignItems: "center",
-                      gap: "5px",
-                      padding: "0 4px",
+                      flexDirection: "column",
+                      alignItems: isShop ? "flex-end" : "flex-start",
                     }}
                   >
-                    <span style={{ fontWeight: isShop ? "700" : "600", color: isShop ? "#ee4d2d" : "#475569" }}>
-                      {senderLabel}
-                    </span>
-                    <span>•</span>
-                    <span>{timeDisplay}</span>
-                  </div>
-
-                  {/* Ảnh đính kèm */}
-                  {Array.isArray(msg.imageUrls) && msg.imageUrls.length > 0 && (
-                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "6px" }}>
-                      {msg.imageUrls.map((url, i) => (
-                        <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                          <img
-                            src={url}
-                            alt="Đính kèm"
-                            style={{
-                              width: "160px",
-                              height: "160px",
-                              objectFit: "cover",
-                              borderRadius: "10px",
-                              border: "1px solid #e2e8f0",
-                              boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
-                              transition: "transform 0.15s",
-                            }}
-                          />
-                        </a>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Nội dung tin nhắn */}
-                  {messageText && (
+                    {/* Tên người gửi & Giờ */}
                     <div
                       style={{
-                        backgroundColor: isShop ? "#ee4d2d" : "#ffffff",
-                        color: isShop ? "#ffffff" : "#1e293b",
-                        padding: "11px 16px",
-                        borderRadius: isShop ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                        fontSize: "13.5px",
-                        lineHeight: "1.5",
-                        boxShadow: isShop
-                          ? "0 3px 10px rgba(238, 77, 45, 0.25)"
-                          : "0 2px 6px rgba(0, 0, 0, 0.04)",
-                        wordBreak: "break-word",
-                        border: isShop ? "none" : "1px solid #e2e8f0",
+                        fontSize: "11px",
+                        color: "#94a3b8",
+                        marginBottom: "4px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        padding: "0 4px",
                       }}
                     >
-                      {messageText}
+                      <span style={{ fontWeight: isShop ? "700" : "600", color: isShop ? "#ee4d2d" : "#475569" }}>
+                        {senderLabel}
+                      </span>
+                      <span>•</span>
+                      <span>{timeDisplay}</span>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
+
+                    {/* Ảnh đính kèm */}
+                    {Array.isArray(msg.imageUrls) && msg.imageUrls.filter((u) => typeof u === "string").length > 0 && (
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "6px" }}>
+                        {msg.imageUrls
+                          .filter((u) => typeof u === "string")
+                          .map((url, i) => (
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                              <img
+                                src={url}
+                                alt="Đính kèm"
+                                style={{
+                                  width: "160px",
+                                  height: "160px",
+                                  objectFit: "cover",
+                                  borderRadius: "10px",
+                                  border: "1px solid #e2e8f0",
+                                  boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
+                                  transition: "transform 0.15s",
+                                }}
+                              />
+                            </a>
+                          ))}
+                      </div>
+                    )}
+
+                    {/* Nội dung tin nhắn */}
+                    {messageText && (
+                      <div
+                        style={{
+                          backgroundColor: isShop ? "#ee4d2d" : "#ffffff",
+                          color: isShop ? "#ffffff" : "#1e293b",
+                          padding: "11px 16px",
+                          borderRadius: isShop ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                          fontSize: "13.5px",
+                          lineHeight: "1.5",
+                          boxShadow: isShop
+                            ? "0 3px 10px rgba(238, 77, 45, 0.25)"
+                            : "0 2px 6px rgba(0, 0, 0, 0.04)",
+                          wordBreak: "break-word",
+                          border: isShop ? "none" : "1px solid #e2e8f0",
+                        }}
+                      >
+                        {messageText}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </div>
 
           {/* Nút nổi: Có tin nhắn mới bên dưới */}
@@ -954,7 +1008,6 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
                 gap: "6px",
                 boxShadow: "0 4px 14px rgba(0,0,0,0.2)",
                 cursor: "pointer",
-                animation: "bounce 1s infinite",
               }}
             >
               <ArrowDown size={14} />
@@ -1218,5 +1271,13 @@ export default function SellerChatCenter({ shop, initialSelectedConvId = null })
         </div>
       )}
     </div>
+  );
+}
+
+export default function SellerChatCenter(props) {
+  return (
+    <SellerChatCenterErrorBoundary>
+      <SellerChatCenterInner {...props} />
+    </SellerChatCenterErrorBoundary>
   );
 }
