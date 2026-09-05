@@ -17,12 +17,20 @@ public class ObjectStorageService {
     }
 
     public void putObject(String bucket, String key, MultipartFile file) throws Exception {
+        try {
+            boolean found = minio.bucketExists(io.minio.BucketExistsArgs.builder().bucket(bucket).build());
+            if (!found) {
+                minio.makeBucket(io.minio.MakeBucketArgs.builder().bucket(bucket).build());
+            }
+        } catch (Exception ignored) {
+        }
+
         minio.putObject(
                 PutObjectArgs.builder()
                         .bucket(bucket)
                         .object(key)
                         .stream(file.getInputStream(), file.getSize(), -1)
-                        .contentType(file.getContentType())
+                        .contentType(file.getContentType() != null ? file.getContentType() : "image/jpeg")
                         .build()
         );
     }
