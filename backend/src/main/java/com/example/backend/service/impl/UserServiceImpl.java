@@ -100,7 +100,17 @@ public class UserServiceImpl implements UserService {
         response.setLng(user.getLng());
         response.setActive(user.getActive());
         response.setProvider(user.getProvider() == null ? "LOCAL" : user.getProvider());
-        response.setUrl(user.getUrl());
+
+        String avatarUrl = user.getUrl();
+        if (avatarUrl != null && !avatarUrl.isBlank()) {
+            if (!avatarUrl.startsWith("http://") && !avatarUrl.startsWith("https://") && !avatarUrl.startsWith("data:")) {
+                try {
+                    avatarUrl = objectStorageService.getPublicUrlOrSignedUrl(userBucket, avatarUrl);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        response.setUrl(avatarUrl);
         return response;
     }
 

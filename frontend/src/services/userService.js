@@ -27,15 +27,15 @@ export const userService = {
   },
 
   // PUT /api/users/{userId}
-  async updateUserProfile(userId, { fullName, phone }) {
+  async updateUserProfile(userId, { fullName, phone, url }) {
     return safeFetch(
       async () => {
         return await authFetch(`${API_BASE_URL}/api/users/${userId}`, {
           method: "PUT",
-          body: JSON.stringify({ fullName, phone }),
+          body: JSON.stringify({ fullName, phone, url }),
         });
       },
-      { userId, fullName, phone }
+      { userId, fullName, phone, url }
     );
   },
 

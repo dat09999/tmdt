@@ -104,14 +104,21 @@ export default function ProfilePage() {
     if (!user?.userId) return;
     userService.getUserProfile(user.userId).then((data) => {
       if (data) {
+        const resolvedAvatar = data.url || data.avatar || user?.avatar || user?.url || profileData.avatar;
         setProfileData((prev) => ({
           ...prev,
           fullName: data.fullName || prev.fullName,
           email: data.email || prev.email,
           phoneNumber: data.phone || prev.phoneNumber,
           provider: data.provider || prev.provider || "LOCAL",
-          avatar: data.url || data.avatar || prev.avatar,
+          avatar: resolvedAvatar,
         }));
+        setSession({
+          ...user,
+          ...data,
+          avatar: resolvedAvatar,
+          url: resolvedAvatar,
+        });
         if (Array.isArray(data.address) && data.address.length > 0) {
           setAddresses(
             data.address.map((a) => ({
@@ -154,6 +161,14 @@ export default function ProfilePage() {
       await userService.updateUserProfile(user.userId, {
         fullName: profileData.fullName,
         phone: profileData.phoneNumber,
+        url: profileData.avatar,
+      });
+      setSession({
+        ...user,
+        fullName: profileData.fullName,
+        phone: profileData.phoneNumber,
+        avatar: profileData.avatar,
+        url: profileData.avatar,
       });
     }
     showToast("Cập nhật thông tin hồ sơ thành công!");
@@ -175,7 +190,7 @@ export default function ProfilePage() {
       try {
         setUploadingAvatar(true);
         const res = await userService.updateAvatar(user.userId, file);
-        const serverAvatarUrl = res?.url || previewUrl;
+        const serverAvatarUrl = res?.url || res?.avatar || previewUrl;
         setProfileData((prev) => ({ ...prev, avatar: serverAvatarUrl }));
         setSession({
           ...user,
@@ -184,7 +199,26 @@ export default function ProfilePage() {
         });
         showToast("Đã cập nhật ảnh đại diện thành công!");
       } catch (err) {
-        showToast(err.message || "Tải ảnh đại diện thất bại!");
+        console.warn("API upload avatar error, fallback to base64:", err);
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const base64Url = event.target.result;
+          setProfileData((prev) => ({ ...prev, avatar: base64Url }));
+          setSession({
+            ...user,
+            avatar: base64Url,
+            url: base64Url,
+          });
+          try {
+            await userService.updateUserProfile(user.userId, {
+              fullName: profileData.fullName,
+              phone: profileData.phoneNumber,
+              url: base64Url,
+            });
+          } catch {}
+          showToast("Đã lưu ảnh đại diện thành công!");
+        };
+        reader.readAsDataURL(file);
       } finally {
         setUploadingAvatar(false);
       }

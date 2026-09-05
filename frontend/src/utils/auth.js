@@ -37,20 +37,23 @@ export function setSession(data) {
   accessToken = data?.accessToken || data?.token || null;
 
   // 2. Thông tin profile thông thường (Tên, email, role, avatar) lưu vào cache để UI mượt
+  const prevUser = currentUser || getCachedProfile();
   const profileInfo =
     data?.user ||
-    (data?.userId || data?.email
+    (data?.userId || data?.email || data?.avatar || data?.url
       ? {
-          userId: data.userId,
-          email: data.email,
-          fullName: data.fullName || data.name,
-          phone: data.phone || data.phoneNumber,
-          role: data.role,
-          address: data.addresses || data.address || [],
-          active: data.active,
-          provider: data.provider || data?.user?.provider || currentUser?.provider || "LOCAL",
+          userId: data.userId || prevUser?.userId,
+          email: data.email || prevUser?.email,
+          fullName: data.fullName || data.name || prevUser?.fullName || prevUser?.name,
+          phone: data.phone || data.phoneNumber || prevUser?.phone || prevUser?.phoneNumber,
+          role: data.role || prevUser?.role,
+          address: data.addresses || data.address || prevUser?.address || [],
+          active: data.active !== undefined ? data.active : prevUser?.active,
+          provider: data.provider || data?.user?.provider || prevUser?.provider || "LOCAL",
+          avatar: data.avatar || data.url || data?.user?.avatar || data?.user?.url || prevUser?.avatar || prevUser?.url || null,
+          url: data.url || data.avatar || data?.user?.url || data?.user?.avatar || prevUser?.url || prevUser?.avatar || null,
         }
-      : currentUser) ||
+      : prevUser) ||
     null;
 
   currentUser = profileInfo;
