@@ -39,6 +39,19 @@ export const sellerService = {
     );
   },
 
+  // PUT /shops/{shopId} - Body: CreateShopRequest
+  async updateShop(shopId, shopData) {
+    return safeFetch(
+      async () => {
+        return await authFetch(`${API_BASE_URL}/shops/${shopId}`, {
+          method: "PUT",
+          body: JSON.stringify(shopData),
+        });
+      },
+      { id: shopId, ...shopData }
+    );
+  },
+
   // GET /shops/{shopId}/analytics/overview?startDate=...&endDate=... OR ?days=10
   async getAnalyticsOverview(shopId, params = 10) {
     if (!shopId) return null;

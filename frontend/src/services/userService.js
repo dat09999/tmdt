@@ -39,6 +39,17 @@ export const userService = {
     );
   },
 
+  // PUT /api/users/{userId}/avatar
+  async updateAvatar(userId, file) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    return authFetch(`${API_BASE_URL}/api/users/${userId}/avatar`, {
+      method: "PUT",
+      body: formData,
+    });
+  },
+
   // PUT /api/users/{userId}/password
   async changePassword(userId, { currentPassword, newPassword }) {
     return authFetch(`${API_BASE_URL}/api/users/${userId}/password`, {

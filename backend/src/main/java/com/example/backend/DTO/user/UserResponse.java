@@ -18,4 +18,5 @@ public class UserResponse {
     private Double lng;
     private boolean active;
     private String provider;
+    private String url;
 }

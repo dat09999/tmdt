@@ -44,6 +44,16 @@ public class UserController {
         return ResponseEntity.ok(userService.updateUser(userId, request));
     }
 
+    @PutMapping(value = "/{userId}/avatar", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<UserResponse> updateAvatar(
+            @PathVariable String userId,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        requireSelf(userId, principal);
+        return ResponseEntity.ok(userService.updateAvatar(userId, file));
+    }
+
     @PutMapping("/{userId}/password")
     public ResponseEntity<Void> changePassword(
             @PathVariable String userId,

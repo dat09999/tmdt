@@ -674,22 +674,36 @@ export default function Header({ onSearch, initialSearch = "" }) {
                     fontWeight: "600",
                   }}
                 >
-                  <div
-                    style={{
-                      width: "26px",
-                      height: "26px",
-                      borderRadius: "50%",
-                      background: "#fff",
-                      color: "var(--primary)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontWeight: "800",
-                      fontSize: "13px",
-                    }}
-                  >
-                    {displayName.charAt(0).toUpperCase()}
-                  </div>
+                  {user?.avatar || user?.url ? (
+                    <img
+                      src={user.avatar || user.url}
+                      alt={displayName}
+                      style={{
+                        width: "26px",
+                        height: "26px",
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                        border: "1.5px solid #fff",
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: "26px",
+                        height: "26px",
+                        borderRadius: "50%",
+                        background: "#fff",
+                        color: "var(--primary)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: "800",
+                        fontSize: "13px",
+                      }}
+                    >
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <span
                     style={{
                       maxWidth: "110px",

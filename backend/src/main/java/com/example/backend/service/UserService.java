@@ -29,4 +29,5 @@ public interface UserService {
     UserResponse addAddress(String userId, AddressRequest request);
     UserResponse updateAddress(String userId, String addressId, AddressRequest request);
     UserResponse deleteAddress(String userId, String addressId);
+    UserResponse updateAvatar(String userId, org.springframework.web.multipart.MultipartFile file);
 }

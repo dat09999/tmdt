@@ -43,6 +43,7 @@ import {
   Calendar,
   MessageCircle,
   Layers,
+  Camera,
 } from "lucide-react";
 
 const CATEGORY_OPTIONS = [
@@ -68,8 +69,9 @@ const getNDaysAgoStr = (n) => {
 export default function SellerPage() {
   const { user } = useAuth();
   const [shop, setShop] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [checkingShop, setCheckingShop] = useState(true);
-
+  const [toastMessage, setToastMessage] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard"); // "dashboard" | "products" | "orders" | "coupons" | "chat" | "settings"
   const [unreadShopChatCount, setUnreadShopChatCount] = useState(0);
   const [orderStatusFilter, setOrderStatusFilter] = useState("ALL"); // "ALL" | "PENDING" | "PROCESSING" | "SHIPPING" | "DELIVERED" | "CANCELLED"
@@ -77,10 +79,8 @@ export default function SellerPage() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [coupons, setCoupons] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
 
-  // Analytics & Date Range State
+  // Filter state for Analytics Overview
   const [dateFilterMode, setDateFilterMode] = useState("PRESET"); // "PRESET" | "CUSTOM"
   const [analyticsDays, setAnalyticsDays] = useState(10); // 7, 10, 30
   const [customStartDate, setCustomStartDate] = useState(getNDaysAgoStr(10));
@@ -99,6 +99,18 @@ export default function SellerPage() {
     logo: "",
     banner: "",
   });
+
+  // Shop Settings Form
+  const [shopSettingsForm, setShopSettingsForm] = useState({
+    shopName: "",
+    phone: "",
+    email: "",
+    description: "",
+    logo: "",
+    coverImage: "",
+    address: "",
+  });
+  const [savingShopSettings, setSavingShopSettings] = useState(false);
 
   // Product Add/Edit Modal
   const [productModalOpen, setProductModalOpen] = useState(false);
@@ -265,6 +277,92 @@ export default function SellerPage() {
       showToast(err.message || "Không thể tạo gian hàng. Vui lòng thử lại!");
     } finally {
       setCreatingShop(false);
+    }
+  };
+
+  // Synchronize shop data into shopSettingsForm
+  useEffect(() => {
+    if (shop) {
+      setShopSettingsForm({
+        shopName: shop.shopName || shop.name || "",
+        phone: shop.phone || user?.phone || "",
+        email: shop.email || user?.email || "",
+        description: shop.description || "",
+        logo: shop.logo || "",
+        coverImage: shop.coverImage || shop.banner || "",
+        address: typeof shop.address === "string" ? shop.address : shop.address?.detail || "",
+      });
+    }
+  }, [shop, user]);
+
+  // Handle upload shop logo from device
+  const handleShopLogoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Dung lượng logo tối đa là 5 MB!");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setShopSettingsForm((prev) => ({ ...prev, logo: event.target.result }));
+      showToast("Đã tải ảnh logo lên thành công!");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle upload shop banner from device
+  const handleShopBannerChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      showToast("Dung lượng ảnh bìa tối đa là 8 MB!");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setShopSettingsForm((prev) => ({ ...prev, coverImage: event.target.result }));
+      showToast("Đã tải ảnh bìa gian hàng lên thành công!");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Save Shop Settings
+  const handleSaveShopSettings = async (e) => {
+    if (e) e.preventDefault();
+    if (!shop?.id) return;
+    if (!shopSettingsForm.shopName?.trim()) {
+      showToast("Vui lòng nhập tên gian hàng!");
+      return;
+    }
+
+    const payload = {
+      ownerId: user?.userId || shop.ownerId,
+      shopName: shopSettingsForm.shopName.trim(),
+      name: shopSettingsForm.shopName.trim(),
+      phone: shopSettingsForm.phone?.trim() || "",
+      email: shopSettingsForm.email?.trim() || "",
+      description: shopSettingsForm.description?.trim() || "",
+      logo: shopSettingsForm.logo?.trim() || "",
+      coverImage: shopSettingsForm.coverImage?.trim() || "",
+      address: shopSettingsForm.address?.trim() || "",
+    };
+
+    try {
+      setSavingShopSettings(true);
+      const updated = await sellerService.updateShop(shop.id, payload);
+      setShop((prev) => ({
+        ...prev,
+        ...updated,
+        ...payload,
+        name: payload.shopName,
+      }));
+      showToast("🎉 Đã lưu cài đặt và ảnh gian hàng thành công!");
+      await loadShopAndData();
+    } catch (err) {
+      showToast(err.message || "Không thể lưu cài đặt gian hàng. Vui lòng thử lại!");
+    } finally {
+      setSavingShopSettings(false);
     }
   };
 
@@ -2443,50 +2541,317 @@ export default function SellerPage() {
               {/* TAB 5: SETTINGS */}
               {activeTab === "settings" && (
                 <div
-                  className="card"
                   style={{
-                    padding: "28px",
-                    backgroundColor: "var(--surface)",
-                    borderRadius: "var(--r-lg)",
-                    border: "1px solid var(--border-light)",
-                    maxWidth: "600px",
+                    display: "grid",
+                    gridTemplateColumns: "1fr",
+                    gap: "24px",
+                    maxWidth: "800px",
+                    margin: "0 auto",
                   }}
                 >
-                  <h3 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "16px" }}>Hồ Sơ Cửa Hàng</h3>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-                        Tên Gian Hàng
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue={shop.name}
-                        style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "4px" }}
-                      />
+                  {/* Shop Branding Card (Cover & Logo) */}
+                  <div
+                    className="card"
+                    style={{
+                      backgroundColor: "var(--surface)",
+                      borderRadius: "var(--r-xl)",
+                      border: "1px solid var(--border-light)",
+                      overflow: "hidden",
+                      boxShadow: "var(--shadow-sm)",
+                    }}
+                  >
+                    <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border-light)" }}>
+                      <h3 style={{ fontSize: "18px", fontWeight: "800", color: "var(--text)" }}>
+                        🖼️ Hình Ảnh & Nhận Diện Thương Hiệu
+                      </h3>
+                      <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                        Cập nhật Logo và Ảnh bìa (Banner) để gian hàng trông chuyên nghiệp và thu hút khách mua hơn.
+                      </p>
                     </div>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-                        Số Điện Thoại Shop
-                      </label>
-                      <input
-                        type="tel"
-                        defaultValue={shop.phone || user?.phone || ""}
-                        style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "4px" }}
-                      />
+
+                    <div style={{ padding: "24px" }}>
+                      {/* Banner / Cover Image Box */}
+                      <div style={{ marginBottom: "28px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                          <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>
+                            Ảnh Bìa Gian Hàng (Banner)
+                          </label>
+                          <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                            Khuyến nghị tỉ lệ 16:5 (VD: 1200x380 px, tối đa 8MB)
+                          </span>
+                        </div>
+
+                        <div
+                          style={{
+                            position: "relative",
+                            width: "100%",
+                            height: "200px",
+                            borderRadius: "var(--r-lg)",
+                            overflow: "hidden",
+                            backgroundColor: "var(--surface-hover)",
+                            border: "1px solid var(--border)",
+                            backgroundImage: `url(${shopSettingsForm.coverImage || "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200"})`,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: "absolute",
+                              inset: 0,
+                              background: "rgba(0, 0, 0, 0.35)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              gap: "12px",
+                              opacity: 0.95,
+                              transition: "opacity 0.2s ease",
+                            }}
+                          >
+                            <label
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "8px",
+                                padding: "8px 16px",
+                                backgroundColor: "#ffffff",
+                                color: "#1e293b",
+                                borderRadius: "var(--r-full)",
+                                fontSize: "13px",
+                                fontWeight: "600",
+                                cursor: "pointer",
+                                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.25)",
+                              }}
+                            >
+                              <Camera size={16} />
+                              <span>Chọn ảnh bìa từ máy</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                style={{ display: "none" }}
+                                onChange={handleShopBannerChange}
+                              />
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Direct URL input for Banner */}
+                        <div style={{ marginTop: "10px" }}>
+                          <input
+                            type="url"
+                            placeholder="Hoặc dán URL ảnh bìa trực tiếp: https://..."
+                            value={shopSettingsForm.coverImage}
+                            onChange={(e) => setShopSettingsForm({ ...shopSettingsForm, coverImage: e.target.value })}
+                            style={{
+                              width: "100%",
+                              padding: "8px 12px",
+                              border: "1px solid var(--border)",
+                              borderRadius: "var(--r-md)",
+                              fontSize: "13px",
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Logo / Avatar Box */}
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                          <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>
+                            Logo Đại Diện Gian Hàng
+                          </label>
+                          <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                            Khuyến nghị hình vuông (VD: 500x500 px, tối đa 5MB)
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap" }}>
+                          <div
+                            style={{
+                              position: "relative",
+                              width: "88px",
+                              height: "88px",
+                              borderRadius: "50%",
+                              overflow: "hidden",
+                              border: "3px solid var(--primary)",
+                              boxShadow: "var(--shadow-md)",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <img
+                              src={shopSettingsForm.logo || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200"}
+                              alt="Shop Logo"
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            />
+                          </div>
+
+                          <div style={{ flex: 1, minWidth: "220px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <div>
+                              <label
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "8px",
+                                  padding: "8px 16px",
+                                  backgroundColor: "var(--primary-light)",
+                                  color: "var(--primary)",
+                                  borderRadius: "var(--r-md)",
+                                  fontSize: "13px",
+                                  fontWeight: "700",
+                                  cursor: "pointer",
+                                  border: "1px solid var(--primary)",
+                                }}
+                              >
+                                <Camera size={16} />
+                                <span>Tải logo từ máy</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  style={{ display: "none" }}
+                                  onChange={handleShopLogoChange}
+                                />
+                              </label>
+                            </div>
+                            <input
+                              type="url"
+                              placeholder="Hoặc dán URL logo trực tiếp: https://..."
+                              value={shopSettingsForm.logo}
+                              onChange={(e) => setShopSettingsForm({ ...shopSettingsForm, logo: e.target.value })}
+                              style={{
+                                width: "100%",
+                                padding: "8px 12px",
+                                border: "1px solid var(--border)",
+                                borderRadius: "var(--r-md)",
+                                fontSize: "13px",
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-                        Mô Tả Shop
-                      </label>
-                      <textarea
-                        rows={3}
-                        defaultValue={shop.description || ""}
-                        style={{ width: "100%", padding: "8px 12px", border: "1px solid var(--border)", borderRadius: "4px" }}
-                      />
-                    </div>
-                    <Button variant="primary" onClick={() => showToast("Đã lưu cài đặt gian hàng!")}>
-                      Lưu Cài Đặt
-                    </Button>
+                  </div>
+
+                  {/* Shop Details Form Card */}
+                  <div
+                    className="card"
+                    style={{
+                      padding: "24px",
+                      backgroundColor: "var(--surface)",
+                      borderRadius: "var(--r-xl)",
+                      border: "1px solid var(--border-light)",
+                      boxShadow: "var(--shadow-sm)",
+                    }}
+                  >
+                    <h3 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "16px", color: "var(--text)" }}>
+                      📋 Thông Tin Gian Hàng
+                    </h3>
+
+                    <form onSubmit={handleSaveShopSettings} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                      <div>
+                        <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
+                          Tên Gian Hàng <span style={{ color: "var(--error)" }}>*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={shopSettingsForm.shopName}
+                          onChange={(e) => setShopSettingsForm({ ...shopSettingsForm, shopName: e.target.value })}
+                          style={{
+                            width: "100%",
+                            padding: "10px 14px",
+                            border: "1px solid var(--border)",
+                            borderRadius: "var(--r-md)",
+                            fontSize: "14px",
+                          }}
+                          required
+                        />
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                        <div>
+                          <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
+                            Số Điện Thoại Shop <span style={{ color: "var(--error)" }}>*</span>
+                          </label>
+                          <input
+                            type="tel"
+                            value={shopSettingsForm.phone}
+                            onChange={(e) => setShopSettingsForm({ ...shopSettingsForm, phone: e.target.value })}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              border: "1px solid var(--border)",
+                              borderRadius: "var(--r-md)",
+                              fontSize: "14px",
+                            }}
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
+                            Email Liên Hệ Shop
+                          </label>
+                          <input
+                            type="email"
+                            value={shopSettingsForm.email}
+                            onChange={(e) => setShopSettingsForm({ ...shopSettingsForm, email: e.target.value })}
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              border: "1px solid var(--border)",
+                              borderRadius: "var(--r-md)",
+                              fontSize: "14px",
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
+                          Địa Chỉ Kho / Cửa Hàng (Gợi ý bản đồ)
+                        </label>
+                        <AddressAutocomplete
+                          value={shopSettingsForm.address}
+                          onChange={(val) => setShopSettingsForm((prev) => ({ ...prev, address: val }))}
+                          onPlaceSelect={(place) => {
+                            setShopSettingsForm((prev) => ({
+                              ...prev,
+                              address: place.formattedAddress || place.detail,
+                            }));
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
+                          Mô Tả / Giới Thiệu Gian Hàng
+                        </label>
+                        <textarea
+                          rows={4}
+                          value={shopSettingsForm.description}
+                          onChange={(e) => setShopSettingsForm({ ...shopSettingsForm, description: e.target.value })}
+                          placeholder="Mô tả ngành hàng, dịch vụ, cam kết chất lượng của shop..."
+                          style={{
+                            width: "100%",
+                            padding: "10px 14px",
+                            border: "1px solid var(--border)",
+                            borderRadius: "var(--r-md)",
+                            fontSize: "14px",
+                            resize: "vertical",
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "8px" }}>
+                        <Button
+                          variant="primary"
+                          size="lg"
+                          type="submit"
+                          loading={savingShopSettings}
+                          style={{ minWidth: "180px" }}
+                        >
+                          Lưu Cài Đặt Gian Hàng
+                        </Button>
+                      </div>
+                    </form>
                   </div>
                 </div>
               )}

@@ -11,5 +11,5 @@ import java.util.List;
 public class UserUpdateRequest {
     private String fullName;
     private String phone;
-
+    private String url;
 }

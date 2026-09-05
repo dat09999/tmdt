@@ -7,6 +7,7 @@ import Button from "../components/common/Button";
 import Modal from "../components/common/Modal";
 import AddressAutocomplete from "../components/common/AddressAutocomplete";
 import { useAuth } from "./Authcontext";
+import { setSession } from "../utils/auth";
 import { userService } from "../services/userService";
 import { couponService } from "../services/couponService";
 import { formatCurrency } from "../utils/formatters";
@@ -23,6 +24,7 @@ import {
   Trash2,
   CheckCircle,
   ShieldCheck,
+  Loader2,
 } from "lucide-react";
 
 export default function ProfilePage() {
@@ -33,6 +35,7 @@ export default function ProfilePage() {
     return "profile";
   });
   const [toastMessage, setToastMessage] = useState("");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // Profile Form state
   const [profileData, setProfileData] = useState({
@@ -41,7 +44,7 @@ export default function ProfilePage() {
     phoneNumber: user?.phone || user?.phoneNumber || "",
     gender: "male",
     birthDate: "1998-05-15",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    avatar: user?.avatar || user?.url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
     provider: user?.provider || "LOCAL",
   });
 
@@ -107,6 +110,7 @@ export default function ProfilePage() {
           email: data.email || prev.email,
           phoneNumber: data.phone || prev.phoneNumber,
           provider: data.provider || prev.provider || "LOCAL",
+          avatar: data.url || data.avatar || prev.avatar,
         }));
         if (Array.isArray(data.address) && data.address.length > 0) {
           setAddresses(
@@ -155,11 +159,37 @@ export default function ProfilePage() {
     showToast("Cập nhật thông tin hồ sơ thành công!");
   };
 
-  const handleAvatarChange = (e) => {
+  const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setProfileData({ ...profileData, avatar: URL.createObjectURL(file) });
-      showToast("Đã tải ảnh đại diện mới!");
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Dung lượng ảnh tối đa là 5 MB!");
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setProfileData((prev) => ({ ...prev, avatar: previewUrl }));
+
+    if (user?.userId) {
+      try {
+        setUploadingAvatar(true);
+        const res = await userService.updateAvatar(user.userId, file);
+        const serverAvatarUrl = res?.url || previewUrl;
+        setProfileData((prev) => ({ ...prev, avatar: serverAvatarUrl }));
+        setSession({
+          ...user,
+          avatar: serverAvatarUrl,
+          url: serverAvatarUrl,
+        });
+        showToast("Đã cập nhật ảnh đại diện thành công!");
+      } catch (err) {
+        showToast(err.message || "Tải ảnh đại diện thất bại!");
+      } finally {
+        setUploadingAvatar(false);
+      }
+    } else {
+      showToast("Đã chọn ảnh đại diện!");
     }
   };
 
@@ -581,6 +611,8 @@ export default function ProfilePage() {
                             borderRadius: "50%",
                             objectFit: "cover",
                             border: "3px solid var(--primary-light)",
+                            opacity: uploadingAvatar ? 0.6 : 1,
+                            transition: "all 0.2s",
                           }}
                         />
                         <label
@@ -597,15 +629,21 @@ export default function ProfilePage() {
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            cursor: "pointer",
+                            cursor: uploadingAvatar ? "not-allowed" : "pointer",
                             boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
                           }}
+                          title="Thay đổi ảnh đại diện"
                         >
-                          <Camera size={16} />
+                          {uploadingAvatar ? (
+                            <Loader2 size={16} className="animate-spin" />
+                          ) : (
+                            <Camera size={16} />
+                          )}
                           <input
                             id="avatar-input"
                             type="file"
                             accept="image/*"
+                            disabled={uploadingAvatar}
                             onChange={handleAvatarChange}
                             style={{ display: "none" }}
                           />
@@ -613,9 +651,9 @@ export default function ProfilePage() {
                       </div>
 
                       <span style={{ fontSize: "12px", color: "var(--text-secondary)", textAlign: "center" }}>
-                        Dung lượng tối đa 1 MB
+                        {uploadingAvatar ? "Đang tải ảnh lên MinIO..." : "Dung lượng tối đa 5 MB"}
                         <br />
-                        Định dạng: .JPEG, .PNG
+                        Định dạng: .JPEG, .PNG, .WEBP
                       </span>
                     </div>
                   </form>

@@ -6,6 +6,7 @@ import com.example.backend.module.Product;
 import com.example.backend.module.ProductImage;
 
 import com.example.backend.module.Shop;
+import com.example.backend.module.User;
 import com.example.backend.repository.ProductRepository;
 import com.example.backend.repository.ShopRepository;
 import com.example.backend.service.LinkService;
@@ -61,6 +62,8 @@ public class LinkServiceImpl implements LinkService {
     private  String bucket ;
     @Value("${minio.bucket-video}")
     private  String bucket1 ;
+    @Value("${minio.bucket-user:user-images}")
+    private  String userBucket;
 
     @Override
     public void addLink(Type type, String targetId, IMAGE_VIDEO imageVideo, MultipartFile file, boolean main) {
@@ -72,11 +75,14 @@ public class LinkServiceImpl implements LinkService {
                     + "/" + UUID.randomUUID()
                     + "_" + originalName;
 
-            if (imageVideo.equals(IMAGE_VIDEO.IMAGE)) {
-                objectStorageService.putObject(bucket, key, file);
-            } else {
-                objectStorageService.putObject(bucket1, key, file);
+            String targetBucket = bucket;
+            if (type.equals(Type.USER)) {
+                targetBucket = userBucket;
+            } else if (imageVideo.equals(IMAGE_VIDEO.VIDEO)) {
+                targetBucket = bucket1;
             }
+
+            objectStorageService.putObject(targetBucket, key, file);
 
             if (type.equals(Type.PRODUCT)) {
                 // FIX #26: atomic $push, không đọc/ghi cả document Product nữa.
@@ -93,7 +99,15 @@ public class LinkServiceImpl implements LinkService {
 
                 var result = mongoTemplate.updateFirst(query, update, Product.class);
                 if (result.getMatchedCount() == 0) {
-                    throw new RuntimeException("ko tìm thấy");
+                    throw new RuntimeException("ko tìm thấy product");
+                }
+            } else if (type.equals(Type.USER)) {
+                Query query = Query.query(Criteria.where("_id").is(targetId));
+                Update update = new Update().set("url", key);
+
+                var result = mongoTemplate.updateFirst(query, update, User.class);
+                if (result.getMatchedCount() == 0) {
+                    throw new RuntimeException("ko tìm thấy user");
                 }
             } else {
                 // FIX #27: atomic $set trên đúng field cần đổi, không ghi đè cả document Shop.

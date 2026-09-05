@@ -24,6 +24,10 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ObjectStorageService objectStorageService;
+
+    @org.springframework.beans.factory.annotation.Value("${minio.bucket-user:user-images}")
+    private String userBucket;
 
     @Override
     public UserResponse getUserById(String userId) {
@@ -44,7 +48,9 @@ public class UserServiceImpl implements UserService {
 
         user.setFullName(request.getFullName());
         user.setPhone(request.getPhone());
-
+        if (request.getUrl() != null) {
+            user.setUrl(request.getUrl());
+        }
 
         User saved = userRepository.save(user);
         return toResponse(saved);
@@ -94,7 +100,30 @@ public class UserServiceImpl implements UserService {
         response.setLng(user.getLng());
         response.setActive(user.getActive());
         response.setProvider(user.getProvider() == null ? "LOCAL" : user.getProvider());
+        response.setUrl(user.getUrl());
         return response;
+    }
+
+    @Override
+    public UserResponse updateAvatar(String userId, org.springframework.web.multipart.MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("File ảnh không được để trống");
+        }
+
+        User user = findUserOrThrow(userId);
+
+        try {
+            String originalName = file.getOriginalFilename();
+            String key = "user/" + userId + "/" + java.util.UUID.randomUUID() + "_" + (originalName != null ? originalName : "avatar.jpg");
+
+            objectStorageService.putObject(userBucket, key, file);
+
+            user.setUrl(key);
+            User saved = userRepository.save(user);
+            return toResponse(saved);
+        } catch (Exception e) {
+            throw new RuntimeException("Cập nhật ảnh đại diện thất bại: " + e.getMessage(), e);
+        }
     }
     @Override
     public UserResponse addAddress(String userId, AddressRequest request) {
