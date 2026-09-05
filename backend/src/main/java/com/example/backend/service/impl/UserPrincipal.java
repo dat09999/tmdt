@@ -18,14 +18,15 @@ public class UserPrincipal implements UserDetails {
     private final String password;
     private final String role;
     private final Boolean active;
+    private final String provider;
 
     public UserPrincipal(User user) {
         this.id = user.getId();
         this.email = user.getEmail();
         this.password = user.getPassword();
         this.role = user.getRole();
-        this.active=user.getActive();
-
+        this.active = user.getActive();
+        this.provider = user.getProvider() == null ? "LOCAL" : user.getProvider();
     }
 
     @NotNull

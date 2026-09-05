@@ -6,6 +6,7 @@ import com.example.backend.DTO.place.AddressRequest;
 import com.example.backend.DTO.user.ChangePasswordRequest;
 import com.example.backend.DTO.user.UserResponse;
 import com.example.backend.DTO.user.UserUpdateRequest;
+import com.example.backend.Exception.BadRequestException;
 import com.example.backend.Exception.UnauthorizedException;
 import com.example.backend.service.UserService;
 import com.example.backend.service.impl.UserPrincipal;
@@ -50,6 +51,9 @@ public class UserController {
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         requireSelf(userId, principal);
+        if ("GOOGLE".equalsIgnoreCase(principal.getProvider())) {
+            throw new BadRequestException("Tài khoản đăng nhập bằng Google không thể đổi mật khẩu");
+        }
         userService.changePassword(userId, request);
         return ResponseEntity.ok().build();
     }

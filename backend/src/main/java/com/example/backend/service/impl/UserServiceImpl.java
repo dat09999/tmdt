@@ -54,8 +54,8 @@ public class UserServiceImpl implements UserService {
     public void changePassword(String userId, ChangePasswordRequest request) {
         User user = findUserOrThrow(userId);
 
-        if (user.getPassword() == null) {
-            throw new IllegalStateException("Tài khoản đăng nhập bằng Google, không thể đổi mật khẩu tại đây");
+        if ("GOOGLE".equalsIgnoreCase(user.getProvider()) || user.getPassword() == null || user.getPassword().isBlank()) {
+            throw new IllegalArgumentException("Tài khoản đăng nhập bằng Google không có mật khẩu, không thể thực hiện đổi mật khẩu");
         }
 
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
@@ -93,6 +93,7 @@ public class UserServiceImpl implements UserService {
         response.setLat(user.getLat());
         response.setLng(user.getLng());
         response.setActive(user.getActive());
+        response.setProvider(user.getProvider() == null ? "LOCAL" : user.getProvider());
         return response;
     }
     @Override

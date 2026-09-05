@@ -17,4 +17,5 @@ public class UserResponse {
     private Double lat;
     private Double lng;
     private boolean active;
+    private String provider;
 }

@@ -80,7 +80,8 @@ public class AuthController {
                         "accessToken", accessToken,
                         "userId", user.getId(),
                         "email", user.getEmail(),
-                        "role", user.getRole()
+                        "role", user.getRole(),
+                        "provider", user.getProvider() == null ? "LOCAL" : user.getProvider()
                 ));
     }
 
@@ -159,8 +160,9 @@ public class AuthController {
                 "accessToken", newAccessToken,
                 "userId", user.getId(),
                 "email", user.getEmail(),
-                "fullName", user.getFullName(),
-                "role", user.getRole()
+                "fullName", user.getFullName() == null ? "" : user.getFullName(),
+                "role", user.getRole(),
+                "provider", user.getProvider() == null ? "LOCAL" : user.getProvider()
         ));
     }
     @PostMapping("/logout")

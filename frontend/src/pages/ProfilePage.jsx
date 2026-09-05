@@ -36,13 +36,22 @@ export default function ProfilePage() {
 
   // Profile Form state
   const [profileData, setProfileData] = useState({
-    fullName: user?.fullName || user?.name || "Nguyễn Minh Khang",
-    email: user?.email || "khang.nguyen@example.com",
-    phoneNumber: user?.phoneNumber || "0912 345 678",
+    fullName: user?.fullName || user?.name || "Người dùng",
+    email: user?.email || "",
+    phoneNumber: user?.phone || user?.phoneNumber || "",
     gender: "male",
     birthDate: "1998-05-15",
     avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    provider: user?.provider || "LOCAL",
   });
+
+  const isGoogleUser = (profileData.provider || user?.provider || "").toUpperCase() === "GOOGLE";
+
+  useEffect(() => {
+    if (isGoogleUser && activeTab === "password") {
+      setActiveTab("profile");
+    }
+  }, [isGoogleUser, activeTab]);
 
   // Address Book state
   const [addresses, setAddresses] = useState([
@@ -97,6 +106,7 @@ export default function ProfilePage() {
           fullName: data.fullName || prev.fullName,
           email: data.email || prev.email,
           phoneNumber: data.phone || prev.phoneNumber,
+          provider: data.provider || prev.provider || "LOCAL",
         }));
         if (Array.isArray(data.address) && data.address.length > 0) {
           setAddresses(
@@ -336,7 +346,7 @@ export default function ProfilePage() {
                 {[
                   { id: "profile", label: "Hồ Sơ Của Tôi", icon: User },
                   { id: "addresses", label: "Địa Chỉ Nhận Hàng", icon: MapPin },
-                  { id: "password", label: "Đổi Mật Khẩu", icon: Lock },
+                  ...(!isGoogleUser ? [{ id: "password", label: "Đổi Mật Khẩu", icon: Lock }] : []),
                   { id: "vouchers", label: "Kho Voucher", icon: Ticket },
                 ].map((item) => {
                   const Icon = item.icon;
@@ -757,7 +767,7 @@ export default function ProfilePage() {
               )}
 
               {/* TAB 3: PASSWORD */}
-              {activeTab === "password" && (
+              {activeTab === "password" && !isGoogleUser && (
                 <div
                   className="card"
                   style={{

@@ -48,6 +48,7 @@ export function setSession(data) {
           role: data.role,
           address: data.addresses || data.address || [],
           active: data.active,
+          provider: data.provider || data?.user?.provider || currentUser?.provider || "LOCAL",
         }
       : currentUser) ||
     null;
