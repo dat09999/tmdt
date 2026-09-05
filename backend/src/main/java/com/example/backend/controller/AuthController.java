@@ -35,6 +35,23 @@ public class AuthController {
     private final UserRepository userRepository;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
+    private final com.example.backend.service.impl.ObjectStorageService objectStorageService;
+
+    @org.springframework.beans.factory.annotation.Value("${minio.bucket-user:user-images}")
+    private String userBucket;
+
+    private String resolveUserAvatarUrl(String rawUrl) {
+        if (rawUrl == null || rawUrl.isBlank()) return "";
+        if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://") || rawUrl.startsWith("data:")) {
+            return rawUrl;
+        }
+        try {
+            return objectStorageService.getPublicUrlOrSignedUrl(userBucket, rawUrl);
+        } catch (Exception e) {
+            return rawUrl;
+        }
+    }
+
 //login
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
@@ -74,15 +91,22 @@ public class AuthController {
                 .maxAge(7 * 24 * 60 * 60)
                 .build();
         log.info("dang nhap 1");
+
+        String avatarUrl = resolveUserAvatarUrl(user.getUrl());
+        Map<String, Object> body = new HashMap<>();
+        body.put("accessToken", accessToken);
+        body.put("userId", user.getId());
+        body.put("email", user.getEmail());
+        body.put("fullName", user.getFullName() == null ? "" : user.getFullName());
+        body.put("phone", user.getPhone() == null ? "" : user.getPhone());
+        body.put("role", user.getRole());
+        body.put("provider", user.getProvider() == null ? "LOCAL" : user.getProvider());
+        body.put("avatar", avatarUrl);
+        body.put("url", avatarUrl);
+
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
-                .body(Map.of(
-                        "accessToken", accessToken,
-                        "userId", user.getId(),
-                        "email", user.getEmail(),
-                        "role", user.getRole(),
-                        "provider", user.getProvider() == null ? "LOCAL" : user.getProvider()
-                ));
+                .body(body);
     }
 
     @PostMapping("/register")
@@ -156,14 +180,19 @@ public class AuthController {
                 user.getEmail()
         );
 
-        return ResponseEntity.ok(Map.of(
-                "accessToken", newAccessToken,
-                "userId", user.getId(),
-                "email", user.getEmail(),
-                "fullName", user.getFullName() == null ? "" : user.getFullName(),
-                "role", user.getRole(),
-                "provider", user.getProvider() == null ? "LOCAL" : user.getProvider()
-        ));
+        String avatarUrl = resolveUserAvatarUrl(user.getUrl());
+        Map<String, Object> body = new HashMap<>();
+        body.put("accessToken", newAccessToken);
+        body.put("userId", user.getId());
+        body.put("email", user.getEmail());
+        body.put("fullName", user.getFullName() == null ? "" : user.getFullName());
+        body.put("phone", user.getPhone() == null ? "" : user.getPhone());
+        body.put("role", user.getRole());
+        body.put("provider", user.getProvider() == null ? "LOCAL" : user.getProvider());
+        body.put("avatar", avatarUrl);
+        body.put("url", avatarUrl);
+
+        return ResponseEntity.ok(body);
     }
     @PostMapping("/logout")
     public ResponseEntity<?> logout() {
