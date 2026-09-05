@@ -44,9 +44,22 @@ export default function ProfilePage() {
     phoneNumber: user?.phone || user?.phoneNumber || "",
     gender: "male",
     birthDate: "1998-05-15",
-    avatar: user?.avatar || user?.url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    avatar: user?.avatar || user?.url || "",
     provider: user?.provider || "LOCAL",
   });
+
+  useEffect(() => {
+    if (user) {
+      setProfileData((prev) => ({
+        ...prev,
+        fullName: user.fullName || user.name || prev.fullName,
+        email: user.email || prev.email,
+        phoneNumber: user.phone || user.phoneNumber || prev.phoneNumber,
+        avatar: user.avatar || user.url || prev.avatar,
+        provider: user.provider || prev.provider || "LOCAL",
+      }));
+    }
+  }, [user?.userId, user?.avatar, user?.url, user?.fullName, user?.phone]);
 
   const isGoogleUser = (profileData.provider || user?.provider || "").toUpperCase() === "GOOGLE";
 
@@ -375,17 +388,38 @@ export default function ProfilePage() {
                   marginBottom: "14px",
                 }}
               >
-                <img
-                  src={profileData.avatar}
-                  alt="Avatar"
-                  style={{
-                    width: "48px",
-                    height: "48px",
-                    borderRadius: "50%",
-                    objectFit: "cover",
-                    border: "2px solid var(--primary-light)",
-                  }}
-                />
+                {profileData.avatar || user?.avatar || user?.url ? (
+                  <img
+                    src={profileData.avatar || user?.avatar || user?.url}
+                    alt="Avatar"
+                    style={{
+                      width: "48px",
+                      height: "48px",
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      border: "2px solid var(--primary-light)",
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: "48px",
+                      height: "48px",
+                      borderRadius: "50%",
+                      backgroundColor: "var(--primary-light)",
+                      color: "var(--primary)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "18px",
+                      fontWeight: "800",
+                      border: "2px solid var(--primary-light)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {(profileData.fullName || user?.fullName || user?.name || user?.email || "U").charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <div style={{ minWidth: 0 }}>
                   <div
                     style={{
@@ -636,19 +670,41 @@ export default function ProfilePage() {
                       }}
                     >
                       <div style={{ position: "relative", marginBottom: "14px" }}>
-                        <img
-                          src={profileData.avatar}
-                          alt="Avatar Large"
-                          style={{
-                            width: "110px",
-                            height: "110px",
-                            borderRadius: "50%",
-                            objectFit: "cover",
-                            border: "3px solid var(--primary-light)",
-                            opacity: uploadingAvatar ? 0.6 : 1,
-                            transition: "all 0.2s",
-                          }}
-                        />
+                        {profileData.avatar || user?.avatar || user?.url ? (
+                          <img
+                            src={profileData.avatar || user?.avatar || user?.url}
+                            alt="Avatar Large"
+                            style={{
+                              width: "110px",
+                              height: "110px",
+                              borderRadius: "50%",
+                              objectFit: "cover",
+                              border: "3px solid var(--primary-light)",
+                              opacity: uploadingAvatar ? 0.6 : 1,
+                              transition: "all 0.2s",
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: "110px",
+                              height: "110px",
+                              borderRadius: "50%",
+                              backgroundColor: "var(--primary-light)",
+                              color: "var(--primary)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: "42px",
+                              fontWeight: "800",
+                              border: "3px solid var(--primary-light)",
+                              opacity: uploadingAvatar ? 0.6 : 1,
+                              transition: "all 0.2s",
+                            }}
+                          >
+                            {(profileData.fullName || user?.fullName || user?.name || user?.email || "U").charAt(0).toUpperCase()}
+                          </div>
+                        )}
                         <label
                           htmlFor="avatar-input"
                           style={{

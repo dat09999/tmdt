@@ -68,8 +68,8 @@ public class SecurityConfig {
                         "/api/payment/vnpay/**", // IPN webhook từ VNPay server và Return URL
                         "/api/geo/**"            // Tra cứu địa chỉ & tọa độ
                 ).permitAll()
-                // Xem danh sách sản phẩm, danh mục, shop, link ảnh thì ai cũng xem được (GET)
-                .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/shops/**", "/reviews/**", "/api/links/**").permitAll()
+                // Xem danh sách sản phẩm, danh mục, shop, link ảnh, mã giảm giá thì ai cũng xem được (GET)
+                .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/shops/**", "/reviews/**", "/api/links/**", "/coupons/**").permitAll()
                 // Ước tính phí ship trước khi đặt hàng - không cần đăng nhập
                 .requestMatchers(HttpMethod.POST, "/shipping/estimate").permitAll()
 

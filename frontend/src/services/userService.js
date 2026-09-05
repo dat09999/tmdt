@@ -4,25 +4,12 @@ import { safeFetch } from "./api";
 export const userService = {
   // GET /api/users/{userId}
   async getUserProfile(userId) {
+    if (!userId) return null;
     return safeFetch(
       async () => {
         return await authFetch(`${API_BASE_URL}/api/users/${userId}`);
       },
-      {
-        userId,
-        fullName: "Nguyễn Minh Khang",
-        email: "khang.nguyen@example.com",
-        phone: "0912 345 678",
-        address: [
-          {
-            id: "addr-1",
-            fullName: "Nguyễn Minh Khang",
-            phone: "0912 345 678",
-            detail: "Số 88 Đường Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh",
-            isDefault: true,
-          },
-        ],
-      }
+      null
     );
   },
 
