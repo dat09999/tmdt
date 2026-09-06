@@ -66,7 +66,8 @@ public class SecurityConfig {
                         "/swagger-ui/**",
                         "/swagger-ui.html",
                         "/api/payment/vnpay/**", // IPN webhook từ VNPay server và Return URL
-                        "/api/geo/**"            // Tra cứu địa chỉ & tọa độ
+                        "/api/geo/**",           // Tra cứu địa chỉ & tọa độ
+                        "/api/files/**"          // Public image & media streaming from MinIO
                 ).permitAll()
                 // Xem danh sách sản phẩm, danh mục, shop, link ảnh, mã giảm giá thì ai cũng xem được (GET)
                 .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/shops/**", "/reviews/**", "/api/links/**", "/coupons/**").permitAll()

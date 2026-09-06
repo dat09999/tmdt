@@ -35,20 +35,25 @@ public class ObjectStorageService {
         );
     }
 
-    // Neu bucket public: tu build URL.
-    // Neu bucket private: doi sang presigned URL.
-    public String getPublicUrlOrSignedUrl(String bucket, String key) {
-        try {
-            return minio.getPresignedObjectUrl(
-                    GetPresignedObjectUrlArgs.builder()
-                            .method(Method.GET)
-                            .bucket(bucket)
-                            .object(key)
-                            .expiry(60 * 60) // 1 gio
-                            .build()
-            );
+    public byte[] getObjectBytes(String bucket, String key) {
+        try (var response = minio.getObject(
+                io.minio.GetObjectArgs.builder()
+                        .bucket(bucket)
+                        .object(key)
+                        .build()
+        )) {
+            return response.readAllBytes();
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            return null;
         }
+    }
+
+    // Tra ve endpoint proxy tren Backend de browser luon tai duoc anh an toan (HTTPS, no CORS)
+    public String getPublicUrlOrSignedUrl(String bucket, String key) {
+        if (key == null || key.isBlank()) return "";
+        if (key.startsWith("http://") || key.startsWith("https://") || key.startsWith("data:")) {
+            return key;
+        }
+        return "/api/files/" + bucket + "/" + key;
     }
 }

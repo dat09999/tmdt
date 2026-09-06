@@ -78,9 +78,13 @@ export function isValidAvatarUrl(url) {
   if (!trimmed) return false;
   // Valid local data previews
   if (trimmed.startsWith("data:image/") || trimmed.startsWith("blob:")) return true;
+  // Relative paths like /api/files/... or user/...
+  if (trimmed.startsWith("/") || trimmed.startsWith("user/")) return true;
   // Must start with http or https
   if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return false;
-  // In HTTPS production, local dev URLs cannot be loaded (Mixed Content / unreachable)
+  // If it's an old localhost MinIO link with :9000/, toFullImageUrl rewrites it to API proxy
+  if (trimmed.includes(":9000/")) return true;
+  // In HTTPS production, other local dev URLs cannot be loaded (Mixed Content / unreachable)
   if (typeof window !== "undefined" && window.location.protocol === "https:") {
     if (trimmed.includes("localhost") || trimmed.includes("127.0.0.1")) {
       return false;

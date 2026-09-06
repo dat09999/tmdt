@@ -3,6 +3,25 @@ export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   "http://localhost:8080";
 
+export function toFullImageUrl(url) {
+  if (!url || typeof url !== "string") return "";
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("data:") || trimmed.startsWith("blob:")) return trimmed;
+  // Convert old localhost:9000 presigned urls from MinIO
+  if (trimmed.includes(":9000/")) {
+    const afterPort = trimmed.split(":9000/")[1]?.split("?")[0];
+    if (afterPort) return `${API_BASE_URL}/api/files/${afterPort}`;
+  }
+  if (trimmed.startsWith("user/")) {
+    return `${API_BASE_URL}/api/files/user-images/${trimmed}`;
+  }
+  if (trimmed.startsWith("/")) {
+    return `${API_BASE_URL}${trimmed}`;
+  }
+  return trimmed;
+}
+
 const PROFILE_STORAGE_KEY = "domix_user_profile";
 
 // Load cached non-sensitive user profile on startup (for smooth UI rendering)

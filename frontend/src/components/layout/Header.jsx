@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "../../pages/Authcontext";
+import { toFullImageUrl } from "../../utils/auth";
 import { cartService } from "../../services/cartService";
 import { notificationService } from "../../services/notificationService";
 import { formatTimeAgo, isValidAvatarUrl } from "../../utils/formatters";
@@ -702,7 +703,7 @@ export default function Header({ onSearch, initialSearch = "" }) {
                     </div>
                     {isValidAvatarUrl(user?.avatar || user?.url) && (
                       <img
-                        src={user.avatar || user.url}
+                        src={toFullImageUrl(user?.avatar || user?.url)}
                         alt={displayName}
                         onError={(e) => {
                           e.currentTarget.style.display = "none";

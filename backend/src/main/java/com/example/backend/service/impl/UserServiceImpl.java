@@ -112,7 +112,7 @@ public class UserServiceImpl implements UserService {
                 }
             }
         }
-        response.setUrl((avatarUrl != null && (avatarUrl.startsWith("http://") || avatarUrl.startsWith("https://") || avatarUrl.startsWith("data:"))) ? avatarUrl : "");
+        response.setUrl((avatarUrl != null && (avatarUrl.startsWith("http://") || avatarUrl.startsWith("https://") || avatarUrl.startsWith("data:") || avatarUrl.startsWith("/"))) ? avatarUrl : "");
         return response;
     }
 

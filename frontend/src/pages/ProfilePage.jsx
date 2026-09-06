@@ -7,7 +7,7 @@ import Button from "../components/common/Button";
 import Modal from "../components/common/Modal";
 import AddressAutocomplete from "../components/common/AddressAutocomplete";
 import { useAuth } from "./Authcontext";
-import { setSession } from "../utils/auth";
+import { setSession, toFullImageUrl } from "../utils/auth";
 import { userService } from "../services/userService";
 import { couponService } from "../services/couponService";
 import { formatCurrency, isValidAvatarUrl } from "../utils/formatters";
@@ -424,7 +424,7 @@ export default function ProfilePage() {
                   </div>
                   {!sidebarAvatarError && isValidAvatarUrl(profileData.avatar || user?.avatar || user?.url) && (
                     <img
-                      src={profileData.avatar || user?.avatar || user?.url}
+                      src={toFullImageUrl(profileData.avatar || user?.avatar || user?.url)}
                       alt="Avatar"
                       onError={() => setSidebarAvatarError(true)}
                       style={{
@@ -708,7 +708,7 @@ export default function ProfilePage() {
                           {(profileData.fullName || user?.fullName || user?.name || user?.email || "U").charAt(0).toUpperCase()}
                           {!mainAvatarError && isValidAvatarUrl(profileData.avatar || user?.avatar || user?.url) && (
                             <img
-                              src={profileData.avatar || user?.avatar || user?.url}
+                              src={toFullImageUrl(profileData.avatar || user?.avatar || user?.url)}
                               alt="Avatar Large"
                               onError={() => setMainAvatarError(true)}
                               style={{
