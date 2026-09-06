@@ -38,4 +38,14 @@ public interface OrderService {
     // Gọi định kỳ (scheduled job) để hủy các đơn PENDING quá hạn chưa thanh toán,
 // hoàn lại tồn kho đã giữ chỗ. Trả về số lượng đơn đã hủy (để log).
     int cancelExpiredPendingOrders(int minutesThreshold);
+
+    // Admin lấy danh sách đơn hàng toàn hệ thống có lọc và phân trang
+    org.springframework.data.domain.Page<Order> getAllOrders(
+            String orderStatus,
+            java.util.Date startDate,
+            java.util.Date endDate,
+            String shopId,
+            String buyerId,
+            org.springframework.data.domain.Pageable pageable
+    );
 }

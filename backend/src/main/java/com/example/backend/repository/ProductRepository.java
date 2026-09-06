@@ -32,4 +32,5 @@ public interface ProductRepository extends MongoRepository<Product, String> {
 
     List<Product> findByBrandIgnoreCase(String brand);
     Optional<Product> findBySlug(String slug);
+    long countByShopId(String shopId);
 }

@@ -84,6 +84,13 @@ public interface ShopService {
             Pageable pageable
     );
 
+    /** Lấy danh sách shop toàn hệ thống cho Admin với bộ lọc trạng thái, từ khóa và phân trang. */
+    Page<ShopResponse> getAllShopsForAdmin(
+            String status,
+            String keyword,
+            Pageable pageable
+    );
+
 
     // =========================================================
     // DASHBOARD / THỐNG KÊ SHOP

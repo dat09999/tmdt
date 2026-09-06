@@ -6,6 +6,9 @@ import com.example.backend.repository.CouponRepository;
 import com.example.backend.service.CouponService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -149,5 +152,45 @@ public class CouponServiceImpl implements CouponService {
     private String normalizeCode(String code) {
         if (code == null || code.trim().isBlank()) throw new RuntimeException("code không được để trống");
         return code.trim().toUpperCase();
+    }
+
+    @Override
+    public Page<Coupon> getAllCoupons(String scope, Boolean active, Pageable pageable) {
+        Query query = new Query();
+        if (scope != null && !scope.isBlank()) {
+            query.addCriteria(Criteria.where("scope").is(scope.trim().toUpperCase()));
+        }
+        if (active != null) {
+            query.addCriteria(Criteria.where("active").is(active));
+        }
+
+        long total = mongoTemplate.count(query, Coupon.class);
+        query.with(pageable);
+        List<Coupon> list = mongoTemplate.find(query, Coupon.class);
+        return new PageImpl<>(list, pageable, total);
+    }
+
+    @Override
+    public boolean incrementUsedCountAtomic(String code) {
+        if (code == null || code.isBlank()) return false;
+        String normalized = normalizeCode(code);
+
+        // Điều kiện atomic: code khớp AND active == true AND (usageLimit == null OR usedCount < usageLimit)
+        Query query = new Query(
+                Criteria.where("code").is(normalized)
+                        .and("active").is(true)
+                        .orOperator(
+                                Criteria.where("usageLimit").is(null),
+                                Criteria.where("usageLimit").exists(false),
+                                Criteria.where("$expr").is(new org.bson.Document("$lt", List.of(
+                                        new org.bson.Document("$ifNull", List.of("$usedCount", 0)),
+                                        "$usageLimit"
+                                )))
+                        )
+        );
+
+        Update update = new Update().inc("usedCount", 1);
+        Coupon updated = mongoTemplate.findAndModify(query, update, FindAndModifyOptions.options().returnNew(true), Coupon.class);
+        return updated != null;
     }
 }

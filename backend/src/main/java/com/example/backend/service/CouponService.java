@@ -11,4 +11,14 @@ public interface CouponService {
     List<Coupon> getCouponsByShop(String shopId);
     Coupon validateCoupon(String code, Long orderValue);
     Coupon deactivateCoupon(String couponId);
+
+    // Admin lấy toàn bộ coupon có lọc theo scope (GLOBAL / SHOP) và active
+    org.springframework.data.domain.Page<Coupon> getAllCoupons(
+            String scope,
+            Boolean active,
+            org.springframework.data.domain.Pageable pageable
+    );
+
+    // BUG FIX: Tăng usedCount nguyên tử kèm điều kiện usedCount < usageLimit
+    boolean incrementUsedCountAtomic(String code);
 }

@@ -17,6 +17,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -24,6 +25,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.List;
 
 @Configuration
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -73,6 +75,12 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/shops/**", "/reviews/**", "/api/links/**", "/coupons/**").permitAll()
                 // Ước tính phí ship trước khi đặt hàng - không cần đăng nhập
                 .requestMatchers(HttpMethod.POST, "/shipping/estimate").permitAll()
+
+                // Phân quyền Quản trị viên (ADMIN)
+                .requestMatchers("/admin/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/categories/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/categories/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/categories/**").hasRole("ADMIN")
 
                 // Các thao tác mua bán, sửa đổi phải đăng nhập:
                 .requestMatchers("/orders/**", "/cart/**", "/wishlist/**", "/notifications/**").authenticated()

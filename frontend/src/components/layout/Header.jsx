@@ -15,6 +15,7 @@ import {
   CheckCheck,
   ExternalLink,
   Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "../../pages/Authcontext";
 import { toFullImageUrl } from "../../utils/auth";
@@ -222,6 +223,24 @@ export default function Header({ onSearch, initialSearch = "" }) {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            {user?.role === "ADMIN" && (
+              <>
+                <a
+                  href="/admin"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    color: "#fef08a",
+                    fontWeight: "700",
+                  }}
+                >
+                  <ShieldCheck size={14} color="#fef08a" />
+                  <span>Trang Quản Trị</span>
+                </a>
+                <span style={{ opacity: 0.4 }}>|</span>
+              </>
+            )}
             <a
               href="/seller"
               style={{
@@ -813,6 +832,28 @@ export default function Header({ onSearch, initialSearch = "" }) {
                       <RotateCcw size={16} />
                       <span>Trả hàng & Hoàn tiền</span>
                     </a>
+
+                    {user?.role === "ADMIN" && (
+                      <a
+                        href="/admin"
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          padding: "10px 16px",
+                          fontSize: "13px",
+                          fontWeight: "700",
+                          color: "#d97706",
+                          backgroundColor: "#fffbeb",
+                          transition: "background 0.15s",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#fef3c7")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "#fffbeb")}
+                      >
+                        <ShieldCheck size={16} color="#d97706" />
+                        <span>Trang Quản Trị (Admin Portal)</span>
+                      </a>
+                    )}
 
                     <div style={{ height: "1px", background: "var(--border-light)", margin: "6px 0" }} />
 

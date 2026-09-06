@@ -25,6 +25,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final ObjectStorageService objectStorageService;
+    private final org.springframework.data.mongodb.core.MongoTemplate mongoTemplate;
 
     @org.springframework.beans.factory.annotation.Value("${minio.bucket-user:user-images}")
     private String userBucket;
@@ -218,4 +219,44 @@ public class UserServiceImpl implements UserService {
         return toResponse(user);
     }
 
+    @Override
+    public org.springframework.data.domain.Page<UserResponse> getAllUsers(
+            Boolean active,
+            String provider,
+            String keyword,
+            org.springframework.data.domain.Pageable pageable) {
+        org.springframework.data.mongodb.core.query.Query query = new org.springframework.data.mongodb.core.query.Query();
+
+        if (active != null) {
+            query.addCriteria(org.springframework.data.mongodb.core.query.Criteria.where("active").is(active));
+        }
+        if (provider != null && !provider.isBlank()) {
+            query.addCriteria(org.springframework.data.mongodb.core.query.Criteria.where("provider").is(provider.trim().toUpperCase()));
+        }
+        if (keyword != null && !keyword.isBlank()) {
+            String regex = java.util.regex.Pattern.quote(keyword.trim());
+            query.addCriteria(new org.springframework.data.mongodb.core.query.Criteria().orOperator(
+                    org.springframework.data.mongodb.core.query.Criteria.where("email").regex(regex, "i"),
+                    org.springframework.data.mongodb.core.query.Criteria.where("fullName").regex(regex, "i")
+            ));
+        }
+
+        long total = mongoTemplate.count(query, User.class);
+        query.with(pageable);
+        List<User> users = mongoTemplate.find(query, User.class);
+        List<UserResponse> responses = users.stream().map(this::toResponse).toList();
+        return new org.springframework.data.domain.PageImpl<>(responses, pageable, total);
+    }
+
+    @Override
+    public UserResponse updateUserStatus(String userId, boolean active) {
+        User user = findUserOrThrow(userId);
+        user.setActive(active);
+        // Khi khóa tài khoản, tăng tokenVersion để vô hiệu hóa ngay lập tức JWT cũ
+        if (!active) {
+            user.setTokenVersion(user.getTokenVersion() + 1);
+        }
+        User saved = userRepository.save(user);
+        return toResponse(saved);
+    }
 }

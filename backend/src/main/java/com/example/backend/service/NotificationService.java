@@ -22,4 +22,7 @@ public interface NotificationService {
     void markAsRead(String notificationId, String userId);
 
     void markAllAsRead(String userId);
+
+    // Admin phát sóng thông báo diện rộng
+    int broadcastNotification(com.example.backend.DTO.admin.AdminBroadcastNotificationRequest request);
 }

@@ -232,4 +232,37 @@ public class ReviewServiceImpl implements ReviewService {
 
         mongoTemplate.updateFirst(query, update, com.example.backend.module.Product.class);
     }
+
+    @Override
+    public Page<ReviewResponse> getAllReviews(
+            Integer rating,
+            LocalDateTime startDate,
+            LocalDateTime endDate,
+            String productId,
+            org.springframework.data.domain.Pageable pageable) {
+        Query query = new Query();
+
+        if (rating != null) {
+            query.addCriteria(Criteria.where("rating").is(rating));
+        }
+        if (productId != null && !productId.isBlank()) {
+            query.addCriteria(Criteria.where("productId").is(productId.trim()));
+        }
+        if (startDate != null || endDate != null) {
+            Criteria dateCriteria = Criteria.where("createdAt");
+            if (startDate != null) {
+                dateCriteria = dateCriteria.gte(startDate);
+            }
+            if (endDate != null) {
+                dateCriteria = dateCriteria.lte(endDate);
+            }
+            query.addCriteria(dateCriteria);
+        }
+
+        long total = mongoTemplate.count(query, Review.class);
+        query.with(pageable);
+        List<Review> reviews = mongoTemplate.find(query, Review.class);
+        List<ReviewResponse> responses = reviews.stream().map(ReviewResponse::fromEntity).toList();
+        return new org.springframework.data.domain.PageImpl<>(responses, pageable, total);
+    }
 }

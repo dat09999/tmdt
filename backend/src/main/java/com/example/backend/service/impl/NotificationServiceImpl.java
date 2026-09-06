@@ -3,7 +3,9 @@ package com.example.backend.service.impl;
 
 import com.example.backend.Exception.ResourceNotFoundException;
 import com.example.backend.module.Notification;
+import com.example.backend.module.User;
 import com.example.backend.repository.NotificationRepository;
+import com.example.backend.repository.UserRepository;
 import com.example.backend.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,12 +15,16 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
     @Override
@@ -93,5 +99,52 @@ public class NotificationServiceImpl implements NotificationService {
             throw new AccessDeniedException("Thông báo không thuộc về bạn");
         }
         return n;
+    }
+
+    @Override
+    public int broadcastNotification(com.example.backend.DTO.admin.AdminBroadcastNotificationRequest request) {
+        Notification.NotificationType type = Notification.NotificationType.SYSTEM;
+        if (request.getType() != null && !request.getType().isBlank()) {
+            try {
+                type = Notification.NotificationType.valueOf(request.getType().trim().toUpperCase());
+            } catch (Exception ignored) {
+            }
+        }
+
+        List<String> targetUserIds;
+        if (Boolean.TRUE.equals(request.getAll())) {
+            targetUserIds = userRepository.findAll().stream()
+                    .filter(u -> Boolean.TRUE.equals(u.getActive()))
+                    .map(User::getId)
+                    .toList();
+        } else {
+            targetUserIds = request.getUserIds() != null ? request.getUserIds() : List.of();
+        }
+
+        List<Notification> notifications = new ArrayList<>();
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        for (String uid : targetUserIds) {
+            notifications.add(Notification.builder()
+                    .userId(uid)
+                    .type(type)
+                    .title(request.getTitle())
+                    .message(request.getMessage())
+                    .actionUrl(request.getActionUrl())
+                    .read(false)
+                    .createdAt(now)
+                    .build());
+        }
+
+        if (!notifications.isEmpty()) {
+            notificationRepository.saveAll(notifications);
+            for (Notification n : notifications) {
+                try {
+                    messagingTemplate.convertAndSendToUser(n.getUserId(), "/queue/notifications", n);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        return notifications.size();
     }
 }

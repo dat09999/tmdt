@@ -14,11 +14,41 @@ import WishlistPage from "./pages/WishlistPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import RefundPage from "./pages/RefundPage";
 import SellerPage from "./pages/SellerPage";
+import AdminPage from "./pages/AdminPage";
 import VnpayResultPage from "./pages/VnpayResultPage";
 import ChatWidget from "./components/chat/ChatWidget";
 import { useAuth } from "./pages/Authcontext";
 
-function resolvePage(path, isAuthenticated) {
+function resolvePage(path, isAuthenticated, user) {
+  if (path === "/admin" || path.startsWith("/admin/")) {
+    if (!isAuthenticated) return <LoginPage />;
+    if (user?.role !== "ADMIN") {
+      return (
+        <div style={{ textAlign: "center", padding: "80px 20px" }}>
+          <h2 style={{ fontSize: "24px", color: "#dc2626", fontWeight: "800" }}>403 - Quyền Truy Cập Bị Từ Chối</h2>
+          <p style={{ color: "#64748b", marginTop: "8px", marginBottom: "20px" }}>
+            Tài khoản của bạn không có quyền quản trị viên để truy cập trang này.
+          </p>
+          <a
+            href="/"
+            style={{
+              display: "inline-block",
+              padding: "10px 20px",
+              backgroundColor: "#ee4d2d",
+              color: "#fff",
+              borderRadius: "6px",
+              textDecoration: "none",
+              fontWeight: "700",
+            }}
+          >
+            Quay Về Trang Chủ
+          </a>
+        </div>
+      );
+    }
+    return <AdminPage />;
+  }
+
   if (path === "/register") return <RegisterPage />;
   if (path === "/login") return <LoginPage />;
   if (path === "/oauth2/success") return <OAuth2SuccessPage />;
@@ -44,7 +74,7 @@ function resolvePage(path, isAuthenticated) {
 
 export default function App() {
   const path = window.location.pathname;
-  const { isAuthenticated, loading } = useAuth();
+  const { user, isAuthenticated, loading } = useAuth();
 
   if (path === "/oauth2/success") {
     return <OAuth2SuccessPage />;
@@ -72,12 +102,12 @@ export default function App() {
     );
   }
 
-  const page = resolvePage(path, isAuthenticated);
+  const page = resolvePage(path, isAuthenticated, user);
 
   return (
     <>
       {page}
-      {!path.startsWith("/seller") && <ChatWidget />}
+      {!path.startsWith("/seller") && !path.startsWith("/admin") && <ChatWidget />}
     </>
   );
 }

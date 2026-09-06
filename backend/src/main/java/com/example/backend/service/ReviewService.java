@@ -19,4 +19,13 @@ public interface ReviewService {
     void markHelpful(String reviewId);
 
     void hideReview(String reviewId);
+    
+    // Admin lấy danh sách toàn bộ review có lọc theo rating, ngày tháng, productId
+    Page<ReviewResponse> getAllReviews(
+            Integer rating,
+            java.time.LocalDateTime startDate,
+            java.time.LocalDateTime endDate,
+            String productId,
+            org.springframework.data.domain.Pageable pageable
+    );
 }

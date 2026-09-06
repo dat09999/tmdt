@@ -646,6 +646,12 @@ public class OrderServiceImpl implements OrderService {
         Order current = orderRepository.findByOrderCode(orderCode)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy order"));
 
+        if (TERMINAL_STATUSES.contains(current.getOrderStatus())) {
+            log.warn("markPaymentSuccess: order {} đã ở trạng thái kết thúc {}, bỏ qua cập nhật PAID",
+                    orderCode, current.getOrderStatus());
+            return current;
+        }
+
         Date now = new Date();
         Update update = new Update()
                 .set("payment.status", "PAID")
@@ -673,11 +679,18 @@ public class OrderServiceImpl implements OrderService {
         // FIX #2: chỉ cộng coupon usedCount khi findAndModify Ở TRÊN thành công
         // -> đảm bảo dù webhook gọi trùng bao nhiêu lần, usedCount chỉ tăng đúng 1 lần.
         if (result.getCouponCode() != null && !result.getCouponCode().isBlank()) {
-            mongoTemplate.updateFirst(
-                    Query.query(Criteria.where("code").is(result.getCouponCode())),
-                    new Update().inc("usedCount", 1),
-                    Coupon.class
+            Query couponQuery = new Query(
+                    Criteria.where("code").is(result.getCouponCode().trim().toUpperCase())
+                            .orOperator(
+                                    Criteria.where("usageLimit").is(null),
+                                    Criteria.where("usageLimit").exists(false),
+                                    Criteria.where("$expr").is(new org.bson.Document("$lt", java.util.List.of(
+                                            new org.bson.Document("$ifNull", java.util.List.of("$usedCount", 0)),
+                                            "$usageLimit"
+                                    )))
+                            )
             );
+            mongoTemplate.updateFirst(couponQuery, new Update().inc("usedCount", 1), Coupon.class);
         }
 
         notificationService.notify(
@@ -799,5 +812,41 @@ public class OrderServiceImpl implements OrderService {
     private String requireText(String value, String message) {
         if (value == null || value.trim().isBlank()) throw new RuntimeException(message);
         return value.trim();
+    }
+
+    @Override
+    public org.springframework.data.domain.Page<Order> getAllOrders(
+            String orderStatus,
+            Date startDate,
+            Date endDate,
+            String shopId,
+            String buyerId,
+            org.springframework.data.domain.Pageable pageable) {
+        Query query = new Query();
+
+        if (orderStatus != null && !orderStatus.isBlank()) {
+            query.addCriteria(Criteria.where("orderStatus").is(orderStatus.trim().toUpperCase()));
+        }
+        if (shopId != null && !shopId.isBlank()) {
+            query.addCriteria(Criteria.where("shopId").is(shopId.trim()));
+        }
+        if (buyerId != null && !buyerId.isBlank()) {
+            query.addCriteria(Criteria.where("buyerId").is(buyerId.trim()));
+        }
+        if (startDate != null || endDate != null) {
+            Criteria dateCriteria = Criteria.where("createdAt");
+            if (startDate != null) {
+                dateCriteria = dateCriteria.gte(startDate);
+            }
+            if (endDate != null) {
+                dateCriteria = dateCriteria.lte(endDate);
+            }
+            query.addCriteria(dateCriteria);
+        }
+
+        long total = mongoTemplate.count(query, Order.class);
+        query.with(pageable);
+        List<Order> orders = mongoTemplate.find(query, Order.class);
+        return new org.springframework.data.domain.PageImpl<>(orders, pageable, total);
     }
 }

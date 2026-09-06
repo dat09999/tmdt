@@ -2,6 +2,8 @@ package com.example.backend.service.impl;
 
 import com.example.backend.DTO.refund.CreateRefundRequest;
 import com.example.backend.module.Order;
+import com.example.backend.module.OrderItem;
+import com.example.backend.module.Product;
 import com.example.backend.module.RefundRequest;
 import com.example.backend.repository.OrderRepository;
 import com.example.backend.repository.RefundRequestRepository;
@@ -9,6 +11,7 @@ import com.example.backend.service.RefundRequestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -190,6 +193,11 @@ public class RefundRequestServiceImpl implements RefundRequestService {
             if (updatedOrder == null) {
                 log.warn("Duyệt refund {} thành công nhưng order {} không còn ở trạng thái phù hợp để chuyển REFUNDED - cần kiểm tra thủ công",
                         refundId, refund.getOrderId());
+            } else if (updatedOrder.getItems() != null) {
+                // BUG FIX: Hoàn trả tồn kho variant khi refund được APPROVED
+                for (OrderItem item : updatedOrder.getItems()) {
+                    restoreStockAtomic(item.getProductId(), item.getVariantSku(), item.getQuantity());
+                }
             }
         } else if ("REJECTED".equalsIgnoreCase(newStatus)) {
             // Refund bị từ chối -> mở khóa "hasPendingRefund" trên order để user có thể
@@ -203,5 +211,27 @@ public class RefundRequestServiceImpl implements RefundRequestService {
         }
 
         return refund;
+    }
+
+    private void restoreStockAtomic(String productId, String sku, int qty) {
+        if (productId == null || sku == null || qty <= 0) return;
+        Query query = Query.query(Criteria.where("id").is(productId)
+                .and("variants.sku").is(sku));
+        Update update = new Update()
+                .inc("variants.$.stock", qty)
+                .inc("soldCount", -qty);
+        mongoTemplate.updateFirst(query, update, Product.class);
+    }
+
+    @Override
+    public Page<RefundRequest> getAllRefundRequests(String status, Pageable pageable) {
+        Query query = new Query();
+        if (status != null && !status.isBlank()) {
+            query.addCriteria(Criteria.where("status").is(status.trim().toUpperCase()));
+        }
+        long total = mongoTemplate.count(query, RefundRequest.class);
+        query.with(pageable);
+        List<RefundRequest> list = mongoTemplate.find(query, RefundRequest.class);
+        return new PageImpl<>(list, pageable, total);
     }
 }

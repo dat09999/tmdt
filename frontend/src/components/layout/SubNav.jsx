@@ -1,7 +1,10 @@
 import React from "react";
 import { Flame, Tag, Truck, ShieldCheck, Zap } from "lucide-react";
+import { useAuth } from "../../pages/Authcontext";
 
 export default function SubNav({ activeTab = "" }) {
+  const { user } = useAuth();
+
   const links = [
     { label: "Trang Chủ", href: "/", icon: "🏠" },
     { label: "Flash Sale", href: "/#flash-sale", icon: "🔥", badge: "HOT" },
@@ -10,6 +13,9 @@ export default function SubNav({ activeTab = "" }) {
     { label: "Mã Giảm Giá", href: "/profile#vouchers", icon: "🎟️" },
     { label: "Yêu Thích", href: "/wishlist", icon: "❤️" },
     { label: "Kênh Người Bán", href: "/seller", icon: "🏪" },
+    ...(user?.role === "ADMIN"
+      ? [{ label: "Trang Quản Trị", href: "/admin", icon: "🛡️", badge: "ADMIN" }]
+      : []),
   ];
 
   return (

@@ -16,4 +16,7 @@ public interface RefundRequestService {
 
     RefundRequest getRefundById(String refundId);
     RefundRequest processRefund(String refundId, String status, String adminNote, String resolvedBy);
+
+    // Admin lấy danh sách yêu cầu hoàn tiền toàn sàn
+    Page<RefundRequest> getAllRefundRequests(String status, org.springframework.data.domain.Pageable pageable);
 }

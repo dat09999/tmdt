@@ -66,7 +66,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     }
                 }
 
+                // 3. Kiểm tra tài khoản có bị Admin khóa không (vô hiệu hóa tức thì)
+                if (user != null && Boolean.FALSE.equals(user.getActive())) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
                 UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+                if (userDetails != null && !userDetails.isEnabled()) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
 
                 if (jwtService.isTokenValid(jwt, userDetails.getUsername())) {
                     UsernamePasswordAuthenticationToken authToken =

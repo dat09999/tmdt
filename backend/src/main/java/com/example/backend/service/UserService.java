@@ -30,4 +30,8 @@ public interface UserService {
     UserResponse updateAddress(String userId, String addressId, AddressRequest request);
     UserResponse deleteAddress(String userId, String addressId);
     UserResponse updateAvatar(String userId, org.springframework.web.multipart.MultipartFile file);
+
+    // Admin methods
+    org.springframework.data.domain.Page<UserResponse> getAllUsers(Boolean active, String provider, String keyword, org.springframework.data.domain.Pageable pageable);
+    UserResponse updateUserStatus(String userId, boolean active);
 }

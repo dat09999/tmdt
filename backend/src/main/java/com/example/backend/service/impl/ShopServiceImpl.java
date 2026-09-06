@@ -7,7 +7,9 @@ import com.example.backend.module.Product;
 import com.example.backend.module.ProductVariant;
 import com.example.backend.module.Shop;
 import com.example.backend.module.ShopFollow;
+import com.example.backend.Exception.ForbiddenException;
 import com.example.backend.repository.OrderRepository;
+import com.example.backend.sercurity.SecurityUtils;
 import com.example.backend.repository.ProductRepository;
 import com.example.backend.repository.ShopFollowRepository;
 import com.example.backend.repository.ShopRepository;
@@ -187,11 +189,29 @@ public class ShopServiceImpl implements ShopService {
     // TRẠNG THÁI SHOP
     // =========================================================
 
-    /** Cập nhật trạng thái của shop theo giá trị truyền vào - atomic $set. */
+    /** Cập nhật trạng thái của shop theo giá trị truyền vào - phân biệt quyền ADMIN và SELLER. */
     @Override
     public ShopResponse updateStatus(String shopId, String status) {
-        getShopOrThrow(shopId);
+        Shop shop = getShopOrThrow(shopId);
         String newStatus = requireText(status, "status không được để trống").toUpperCase();
+
+        boolean isAdmin = SecurityUtils.isAdmin();
+        String currentUserId = SecurityUtils.getCurrentUserId();
+        boolean isOwner = shop.getOwnerId() != null && shop.getOwnerId().equals(currentUserId);
+
+        if (!isAdmin && !isOwner) {
+            throw new ForbiddenException("Bạn không có quyền thay đổi trạng thái shop này");
+        }
+
+        // Nếu là seller: chỉ được phép chuyển đổi qua lại giữa ACTIVE và INACTIVE
+        if (!isAdmin) {
+            if (!"ACTIVE".equals(newStatus) && !"INACTIVE".equals(newStatus)) {
+                throw new ForbiddenException("Chủ shop chỉ có thể chuyển đổi giữa trạng thái ACTIVE và INACTIVE");
+            }
+            if ("SUSPENDED".equalsIgnoreCase(shop.getStatus()) || "REJECTED".equalsIgnoreCase(shop.getStatus()) || "PENDING".equalsIgnoreCase(shop.getStatus())) {
+                throw new ForbiddenException("Shop đang ở trạng thái " + shop.getStatus() + ", không thể tự kích hoạt");
+            }
+        }
 
         Update update = new Update().set("status", newStatus).set("updatedAt", new Date());
         Shop updated = atomicUpdateShop(shopId, update);
@@ -251,6 +271,31 @@ public class ShopServiceImpl implements ShopService {
         return shopRepository
                 .findByShopNameContainingIgnoreCase(normalize(keyword), pageable)
                 .map(this::toSummary);
+    }
+
+    /** Lấy danh sách shop toàn hệ thống cho Admin với bộ lọc trạng thái, từ khóa và phân trang. */
+    @Override
+    public Page<ShopResponse> getAllShopsForAdmin(String status, String keyword, Pageable pageable) {
+        Query query = new Query();
+
+        if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status.trim())) {
+            query.addCriteria(Criteria.where("status").is(status.trim().toUpperCase()));
+        }
+
+        if (keyword != null && !keyword.isBlank()) {
+            String regex = java.util.regex.Pattern.quote(keyword.trim());
+            query.addCriteria(new Criteria().orOperator(
+                    Criteria.where("shopName").regex(regex, "i"),
+                    Criteria.where("email").regex(regex, "i"),
+                    Criteria.where("phone").regex(regex, "i")
+            ));
+        }
+
+        long total = mongoTemplate.count(query, Shop.class);
+        query.with(pageable);
+        List<Shop> shops = mongoTemplate.find(query, Shop.class);
+        List<ShopResponse> responses = shops.stream().map(this::toResponse).toList();
+        return new org.springframework.data.domain.PageImpl<>(responses, pageable, total);
     }
 
     // =========================================================

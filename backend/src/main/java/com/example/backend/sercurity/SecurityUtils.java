@@ -21,4 +21,13 @@ public class SecurityUtils {
     public static String getCurrentUserId() {
         return getCurrentUser().getId();
     }
+
+    public static boolean isAdmin() {
+        try {
+            UserPrincipal principal = getCurrentUser();
+            return "ADMIN".equalsIgnoreCase(principal.getRole());
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }
