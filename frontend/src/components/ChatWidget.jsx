@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { API_BASE_URL, authFetch } from "../utils/auth";
+import { API_BASE_URL, authFetch, toFullImageUrl } from "../utils/auth";
 import { useAuth } from "../pages/Authcontext";
 import "./ChatWidget.css";
 
@@ -224,7 +224,16 @@ export default function ChatWidget() {
                       {m.content && <p>{m.content}</p>}
                       {m.imageUrls?.length > 0 && (
                         <div className="chat-bubble-images">
-                          {m.imageUrls.map((url, i) => <img key={i} src={url} alt="" />)}
+                          {m.imageUrls.map((url, i) => (
+                            <img
+                              key={i}
+                              src={toFullImageUrl(url)}
+                              alt=""
+                              onError={(e) => {
+                                e.target.style.display = "none";
+                              }}
+                            />
+                          ))}
                         </div>
                       )}
                       <span className="chat-bubble-time">{m.sentAt ? new Date(m.sentAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : ""}</span>

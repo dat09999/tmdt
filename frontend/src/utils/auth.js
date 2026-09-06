@@ -8,13 +8,30 @@ export function toFullImageUrl(url) {
   const trimmed = url.trim();
   if (!trimmed) return "";
   if (trimmed.startsWith("data:") || trimmed.startsWith("blob:")) return trimmed;
-  // Convert old localhost:9000 presigned urls from MinIO
+  // Convert old localhost:9000 presigned urls or any direct MinIO urls
+  if (trimmed.includes("/user-images/")) {
+    const path = trimmed.split("/user-images/")[1]?.split("?")[0];
+    if (path) return `${API_BASE_URL}/api/files/user-images/${path}`;
+  }
+  if (trimmed.includes("/product-images/")) {
+    const path = trimmed.split("/product-images/")[1]?.split("?")[0];
+    if (path) return `${API_BASE_URL}/api/files/product-images/${path}`;
+  }
   if (trimmed.includes(":9000/")) {
     const afterPort = trimmed.split(":9000/")[1]?.split("?")[0];
     if (afterPort) return `${API_BASE_URL}/api/files/${afterPort}`;
   }
   if (trimmed.startsWith("user/")) {
     return `${API_BASE_URL}/api/files/user-images/${trimmed}`;
+  }
+  if (trimmed.startsWith("chat/")) {
+    return `${API_BASE_URL}/api/files/product-images/${trimmed}`;
+  }
+  if (trimmed.startsWith("product/")) {
+    return `${API_BASE_URL}/api/files/product-images/${trimmed}`;
+  }
+  if (trimmed.startsWith("shop/")) {
+    return `${API_BASE_URL}/api/files/product-images/${trimmed}`;
   }
   if (trimmed.startsWith("/")) {
     return `${API_BASE_URL}${trimmed}`;

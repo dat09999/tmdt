@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { chatService } from "../../services/chatService";
 import { useAuth } from "../../pages/Authcontext";
+import { toFullImageUrl } from "../../utils/auth";
 
 // Error Boundary bảo vệ: Không bao giờ bị màn hình trắng kể cả khi dữ liệu có lỗi
 class SellerChatCenterErrorBoundary extends Component {
@@ -682,8 +683,11 @@ function SellerChatCenterInner({ shop, initialSelectedConvId = null }) {
                   >
                     {conv.buyerAvatar ? (
                       <img
-                        src={conv.buyerAvatar}
+                        src={toFullImageUrl(conv.buyerAvatar)}
                         alt={buyerDisplayName}
+                        onError={(e) => {
+                          e.target.style.display = "none";
+                        }}
                         style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }}
                       />
                     ) : (
@@ -957,23 +961,30 @@ function SellerChatCenterInner({ shop, initialSelectedConvId = null }) {
                       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "6px" }}>
                         {msg.imageUrls
                           .filter((u) => typeof u === "string")
-                          .map((url, i) => (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                              <img
-                                src={url}
-                                alt="Đính kèm"
-                                style={{
-                                  width: "160px",
-                                  height: "160px",
-                                  objectFit: "cover",
-                                  borderRadius: "10px",
-                                  border: "1px solid #e2e8f0",
-                                  boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
-                                  transition: "transform 0.15s",
-                                }}
-                              />
-                            </a>
-                          ))}
+                          .map((url, i) => {
+                            const fullUrl = toFullImageUrl(url);
+                            return (
+                              <a key={i} href={fullUrl} target="_blank" rel="noopener noreferrer">
+                                <img
+                                  src={fullUrl}
+                                  alt="Đính kèm"
+                                  onError={(e) => {
+                                    e.target.style.display = "none";
+                                  }}
+                                  style={{
+                                    width: "160px",
+                                    height: "160px",
+                                    objectFit: "cover",
+                                    borderRadius: "10px",
+                                    border: "1px solid #e2e8f0",
+                                    boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
+                                    transition: "transform 0.15s",
+                                    cursor: "pointer",
+                                  }}
+                                />
+                              </a>
+                            );
+                          })}
                       </div>
                     )}
 

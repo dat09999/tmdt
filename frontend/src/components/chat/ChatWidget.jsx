@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { chatService, openChatWithShop } from "../../services/chatService";
 import { useAuth } from "../../pages/Authcontext";
+import { toFullImageUrl } from "../../utils/auth";
 
 export { openChatWithShop };
 
@@ -575,20 +576,28 @@ export default function ChatWidget() {
                       {/* Image attachments */}
                       {Array.isArray(msg.imageUrls) && msg.imageUrls.length > 0 && (
                         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "4px" }}>
-                          {msg.imageUrls.map((url, i) => (
-                            <img
-                              key={i}
-                              src={url}
-                              alt="Attachment"
-                              style={{
-                                width: "120px",
-                                height: "120px",
-                                objectFit: "cover",
-                                borderRadius: "8px",
-                                border: "1px solid var(--border)",
-                              }}
-                            />
-                          ))}
+                          {msg.imageUrls.map((url, i) => {
+                            const fullUrl = toFullImageUrl(url);
+                            return (
+                              <a key={i} href={fullUrl} target="_blank" rel="noopener noreferrer">
+                                <img
+                                  src={fullUrl}
+                                  alt="Attachment"
+                                  onError={(e) => {
+                                    e.target.style.display = "none";
+                                  }}
+                                  style={{
+                                    width: "120px",
+                                    height: "120px",
+                                    objectFit: "cover",
+                                    borderRadius: "8px",
+                                    border: "1px solid var(--border)",
+                                    cursor: "pointer",
+                                  }}
+                                />
+                              </a>
+                            );
+                          })}
                         </div>
                       )}
 
