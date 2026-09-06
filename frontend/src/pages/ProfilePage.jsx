@@ -10,7 +10,7 @@ import { useAuth } from "./Authcontext";
 import { setSession } from "../utils/auth";
 import { userService } from "../services/userService";
 import { couponService } from "../services/couponService";
-import { formatCurrency } from "../utils/formatters";
+import { formatCurrency, isValidAvatarUrl } from "../utils/formatters";
 import {
   User,
   MapPin,
@@ -36,6 +36,8 @@ export default function ProfilePage() {
   });
   const [toastMessage, setToastMessage] = useState("");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [mainAvatarError, setMainAvatarError] = useState(false);
+  const [sidebarAvatarError, setSidebarAvatarError] = useState(false);
 
   // Profile Form state
   const [profileData, setProfileData] = useState({
@@ -58,6 +60,8 @@ export default function ProfilePage() {
         avatar: user.avatar || user.url || prev.avatar,
         provider: user.provider || prev.provider || "LOCAL",
       }));
+      setMainAvatarError(false);
+      setSidebarAvatarError(false);
     }
   }, [user?.userId, user?.avatar, user?.url, user?.fullName, user?.phone]);
 
@@ -132,6 +136,8 @@ export default function ProfilePage() {
           avatar: resolvedAvatar,
           url: resolvedAvatar,
         });
+        setMainAvatarError(false);
+        setSidebarAvatarError(false);
         if (Array.isArray(data.address) && data.address.length > 0) {
           setAddresses(
             data.address.map((a) => ({
@@ -198,6 +204,8 @@ export default function ProfilePage() {
 
     const previewUrl = URL.createObjectURL(file);
     setProfileData((prev) => ({ ...prev, avatar: previewUrl }));
+    setMainAvatarError(false);
+    setSidebarAvatarError(false);
 
     if (user?.userId) {
       try {
@@ -388,38 +396,48 @@ export default function ProfilePage() {
                   marginBottom: "14px",
                 }}
               >
-                {profileData.avatar || user?.avatar || user?.url ? (
-                  <img
-                    src={profileData.avatar || user?.avatar || user?.url}
-                    alt="Avatar"
-                    style={{
-                      width: "48px",
-                      height: "48px",
-                      borderRadius: "50%",
-                      objectFit: "cover",
-                      border: "2px solid var(--primary-light)",
-                    }}
-                  />
-                ) : (
+                <div
+                  style={{
+                    position: "relative",
+                    width: "48px",
+                    height: "48px",
+                    borderRadius: "50%",
+                    overflow: "hidden",
+                    flexShrink: 0,
+                    border: "2px solid var(--primary-light)",
+                    backgroundColor: "var(--primary-light)",
+                  }}
+                >
                   <div
                     style={{
-                      width: "48px",
-                      height: "48px",
-                      borderRadius: "50%",
-                      backgroundColor: "var(--primary-light)",
+                      width: "100%",
+                      height: "100%",
                       color: "var(--primary)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       fontSize: "18px",
                       fontWeight: "800",
-                      border: "2px solid var(--primary-light)",
-                      flexShrink: 0,
                     }}
                   >
                     {(profileData.fullName || user?.fullName || user?.name || user?.email || "U").charAt(0).toUpperCase()}
                   </div>
-                )}
+                  {!sidebarAvatarError && isValidAvatarUrl(profileData.avatar || user?.avatar || user?.url) && (
+                    <img
+                      src={profileData.avatar || user?.avatar || user?.url}
+                      alt="Avatar"
+                      onError={() => setSidebarAvatarError(true)}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
+                    />
+                  )}
+                </div>
                 <div style={{ minWidth: 0 }}>
                   <div
                     style={{
@@ -669,42 +687,43 @@ export default function ProfilePage() {
                         paddingLeft: "24px",
                       }}
                     >
-                      <div style={{ position: "relative", marginBottom: "14px" }}>
-                        {profileData.avatar || user?.avatar || user?.url ? (
-                          <img
-                            src={profileData.avatar || user?.avatar || user?.url}
-                            alt="Avatar Large"
-                            style={{
-                              width: "110px",
-                              height: "110px",
-                              borderRadius: "50%",
-                              objectFit: "cover",
-                              border: "3px solid var(--primary-light)",
-                              opacity: uploadingAvatar ? 0.6 : 1,
-                              transition: "all 0.2s",
-                            }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: "110px",
-                              height: "110px",
-                              borderRadius: "50%",
-                              backgroundColor: "var(--primary-light)",
-                              color: "var(--primary)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontSize: "42px",
-                              fontWeight: "800",
-                              border: "3px solid var(--primary-light)",
-                              opacity: uploadingAvatar ? 0.6 : 1,
-                              transition: "all 0.2s",
-                            }}
-                          >
-                            {(profileData.fullName || user?.fullName || user?.name || user?.email || "U").charAt(0).toUpperCase()}
-                          </div>
-                        )}
+                      <div style={{ position: "relative", marginBottom: "14px", width: "110px", height: "110px" }}>
+                        <div
+                          style={{
+                            width: "110px",
+                            height: "110px",
+                            borderRadius: "50%",
+                            backgroundColor: "var(--primary-light)",
+                            color: "var(--primary)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "42px",
+                            fontWeight: "800",
+                            border: "3px solid var(--primary-light)",
+                            overflow: "hidden",
+                            position: "relative",
+                          }}
+                        >
+                          {(profileData.fullName || user?.fullName || user?.name || user?.email || "U").charAt(0).toUpperCase()}
+                          {!mainAvatarError && isValidAvatarUrl(profileData.avatar || user?.avatar || user?.url) && (
+                            <img
+                              src={profileData.avatar || user?.avatar || user?.url}
+                              alt="Avatar Large"
+                              onError={() => setMainAvatarError(true)}
+                              style={{
+                                position: "absolute",
+                                top: 0,
+                                left: 0,
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                                opacity: uploadingAvatar ? 0.6 : 1,
+                                transition: "all 0.2s",
+                              }}
+                            />
+                          )}
+                        </div>
                         <label
                           htmlFor="avatar-input"
                           style={{

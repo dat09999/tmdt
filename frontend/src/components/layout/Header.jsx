@@ -19,7 +19,7 @@ import {
 import { useAuth } from "../../pages/Authcontext";
 import { cartService } from "../../services/cartService";
 import { notificationService } from "../../services/notificationService";
-import { formatTimeAgo } from "../../utils/formatters";
+import { formatTimeAgo, isValidAvatarUrl } from "../../utils/formatters";
 
 export default function Header({ onSearch, initialSearch = "" }) {
   const { user, logout } = useAuth();
@@ -674,25 +674,22 @@ export default function Header({ onSearch, initialSearch = "" }) {
                     fontWeight: "600",
                   }}
                 >
-                  {user?.avatar || user?.url ? (
-                    <img
-                      src={user.avatar || user.url}
-                      alt={displayName}
-                      style={{
-                        width: "26px",
-                        height: "26px",
-                        borderRadius: "50%",
-                        objectFit: "cover",
-                        border: "1.5px solid #fff",
-                      }}
-                    />
-                  ) : (
+                  <div
+                    style={{
+                      position: "relative",
+                      width: "26px",
+                      height: "26px",
+                      borderRadius: "50%",
+                      overflow: "hidden",
+                      border: "1.5px solid #fff",
+                      backgroundColor: "#fff",
+                      flexShrink: 0,
+                    }}
+                  >
                     <div
                       style={{
-                        width: "26px",
-                        height: "26px",
-                        borderRadius: "50%",
-                        background: "#fff",
+                        width: "100%",
+                        height: "100%",
                         color: "var(--primary)",
                         display: "flex",
                         alignItems: "center",
@@ -703,7 +700,24 @@ export default function Header({ onSearch, initialSearch = "" }) {
                     >
                       {displayName.charAt(0).toUpperCase()}
                     </div>
-                  )}
+                    {isValidAvatarUrl(user?.avatar || user?.url) && (
+                      <img
+                        src={user.avatar || user.url}
+                        alt={displayName}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                        }}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                        }}
+                      />
+                    )}
+                  </div>
                   <span
                     style={{
                       maxWidth: "110px",

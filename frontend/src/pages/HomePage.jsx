@@ -8,6 +8,42 @@ import { productService } from "../services/productService";
 import { Flame, Sparkles, ChevronRight, Zap, ShieldCheck, Truck, Headphones } from "lucide-react";
 import { formatCurrency } from "../utils/formatters";
 
+// Smart icon mapping for categories
+const CATEGORY_ICON_MAP = [
+  { keywords: ["dien thoai", "phone", "iphone", "samsung", "mobile"], icon: "📱" },
+  { keywords: ["tai nghe", "headphone", "earphone", "audio", "am thanh"], icon: "🎧" },
+  { keywords: ["dong ho", "watch", "smartwatch"], icon: "⌚" },
+  { keywords: ["thiet bi mang", "mang", "network", "router", "wifi"], icon: "🌐" },
+  { keywords: ["gia dung", "do gia dung", "home", "noi com", "may hut bui"], icon: "🏠" },
+  { keywords: ["may tinh bang", "tablet", "ipad"], icon: "📲" },
+  { keywords: ["phu kien dien thoai", "sac", "cap", "op lung"], icon: "🔌" },
+  { keywords: ["man hinh", "monitor", "display"], icon: "🖥️" },
+  { keywords: ["laptop", "macbook", "notebook"], icon: "💻" },
+  { keywords: ["phu kien may tinh", "ban phim", "chuot", "keyboard", "mouse"], icon: "⌨️" },
+  { keywords: ["thoi trang nam", "nam", "ao nam", "quan nam"], icon: "👕" },
+  { keywords: ["thoi trang nu", "nu", "ao nu", "vay", "dam"], icon: "👗" },
+  { keywords: ["giay", "dep", "sneaker", "shoes"], icon: "👟" },
+  { keywords: ["tui", "balo", "vi", "bag"], icon: "🎒" },
+  { keywords: ["sac dep", "my pham", "son", "kem", "beauty", "cosmetic"], icon: "💄" },
+  { keywords: ["suc khoe", "thuoc", "vitamin", "health"], icon: "💊" },
+  { keywords: ["the thao", "sport", "gym", "bong"], icon: "⚽" },
+  { keywords: ["sach", "vo", "truyen", "book"], icon: "📚" },
+  { keywords: ["bach hoa", "thuc pham", "grocery", "mart"], icon: "🛒" },
+  { keywords: ["camera", "may anh"], icon: "📷" },
+  { keywords: ["xe", "oto", "xe may"], icon: "🚗" },
+];
+
+function getCategoryIcon(cat) {
+  if (cat?.icon) return cat.icon;
+  const text = `${cat?.name || ""} ${cat?.slug || ""} ${cat?.id || ""}`.toLowerCase();
+  for (const item of CATEGORY_ICON_MAP) {
+    if (item.keywords.some((kw) => text.includes(kw))) {
+      return item.icon;
+    }
+  }
+  return "🛍️";
+}
+
 export default function HomePage() {
   const [categories, setCategories] = useState([]);
   const [flashSaleProducts, setFlashSaleProducts] = useState([]);
@@ -261,7 +297,48 @@ export default function HomePage() {
                       e.currentTarget.style.transform = "translateY(0)";
                     }}
                   >
-                    <span style={{ fontSize: "30px", marginBottom: "8px" }}>{cat.icon || "📦"}</span>
+                    <div
+                      style={{
+                        width: "44px",
+                        height: "44px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginBottom: "8px",
+                        borderRadius: "12px",
+                        backgroundColor: "rgba(238, 77, 45, 0.08)",
+                        fontSize: "26px",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {cat.image ? (
+                        <img
+                          src={cat.image}
+                          alt={cat.name}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            if (e.currentTarget.nextElementSibling) {
+                              e.currentTarget.nextElementSibling.style.display = "flex";
+                            }
+                          }}
+                        />
+                      ) : null}
+                      <span
+                        style={{
+                          display: cat.image ? "none" : "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          lineHeight: 1,
+                        }}
+                      >
+                        {getCategoryIcon(cat)}
+                      </span>
+                    </div>
                     <span
                       style={{
                         fontSize: "12px",

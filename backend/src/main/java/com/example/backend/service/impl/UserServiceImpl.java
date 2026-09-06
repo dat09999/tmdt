@@ -108,10 +108,11 @@ public class UserServiceImpl implements UserService {
                 try {
                     avatarUrl = objectStorageService.getPublicUrlOrSignedUrl(userBucket, avatarUrl);
                 } catch (Exception ignored) {
+                    avatarUrl = "";
                 }
             }
         }
-        response.setUrl(avatarUrl);
+        response.setUrl((avatarUrl != null && (avatarUrl.startsWith("http://") || avatarUrl.startsWith("https://") || avatarUrl.startsWith("data:"))) ? avatarUrl : "");
         return response;
     }
 

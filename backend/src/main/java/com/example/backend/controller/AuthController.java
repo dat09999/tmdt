@@ -49,7 +49,7 @@ public class AuthController {
         try {
             return objectStorageService.getPublicUrlOrSignedUrl(userBucket, rawUrl);
         } catch (Exception e) {
-            return rawUrl;
+            return "";
         }
     }
 

@@ -70,3 +70,22 @@ export function formatTimeAgo(dateInput) {
   if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
   return formatDate(dateInput);
 }
+
+// Validate whether an avatar URL is actually loadable in the browser
+export function isValidAvatarUrl(url) {
+  if (!url || typeof url !== "string") return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  // Valid local data previews
+  if (trimmed.startsWith("data:image/") || trimmed.startsWith("blob:")) return true;
+  // Must start with http or https
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return false;
+  // In HTTPS production, local dev URLs cannot be loaded (Mixed Content / unreachable)
+  if (typeof window !== "undefined" && window.location.protocol === "https:") {
+    if (trimmed.includes("localhost") || trimmed.includes("127.0.0.1")) {
+      return false;
+    }
+  }
+  return true;
+}
+
