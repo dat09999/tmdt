@@ -48,8 +48,12 @@ public class UserServiceImpl implements UserService {
 
         user.setFullName(request.getFullName());
         user.setPhone(request.getPhone());
-        if (request.getUrl() != null) {
-            user.setUrl(request.getUrl());
+        if (request.getUrl() != null && !request.getUrl().isBlank()) {
+            String newUrl = request.getUrl().trim();
+            // Tuyệt đối không lưu URL tạm thời blob: của trình duyệt vào CSDL
+            if (!newUrl.startsWith("blob:")) {
+                user.setUrl(newUrl);
+            }
         }
 
         User saved = userRepository.save(user);

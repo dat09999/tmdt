@@ -177,11 +177,15 @@ export default function ProfilePage() {
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     if (user?.userId) {
-      await userService.updateUserProfile(user.userId, {
+      const payload = {
         fullName: profileData.fullName,
         phone: profileData.phoneNumber,
-        url: profileData.avatar,
-      });
+      };
+      // Chỉ gửi url nếu là đường dẫn thật, KHÔNG BAO GIỜ gửi blob: của trình duyệt
+      if (profileData.avatar && !profileData.avatar.startsWith("blob:")) {
+        payload.url = profileData.avatar;
+      }
+      await userService.updateUserProfile(user.userId, payload);
       setSession({
         ...user,
         fullName: profileData.fullName,
@@ -211,13 +215,15 @@ export default function ProfilePage() {
       try {
         setUploadingAvatar(true);
         const res = await userService.updateAvatar(user.userId, file);
-        const serverAvatarUrl = res?.url || res?.avatar || previewUrl;
-        setProfileData((prev) => ({ ...prev, avatar: serverAvatarUrl }));
-        setSession({
-          ...user,
-          avatar: serverAvatarUrl,
-          url: serverAvatarUrl,
-        });
+        const serverAvatarUrl = res?.url || res?.avatar;
+        if (serverAvatarUrl) {
+          setProfileData((prev) => ({ ...prev, avatar: serverAvatarUrl }));
+          setSession({
+            ...user,
+            avatar: serverAvatarUrl,
+            url: serverAvatarUrl,
+          });
+        }
         showToast("Đã cập nhật ảnh đại diện thành công!");
       } catch (err) {
         console.warn("API upload avatar error, fallback to base64:", err);
