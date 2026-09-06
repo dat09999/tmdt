@@ -12,6 +12,7 @@ import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 @Service
@@ -58,6 +59,9 @@ public class JwtService {
 
         Map<String, Object> claims = new HashMap<>(extraClaims);
         claims.put("tokenType", "access");
+        if (!claims.containsKey("jti")) {
+            claims.put("jti", UUID.randomUUID().toString());
+        }
 
         return Jwts.builder()
                 .claims(claims)
@@ -66,6 +70,22 @@ public class JwtService {
                 .expiration(expiryDate)
                 .signWith(getSigningKey())
                 .compact();
+    }
+
+    public String extractJti(String token) {
+        return extractClaim(token, claims -> claims.get("jti", String.class));
+    }
+
+    public Integer extractTokenVersion(String token) {
+        return extractClaim(token, claims -> claims.get("tokenVersion", Integer.class));
+    }
+
+    public String extractUserId(String token) {
+        return extractClaim(token, claims -> claims.get("userId", String.class));
+    }
+
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
     }
 
     public String generateRefreshToken(String username) {

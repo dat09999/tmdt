@@ -50,6 +50,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                     .provider("GOOGLE")
                     .providerId(providerId)
                     .active(true)
+                    .tokenVersion(1)
                     .build();
         } else {
             if (Boolean.FALSE.equals(user.getActive())) {
@@ -67,6 +68,10 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
             if (user.getProviderId() == null || user.getProviderId().isBlank()) {
                 user.setProviderId(providerId);
+            }
+
+            if (user.getTokenVersion() == null) {
+                user.setTokenVersion(1);
             }
         }
 

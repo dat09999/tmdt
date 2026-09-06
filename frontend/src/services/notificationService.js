@@ -1,4 +1,4 @@
-import { API_BASE_URL, authFetch } from "../utils/auth";
+import { API_BASE_URL, authFetch, getCurrentUser } from "../utils/auth";
 import { safeFetch } from "./api";
 import { MOCK_NOTIFICATIONS } from "../mocks/mockNotifications";
 
@@ -21,6 +21,9 @@ function notifyListeners(data) {
 export const notificationService = {
   // GET /notifications?page=0&size=20
   async getNotifications(page = 0, size = 20) {
+    if (!getCurrentUser()?.userId) {
+      return [];
+    }
     return safeFetch(
       async () => {
         const res = await authFetch(`${API_BASE_URL}/notifications?page=${page}&size=${size}`);

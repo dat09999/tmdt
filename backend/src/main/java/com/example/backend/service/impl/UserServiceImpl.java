@@ -69,6 +69,7 @@ public class UserServiceImpl implements UserService {
         }
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setTokenVersion((user.getTokenVersion() != null ? user.getTokenVersion() : 1) + 1);
         userRepository.save(user);
     }
 

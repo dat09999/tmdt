@@ -33,4 +33,11 @@ public class User {
     private List<Address> addresses;
     private Double lat;
     private Double lng;
+
+    @Builder.Default
+    private Integer tokenVersion = 1;
+
+    public Integer getTokenVersion() {
+        return tokenVersion != null ? tokenVersion : 1;
+    }
 }

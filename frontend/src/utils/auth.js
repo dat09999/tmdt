@@ -34,7 +34,9 @@ export function onAuthChange(callback) {
 
 export function setSession(data) {
   // 1. Token chỉ lưu trong RAM (In-Memory)
-  accessToken = data?.accessToken || data?.token || null;
+  if (data?.accessToken || data?.token) {
+    accessToken = data.accessToken || data.token;
+  }
 
   // 2. Thông tin profile thông thường (Tên, email, role, avatar) lưu vào cache để UI mượt
   const prevUser = currentUser || getCachedProfile();
@@ -196,12 +198,19 @@ export async function refreshAccessToken() {
  * Tự động silent-refresh token nếu nhận lỗi 401
  */
 export async function authFetch(url, options = {}) {
+  // Nếu chưa có accessToken trong RAM nhưng có profile đã đăng nhập (F5/mở tab mới)
+  // hoặc đang có tiến trình refresh token đang chạy, hãy chờ refreshAccessToken xong trước!
+  if (!accessToken && (currentUser?.userId || refreshPromise)) {
+    await refreshAccessToken();
+  }
+
   const isFormData = options.body instanceof FormData;
   const doFetch = (tokenOverride) => {
+    const tokenToUse = tokenOverride || accessToken;
     const headers = {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
       Accept: "application/json",
-      ...(tokenOverride ? { Authorization: `Bearer ${tokenOverride}` } : getAuthHeader()),
+      ...(tokenToUse ? { Authorization: `Bearer ${tokenToUse}` } : {}),
       ...(options.headers || {}),
     };
 
@@ -214,15 +223,17 @@ export async function authFetch(url, options = {}) {
 
   let response = await doFetch();
 
-  // Nếu Access Token hết hạn (401), tự động refresh và retry 1 lần
+  // Nếu Access Token hết hạn (401), tự động xếp hàng refresh và retry 1 lần
   if (response.status === 401) {
     const newToken = await refreshAccessToken();
 
     if (newToken) {
       response = await doFetch(newToken);
     } else {
-      clearSession();
-      window.location.href = "/login";
+      if (currentUser?.userId) {
+        clearSession();
+        window.location.href = "/login";
+      }
       throw new Error("Phiên đăng nhập đã hết hạn");
     }
   }

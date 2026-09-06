@@ -36,6 +36,7 @@ public class AuthController {
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final com.example.backend.service.impl.ObjectStorageService objectStorageService;
+    private final com.example.backend.service.TokenBlacklistService tokenBlacklistService;
 
     @org.springframework.beans.factory.annotation.Value("${minio.bucket-user:user-images}")
     private String userBucket;
@@ -75,7 +76,8 @@ public class AuthController {
         String accessToken = jwtService.generateAccessToken(
                 Map.of(
                         "userId", user.getId(),
-                        "role", user.getRole()
+                        "role", user.getRole(),
+                        "tokenVersion", user.getTokenVersion()
                 ),
                 user.getEmail()
         );
@@ -175,10 +177,22 @@ public class AuthController {
         String newAccessToken = jwtService.generateAccessToken(
                 Map.of(
                         "userId", user.getId(),
-                        "role", user.getRole()
+                        "role", user.getRole(),
+                        "tokenVersion", user.getTokenVersion()
                 ),
                 user.getEmail()
         );
+
+        // Refresh Token Rotation: issue a new refresh token on every refresh call
+        String newRefreshToken = jwtService.generateRefreshToken(user.getEmail());
+        ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", newRefreshToken)
+                .httpOnly(true)
+                .secure(true)
+                .path("/auth")
+                .sameSite("None")
+                .partitioned(true)
+                .maxAge(7 * 24 * 60 * 60)
+                .build();
 
         String avatarUrl = resolveUserAvatarUrl(user.getUrl());
         Map<String, Object> body = new HashMap<>();
@@ -192,15 +206,32 @@ public class AuthController {
         body.put("avatar", avatarUrl);
         body.put("url", avatarUrl);
 
-        return ResponseEntity.ok(body);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
+                .body(body);
     }
     @PostMapping("/logout")
-    public ResponseEntity<?> logout() {
+    public ResponseEntity<?> logout(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader
+    ) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            try {
+                String jwt = authHeader.substring(7);
+                String jti = jwtService.extractJti(jwt);
+                String userId = jwtService.extractUserId(jwt);
+                java.util.Date expiresAt = jwtService.extractExpiration(jwt);
+                tokenBlacklistService.blacklistToken(jwt, jti, userId, expiresAt);
+            } catch (Exception e) {
+                log.warn("Failed to blacklist access token during logout: {}", e.getMessage());
+            }
+        }
+
         ResponseCookie deleteCookie = ResponseCookie.from("refreshToken", "")
                 .httpOnly(true)
                 .secure(true) // production: true
                 .path("/auth")
                 .sameSite("None")
+                .partitioned(true)
                 .maxAge(0)
                 .build();
 
