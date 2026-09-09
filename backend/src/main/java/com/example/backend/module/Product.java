@@ -18,7 +18,8 @@ import java.util.List;
 @CompoundIndexes({
         @CompoundIndex(name = "prod_status_created_idx", def = "{'status': 1, 'createdAt': -1}"),
         @CompoundIndex(name = "prod_category_status_idx", def = "{'categoryId': 1, 'status': 1, 'createdAt': -1}"),
-        @CompoundIndex(name = "prod_shop_status_idx", def = "{'shopId': 1, 'status': 1, 'createdAt': -1}")
+        @CompoundIndex(name = "prod_shop_status_idx", def = "{'shopId': 1, 'status': 1, 'createdAt': -1}"),
+        @CompoundIndex(name = "prod_shop_cat_idx", def = "{'shopId': 1, 'shopCategoryId': 1, 'status': 1}")
 })
 @Getter
 @Setter
@@ -31,7 +32,8 @@ public class Product {
     private String id;
 
     private String shopId;
-    private String categoryId;
+    private String categoryId;      // Danh mục toàn sàn của Admin
+    private String shopCategoryId;  // Danh mục riêng của Shop (tùy chọn)
 
     private String name;
 

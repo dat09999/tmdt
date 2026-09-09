@@ -354,4 +354,43 @@ export const sellerService = {
       { id: `c-${Date.now()}`, ...couponData }
     );
   },
+
+  // ==========================================
+  // SHOP CATEGORIES (Danh mục riêng của Shop)
+  // ==========================================
+
+  // GET /shops/{shopId}/categories
+  async getShopCategories(shopId, activeOnly = false) {
+    if (!shopId) return [];
+    return safeFetch(
+      async () => {
+        const res = await authFetch(`${API_BASE_URL}/shops/${shopId}/categories?activeOnly=${activeOnly}`);
+        return Array.isArray(res) ? res : [];
+      },
+      []
+    );
+  },
+
+  // POST /shops/{shopId}/categories
+  async createShopCategory(shopId, categoryData) {
+    return authFetch(`${API_BASE_URL}/shops/${shopId}/categories`, {
+      method: "POST",
+      body: JSON.stringify(categoryData),
+    });
+  },
+
+  // PUT /shops/{shopId}/categories/{categoryId}
+  async updateShopCategory(shopId, categoryId, categoryData) {
+    return authFetch(`${API_BASE_URL}/shops/${shopId}/categories/${categoryId}`, {
+      method: "PUT",
+      body: JSON.stringify(categoryData),
+    });
+  },
+
+  // DELETE /shops/{shopId}/categories/{categoryId}
+  async deleteShopCategory(shopId, categoryId) {
+    return authFetch(`${API_BASE_URL}/shops/${shopId}/categories/${categoryId}`, {
+      method: "DELETE",
+    });
+  },
 };

@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -24,7 +25,11 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import com.example.backend.Exception.ForbiddenException;
+import com.example.backend.sercurity.SecurityUtils;
 
 import java.util.*;
 
@@ -81,6 +86,8 @@ public class ProductServiceImpl implements ProductService {
         Shop shop = shopRepository.findById(request.getShopId())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy shop"));
 
+        checkShopOwnershipOrAdmin(shop.getId(), "Bạn không có quyền đăng sản phẩm cho shop này");
+
         if (!"ACTIVE".equalsIgnoreCase(shop.getStatus())) {
             throw new RuntimeException("Shop không hoạt động");
         }
@@ -96,6 +103,7 @@ public class ProductServiceImpl implements ProductService {
         Product product = Product.builder()
                 .shopId(requireText(request.getShopId(), "shopId không được để trống"))
                 .categoryId(requireText(request.getCategoryId(), "categoryId không được để trống"))
+                .shopCategoryId(normalize(request.getShopCategoryId()))
                 .name(requireText(request.getName(), "name không được để trống"))
                 .slug(slug)
                 .description(normalize(request.getDescription()))
@@ -256,6 +264,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public ProductResponse updateProduct(String productId, CreateProductRequest request) {
         Product product = getProductEntityById(productId);
+        checkShopOwnershipOrAdmin(product.getShopId(), "Bạn không có quyền sửa sản phẩm của shop này");
 
         if (request.getName() != null) {
             product.setName(request.getName().trim());
@@ -281,6 +290,10 @@ public class ProductServiceImpl implements ProductService {
             categoryRepository.findById(request.getCategoryId())
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy category"));
             product.setCategoryId(request.getCategoryId());
+        }
+
+        if (request.getShopCategoryId() != null) {
+            product.setShopCategoryId(request.getShopCategoryId().isBlank() ? null : request.getShopCategoryId().trim());
         }
 
         if (request.getTags() != null) {
@@ -385,6 +398,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public void deleteProduct(String productId) {
         Product product = getProductEntityById(productId);
+        checkShopOwnershipOrAdmin(product.getShopId(), "Bạn không có quyền xóa sản phẩm của shop này");
         product.setStatus("INACTIVE");
         product.setUpdatedAt(new Date());
         productRepository.save(product);
@@ -420,6 +434,7 @@ public class ProductServiceImpl implements ProductService {
                 .id(product.getId())
                 .shopId(product.getShopId())
                 .categoryId(product.getCategoryId())
+                .shopCategoryId(product.getShopCategoryId())
                 .name(product.getName())
                 .slug(product.getSlug())
                 .description(product.getDescription())
@@ -617,5 +632,88 @@ public class ProductServiceImpl implements ProductService {
         }
 
         return value;
+    }
+
+    private void checkShopOwnershipOrAdmin(String shopId, String errorMessage) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getName())) {
+            return;
+        }
+        if (SecurityUtils.isAdmin()) {
+            return;
+        }
+        String currentUserId = null;
+        if (auth.getPrincipal() instanceof UserPrincipal principal) {
+            currentUserId = principal.getId();
+        } else if (auth.getName() != null) {
+            currentUserId = auth.getName();
+        }
+
+        Shop shop = shopRepository.findById(shopId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy shop"));
+
+        if (shop.getOwnerId() != null && shop.getOwnerId().equals(currentUserId)) {
+            return;
+        }
+        throw new ForbiddenException(errorMessage);
+    }
+
+    @Override
+    public Page<ProductResponse> getAllProductsForAdmin(String keyword, String status, String shopId, String categoryId, Pageable pageable) {
+        Query query = new Query();
+        if (keyword != null && !keyword.isBlank()) {
+            query.addCriteria(Criteria.where("name").regex(keyword.trim(), "i"));
+        }
+        if (status != null && !status.isBlank()) {
+            query.addCriteria(Criteria.where("status").is(status.trim().toUpperCase()));
+        }
+        if (shopId != null && !shopId.isBlank()) {
+            query.addCriteria(Criteria.where("shopId").is(shopId.trim()));
+        }
+        if (categoryId != null && !categoryId.isBlank()) {
+            query.addCriteria(Criteria.where("categoryId").is(categoryId.trim()));
+        }
+
+        long total = mongoTemplate.count(query, Product.class);
+        query.with(pageable);
+        List<Product> list = mongoTemplate.find(query, Product.class);
+        List<ProductResponse> responses = list.stream().map(this::toProductResponse).toList();
+        return new PageImpl<>(responses, pageable, total);
+    }
+
+    @Override
+    public ProductResponse updateProductStatus(String productId, String status) {
+        Product product = getProductEntityById(productId);
+        product.setStatus(status.trim().toUpperCase());
+        product.setUpdatedAt(new Date());
+        return toProductResponse(productRepository.save(product));
+    }
+
+    @Override
+    public ProductResponse approveProduct(String productId) {
+        return updateProductStatus(productId, "ACTIVE");
+    }
+
+    @Override
+    public ProductResponse banProduct(String productId, String reason) {
+        Product product = getProductEntityById(productId);
+        product.setStatus("BANNED");
+        product.setUpdatedAt(new Date());
+        Product saved = productRepository.save(product);
+
+        try {
+            Shop shop = shopRepository.findById(product.getShopId()).orElse(null);
+            if (shop != null && shop.getOwnerId() != null) {
+                notificationService.notify(
+                        shop.getOwnerId(),
+                        Notification.NotificationType.ORDER_STATUS,
+                        "Sản phẩm '" + product.getName() + "' đã bị khóa",
+                        "Lý do: " + (reason == null || reason.isBlank() ? "Vi phạm chính sách sàn TMĐT" : reason),
+                        "/shop/products"
+                );
+            }
+        } catch (Exception ignored) {}
+
+        return toProductResponse(saved);
     }
 }

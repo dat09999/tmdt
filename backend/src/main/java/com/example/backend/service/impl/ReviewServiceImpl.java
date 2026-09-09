@@ -4,18 +4,21 @@ import com.example.backend.DTO.review.RatingSummary;
 import com.example.backend.DTO.review.ReviewRequest;
 import com.example.backend.DTO.review.ReviewResponse;
 import com.example.backend.module.Order;
+import com.example.backend.module.Product;
 import com.example.backend.module.Review;
+import com.example.backend.module.Shop;
 import com.example.backend.module.User;
 import com.example.backend.repository.OrderRepository;
 import com.example.backend.repository.ProductRepository;
-
 import com.example.backend.repository.Reviewrepository;
 import com.example.backend.repository.UserRepository;
 import com.example.backend.service.ReviewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -27,6 +30,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * ĐÃ SỬA CÁC LỖI CONCURRENCY / LOST UPDATE SO VỚI BẢN GỐC:
@@ -97,7 +101,11 @@ public class ReviewServiceImpl implements ReviewService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy user"));
 
+        Product product = productRepository.findById(request.getProductId()).orElse(null);
+        String shopId = product != null ? product.getShopId() : null;
+
         Review review = Review.builder()
+                .shopId(shopId)
                 .productId(request.getProductId())
                 .orderId(request.getOrderId())
                 .variantSku(request.getVariantSku())
@@ -231,6 +239,114 @@ public class ReviewServiceImpl implements ReviewService {
                 .set("totalReviews", Math.toIntExact(summary.getTotalReviews()));
 
         mongoTemplate.updateFirst(query, update, com.example.backend.module.Product.class);
+
+        // Đồng thời cập nhật lại rating tổng hợp cho Shop sở hữu sản phẩm
+        Product product = productRepository.findById(productId).orElse(null);
+        if (product != null && product.getShopId() != null) {
+            recalculateShopRating(product.getShopId());
+        }
+    }
+
+    @Override
+    public void recalculateShopRating(String shopId) {
+        if (shopId == null || shopId.isBlank()) return;
+
+        RatingSummary summary = getShopRatingSummary(shopId);
+
+        Query query = Query.query(Criteria.where("id").is(shopId));
+        Update update = new Update()
+                .set("rating", summary.getAvgRating())
+                .set("totalReviews", Math.toIntExact(summary.getTotalReviews()));
+
+        mongoTemplate.updateFirst(query, update, com.example.backend.module.Shop.class);
+    }
+
+    @Override
+    public RatingSummary getShopRatingSummary(String shopId) {
+        if (shopId == null || shopId.isBlank()) {
+            return RatingSummary.builder()
+                    .avgRating(0.0)
+                    .totalReviews(0L)
+                    .starBreakdown(Map.of())
+                    .build();
+        }
+
+        // Lấy danh sách ID các sản phẩm thuộc shop
+        List<Product> shopProducts = productRepository.findByShopId(shopId);
+        List<String> productIds = shopProducts.stream()
+                .map(Product::getId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        // Tiêu chí: review có visible = true và (shopId khớp HOẶC productId thuộc shop)
+        Criteria criteria;
+        if (!productIds.isEmpty()) {
+            criteria = new Criteria().andOperator(
+                    Criteria.where("visible").is(true),
+                    new Criteria().orOperator(
+                            Criteria.where("shopId").is(shopId),
+                            Criteria.where("productId").in(productIds)
+                    )
+            );
+        } else {
+            criteria = Criteria.where("visible").is(true).and("shopId").is(shopId);
+        }
+
+        List<Review> visibleReviews = mongoTemplate.find(Query.query(criteria), Review.class);
+
+        long total = visibleReviews.size();
+        double avg = visibleReviews.stream()
+                .mapToInt(Review::getRating)
+                .average()
+                .orElse(0.0);
+
+        Map<Integer, Long> breakdown = new HashMap<>();
+        for (int star = 1; star <= 5; star++) {
+            final int s = star;
+            breakdown.put(s, visibleReviews.stream().filter(r -> r.getRating() != null && r.getRating() == s).count());
+        }
+
+        return RatingSummary.builder()
+                .avgRating(Math.round(avg * 10.0) / 10.0)
+                .totalReviews(total)
+                .starBreakdown(breakdown)
+                .build();
+    }
+
+    @Override
+    public Page<ReviewResponse> getReviewsByShop(String shopId, int page, int size) {
+        if (shopId == null || shopId.isBlank()) {
+            return Page.empty();
+        }
+
+        List<Product> shopProducts = productRepository.findByShopId(shopId);
+        List<String> productIds = shopProducts.stream()
+                .map(Product::getId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        Criteria criteria;
+        if (!productIds.isEmpty()) {
+            criteria = new Criteria().andOperator(
+                    Criteria.where("visible").is(true),
+                    new Criteria().orOperator(
+                            Criteria.where("shopId").is(shopId),
+                            Criteria.where("productId").in(productIds)
+                    )
+            );
+        } else {
+            criteria = Criteria.where("visible").is(true).and("shopId").is(shopId);
+        }
+
+        Query query = Query.query(criteria);
+        long total = mongoTemplate.count(query, Review.class);
+
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by(Sort.Direction.DESC, "createdAt"));
+        query.with(pageable);
+
+        List<Review> reviews = mongoTemplate.find(query, Review.class);
+        List<ReviewResponse> responses = reviews.stream().map(ReviewResponse::fromEntity).toList();
+        return new PageImpl<>(responses, pageable, total);
     }
 
     @Override

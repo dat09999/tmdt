@@ -60,6 +60,10 @@ public class Order {
     private Payment payment;
     private List<OrderStatusLog> statusLogs; // lịch sử thay đổi trạng thái
 
+    private Date completedAt;
+    private Boolean hasPendingRefund;
+    private Boolean salesCounted;
+
     private Date createdAt;
     private Date updatedAt;
 }

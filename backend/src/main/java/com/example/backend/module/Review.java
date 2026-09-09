@@ -26,12 +26,16 @@ import java.util.List;
                 unique = true),
         // truy vấn nhanh: lấy review theo sản phẩm, sort theo thời gian mới nhất
         @CompoundIndex(name = "product_created_idx",
-                def = "{'productId': 1, 'createdAt': -1}")
+                def = "{'productId': 1, 'createdAt': -1}"),
+        // truy vấn nhanh: lấy review theo shop, sort theo thời gian mới nhất
+        @CompoundIndex(name = "shop_created_idx",
+                def = "{'shopId': 1, 'createdAt': -1}")
 })
 public class Review {
-@Id
+    @Id
     private String id;
 
+    private String shopId;        // Mã shop của sản phẩm được đánh giá
     private String productId;
     private String orderId;       // để xác minh đã mua hàng mới được đánh giá ("verified purchase")
     private String variantSku;    // review theo đúng biến thể đã mua (màu/size...), có thể null

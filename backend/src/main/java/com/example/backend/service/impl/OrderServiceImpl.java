@@ -17,7 +17,12 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import com.example.backend.Exception.ForbiddenException;
+import com.example.backend.sercurity.SecurityUtils;
+import com.example.backend.service.impl.UserPrincipal;
 
 import java.util.*;
 
@@ -62,7 +67,7 @@ public class OrderServiceImpl implements OrderService {
     // TODO: xác nhận đúng giá trị enum Notification.NotificationType bạn đang có (đang
     // dùng "ORDER" - đổi lại cho khớp enum thật nếu tên khác).
 
-    private static final Set<String> TERMINAL_STATUSES = Set.of("COMPLETED", "DELIVERED", "CANCELED");
+    private static final Set<String> TERMINAL_STATUSES = Set.of("COMPLETED", "CANCELED", "REFUNDED");
 
     // ================== TẠO ĐƠN TỪ GIỎ HÀNG ==================
 
@@ -104,6 +109,36 @@ public class OrderServiceImpl implements OrderService {
         Map<String, Product> productCache = new HashMap<>();
         List<Order> savedOrders = new ArrayList<>();
 
+        // FIX: Chặn dùng chéo mã shop khác và chặn giảm giá nhân bội trong giỏ hàng nhiều shop
+        String couponCode = request.getCouponCode();
+        String couponTargetShopId = null;
+        if (couponCode != null && !couponCode.trim().isBlank()) {
+            Coupon coupon = couponRepository.findByCode(couponCode.trim().toUpperCase())
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy coupon: " + couponCode));
+
+            if (coupon.getShopId() != null || "SHOP".equalsIgnoreCase(coupon.getScope())) {
+                couponTargetShopId = coupon.getShopId();
+                if (couponTargetShopId == null || !itemsByShop.containsKey(couponTargetShopId)) {
+                    throw new RuntimeException("Mã giảm giá này chỉ áp dụng cho sản phẩm của shop: " + couponTargetShopId);
+                }
+            } else {
+                // PLATFORM coupon: Chọn DUY NHẤT 1 shop có tổng giá trị hàng lớn nhất để áp dụng (không nhân bội)
+                String bestShopId = null;
+                long maxShopSubtotal = -1L;
+                for (Map.Entry<String, List<CartItem>> entry : itemsByShop.entrySet()) {
+                    long estimatedShopSubtotal = 0L;
+                    for (CartItem ci : entry.getValue()) {
+                        estimatedShopSubtotal += (ci.getPrice() != null ? ci.getPrice() : 0L) * ci.getQuantity();
+                    }
+                    if (estimatedShopSubtotal > maxShopSubtotal) {
+                        maxShopSubtotal = estimatedShopSubtotal;
+                        bestShopId = entry.getKey();
+                    }
+                }
+                couponTargetShopId = bestShopId;
+            }
+        }
+
         // ---- FIX #4: nếu 1 shop lỗi giữa chừng, rollback (cancel) toàn bộ order
         //      đã tạo thành công trước đó trong CÙNG lần checkout này ----
         try {
@@ -125,11 +160,13 @@ public class OrderServiceImpl implements OrderService {
                             "Shop không khớp: expected=" + shopEntry.getKey() + ", actual=" + built.shopId);
                 }
 
+                String applicableCouponCode = Objects.equals(built.shopId, couponTargetShopId) ? couponCode : null;
+
                 Order savedOrder = finalizeOrder(
                         request.getBuyerId(),
                         built.shopId,
                         built,
-                        request.getCouponCode(),
+                        applicableCouponCode,
                         request.getShippingAddress(),
                         request.getNote(),
                         request.getPaymentMethod()
@@ -275,7 +312,7 @@ public class OrderServiceImpl implements OrderService {
         if (couponCode != null && !couponCode.isBlank()) {
             coupon = couponRepository.findByCode(couponCode.trim().toUpperCase())
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy coupon"));
-            validateCoupon(coupon, built.subtotal);
+            validateCoupon(coupon, shopId, built.subtotal);
             discountAmount = calculateDiscount(coupon, built.subtotal);
             // LƯU Ý (lỗi #8 - TOCTOU): validateCoupon() chỉ check usageLimit tại thời điểm
             // ĐỌC, chưa "giữ chỗ" ngay lúc này. Việc cộng usedCount atomic thật sự chỉ xảy ra
@@ -443,10 +480,27 @@ public class OrderServiceImpl implements OrderService {
         if ("DELIVERED".equals(newStatus)) {
             update.set("deliveredAt", now);
         }
+        if ("COMPLETED".equals(newStatus)) {
+            update.set("completedAt", now);
+        }
+
+        boolean willCountSales = ("DELIVERED".equals(newStatus) || "COMPLETED".equals(newStatus))
+                && !Boolean.TRUE.equals(current.getSalesCounted());
+        if (willCountSales) {
+            update.set("salesCounted", true);
+        }
 
         Order result = atomicUpdateOrderStatus(orderId, current.getOrderStatus(), update);
         if (result == null) {
             throw new RuntimeException("Đơn hàng vừa bị thay đổi trạng thái bởi thao tác khác, vui lòng thử lại");
+        }
+
+        if (willCountSales && result.getShopId() != null) {
+            mongoTemplate.updateFirst(
+                    Query.query(Criteria.where("_id").is(result.getShopId())),
+                    new Update().inc("totalSales", 1),
+                    Shop.class
+            );
         }
 
         notificationService.notify(
@@ -502,11 +556,120 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    public Order confirmReceived(String orderId, String userId) {
+        Order current = getOrderById(orderId);
+
+        if (userId != null && !userId.isBlank()) {
+            if (!userId.equals(current.getBuyerId())) {
+                throw new RuntimeException("Bạn không có quyền xác nhận đơn hàng này");
+            }
+        }
+
+        if (!"DELIVERED".equalsIgnoreCase(current.getOrderStatus())
+                && !"SHIPPING".equalsIgnoreCase(current.getOrderStatus())) {
+            throw new RuntimeException("Chỉ có thể xác nhận đã nhận hàng khi đơn hàng đang giao hoặc đã giao");
+        }
+
+        Date now = new Date();
+        Update update = new Update()
+                .set("orderStatus", "COMPLETED")
+                .set("completedAt", now)
+                .set("updatedAt", now)
+                .push("statusLogs", OrderStatusLog.builder()
+                        .status("COMPLETED")
+                        .note("Người mua đã xác nhận nhận hàng thành công")
+                        .updatedBy("BUYER")
+                        .timestamp(now)
+                        .build());
+
+        if (current.getDeliveredAt() == null) {
+            update.set("deliveredAt", now);
+        }
+
+        boolean willCountSales = !Boolean.TRUE.equals(current.getSalesCounted());
+        if (willCountSales) {
+            update.set("salesCounted", true);
+        }
+
+        Order result = atomicUpdateOrderStatus(orderId, current.getOrderStatus(), update);
+        if (result == null) {
+            throw new RuntimeException("Đơn hàng vừa bị thay đổi trạng thái bởi thao tác khác, vui lòng thử lại");
+        }
+
+        if (willCountSales && result.getShopId() != null) {
+            mongoTemplate.updateFirst(
+                    Query.query(Criteria.where("_id").is(result.getShopId())),
+                    new Update().inc("totalSales", 1),
+                    Shop.class
+            );
+        }
+
+        // Thông báo cho người mua
+        notificationService.notify(
+                result.getBuyerId(),
+                Notification.NotificationType.ORDER_STATUS,
+                "Đơn hàng " + result.getOrderCode() + " đã hoàn thành",
+                "Bạn đã xác nhận nhận hàng thành công. Hãy để lại đánh giá cho sản phẩm nhé!",
+                "/orders/" + result.getId()
+        );
+
+        // Thông báo cho chủ shop
+        if (result.getShopId() != null) {
+            shopRepository.findById(result.getShopId()).ifPresent(shop -> {
+                if (shop.getOwnerId() != null) {
+                    notificationService.notify(
+                            shop.getOwnerId(),
+                            Notification.NotificationType.ORDER_STATUS,
+                            "Đơn hàng " + result.getOrderCode() + " đã hoàn thành",
+                            "Người mua đã xác nhận nhận được hàng.",
+                            "/shop/orders/" + result.getId()
+                    );
+                }
+            });
+        }
+
+        return result;
+    }
+
+    @Override
     public Order cancelOrder(String orderId, String canceledBy, String reason) {
         Order current = getOrderById(orderId);
 
-        if (TERMINAL_STATUSES.contains(current.getOrderStatus())) {
-            throw new RuntimeException("Không thể hủy đơn hàng ở trạng thái: " + current.getOrderStatus());
+        // IDOR CHECK: Người gửi yêu cầu hủy đơn phải là Buyer, Shop Owner hoặc Admin
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())) {
+            if (!SecurityUtils.isAdmin()) {
+                String currentUserId = null;
+                if (auth.getPrincipal() instanceof UserPrincipal principal) {
+                    currentUserId = principal.getId();
+                } else if (auth.getName() != null) {
+                    currentUserId = auth.getName();
+                }
+
+                boolean isBuyer = currentUserId != null && currentUserId.equals(current.getBuyerId());
+                boolean isShopOwner = false;
+                if (!isBuyer && current.getShopId() != null) {
+                    Shop shop = shopRepository.findById(current.getShopId()).orElse(null);
+                    if (shop != null && currentUserId != null && currentUserId.equals(shop.getOwnerId())) {
+                        isShopOwner = true;
+                    }
+                }
+
+                if (!isBuyer && !isShopOwner && !"SYSTEM".equalsIgnoreCase(canceledBy)) {
+                    throw new ForbiddenException("Bạn không có quyền hủy đơn hàng này");
+                }
+
+                if (isBuyer) {
+                    canceledBy = "BUYER";
+                } else if (isShopOwner) {
+                    canceledBy = "SELLER";
+                }
+            }
+        }
+
+        if (TERMINAL_STATUSES.contains(current.getOrderStatus()) || "DELIVERED".equals(current.getOrderStatus())) {
+            throw new RuntimeException("Không thể hủy đơn hàng ở trạng thái: " + current.getOrderStatus()
+                    + ". Vui lòng yêu cầu trả hàng / hoàn tiền nếu đã nhận được hàng.");
         }
 
         Date now = new Date();
@@ -769,7 +932,7 @@ public class OrderServiceImpl implements OrderService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy variant"));
     }
 
-    private void validateCoupon(Coupon coupon, long subtotal) {
+    private void validateCoupon(Coupon coupon, String orderShopId, long subtotal) {
         Date now = new Date();
         if (!Boolean.TRUE.equals(coupon.getActive()))
             throw new RuntimeException("Coupon không còn hoạt động");
@@ -780,6 +943,14 @@ public class OrderServiceImpl implements OrderService {
         if (coupon.getUsageLimit() != null && coupon.getUsedCount() != null
                 && coupon.getUsedCount() >= coupon.getUsageLimit())
             throw new RuntimeException("Coupon đã hết lượt sử dụng");
+
+        // Chặn dùng chéo mã coupon của shop khác
+        if (coupon.getShopId() != null || "SHOP".equalsIgnoreCase(coupon.getScope())) {
+            if (!Objects.equals(coupon.getShopId(), orderShopId)) {
+                throw new RuntimeException("Mã giảm giá này chỉ áp dụng cho shop: " + coupon.getShopId());
+            }
+        }
+
         long min = coupon.getMinOrderValue() == null ? 0L : coupon.getMinOrderValue();
         if (subtotal < min)
             throw new RuntimeException("Đơn hàng chưa đủ giá trị tối thiểu để áp coupon");

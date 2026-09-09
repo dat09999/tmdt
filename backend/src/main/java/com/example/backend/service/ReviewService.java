@@ -19,6 +19,13 @@ public interface ReviewService {
     void markHelpful(String reviewId);
 
     void hideReview(String reviewId);
+
+    // Shop rating methods
+    void recalculateShopRating(String shopId);
+
+    RatingSummary getShopRatingSummary(String shopId);
+
+    Page<ReviewResponse> getReviewsByShop(String shopId, int page, int size);
     
     // Admin lấy danh sách toàn bộ review có lọc theo rating, ngày tháng, productId
     Page<ReviewResponse> getAllReviews(

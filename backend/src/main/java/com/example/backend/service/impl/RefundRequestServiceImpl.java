@@ -5,6 +5,7 @@ import com.example.backend.module.Order;
 import com.example.backend.module.OrderItem;
 import com.example.backend.module.Product;
 import com.example.backend.module.RefundRequest;
+import com.example.backend.module.Shop;
 import com.example.backend.repository.OrderRepository;
 import com.example.backend.repository.RefundRequestRepository;
 import com.example.backend.service.RefundRequestService;
@@ -74,7 +75,7 @@ public class RefundRequestServiceImpl implements RefundRequestService {
         // request còn lại sẽ nhận về null ngay lập tức.
         Query lockQuery = Query.query(
                 Criteria.where("_id").is(order.getId())
-                        .and("orderStatus").in("COMPLETED", "SHIPPING")
+                        .and("orderStatus").in("COMPLETED", "DELIVERED", "SHIPPING")
                         .and("hasPendingRefund").ne(true)
         );
         Update lockUpdate = new Update().set("hasPendingRefund", true);
@@ -86,8 +87,9 @@ public class RefundRequestServiceImpl implements RefundRequestService {
             // Không khóa được -> hoặc order sai trạng thái, hoặc đã có refund khác đang xử lý.
             // Phân biệt rõ để báo lỗi đúng cho người dùng.
             if (!"COMPLETED".equalsIgnoreCase(order.getOrderStatus())
+                    && !"DELIVERED".equalsIgnoreCase(order.getOrderStatus())
                     && !"SHIPPING".equalsIgnoreCase(order.getOrderStatus())) {
-                throw new RuntimeException("Chỉ có thể yêu cầu hoàn trả khi đơn hàng đang giao hoặc đã hoàn thành");
+                throw new RuntimeException("Chỉ có thể yêu cầu hoàn trả khi đơn hàng đang giao, đã giao hoặc đã hoàn thành");
             }
             throw new RuntimeException("Đơn hàng này đã có yêu cầu hoàn trả đang xử lý");
         }
@@ -177,11 +179,11 @@ public class RefundRequestServiceImpl implements RefundRequestService {
 
         if ("APPROVED".equalsIgnoreCase(newStatus)) {
             // Update order atomic có điều kiện, thay vì đọc-sửa-ghi tự do như bản gốc.
-            // Điều kiện orderStatus phải đang COMPLETED/SHIPPING - tránh trường hợp order
+            // Điều kiện orderStatus phải đang COMPLETED/DELIVERED/SHIPPING - tránh trường hợp order
             // đã bị thay đổi trạng thái bởi luồng khác (vd: cancel) ngay trước đó.
             Query orderQuery = Query.query(
                     Criteria.where("_id").is(refund.getOrderId())
-                            .and("orderStatus").in("COMPLETED", "SHIPPING")
+                            .and("orderStatus").in("COMPLETED", "DELIVERED", "SHIPPING")
             );
             Update orderUpdate = new Update()
                     .set("orderStatus", "REFUNDED")
@@ -193,10 +195,25 @@ public class RefundRequestServiceImpl implements RefundRequestService {
             if (updatedOrder == null) {
                 log.warn("Duyệt refund {} thành công nhưng order {} không còn ở trạng thái phù hợp để chuyển REFUNDED - cần kiểm tra thủ công",
                         refundId, refund.getOrderId());
-            } else if (updatedOrder.getItems() != null) {
-                // BUG FIX: Hoàn trả tồn kho variant khi refund được APPROVED
-                for (OrderItem item : updatedOrder.getItems()) {
-                    restoreStockAtomic(item.getProductId(), item.getVariantSku(), item.getQuantity());
+            } else {
+                if (updatedOrder.getItems() != null) {
+                    // BUG FIX: Hoàn trả tồn kho variant khi refund được APPROVED
+                    for (OrderItem item : updatedOrder.getItems()) {
+                        restoreStockAtomic(item.getProductId(), item.getVariantSku(), item.getQuantity());
+                    }
+                }
+                // Giảm totalSales của Shop nếu đơn này trước đó đã được tính vào doanh số
+                if (Boolean.TRUE.equals(updatedOrder.getSalesCounted()) && updatedOrder.getShopId() != null) {
+                    mongoTemplate.updateFirst(
+                            Query.query(Criteria.where("_id").is(updatedOrder.getShopId()).and("totalSales").gt(0)),
+                            new Update().inc("totalSales", -1),
+                            Shop.class
+                    );
+                    mongoTemplate.updateFirst(
+                            Query.query(Criteria.where("_id").is(updatedOrder.getId())),
+                            new Update().set("salesCounted", false),
+                            Order.class
+                    );
                 }
             }
         } else if ("REJECTED".equalsIgnoreCase(newStatus)) {

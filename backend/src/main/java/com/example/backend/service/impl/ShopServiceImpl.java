@@ -137,7 +137,8 @@ public class ShopServiceImpl implements ShopService {
     /** Chỉ cập nhật các trường request có gửi lên - đổi sang atomic $set. */
     @Override
     public ShopResponse updateShop(String shopId, CreateShopRequest request) {
-        getShopOrThrow(shopId); // vẫn giữ để 404 sớm nếu shopId không tồn tại
+        Shop shop = getShopOrThrow(shopId);
+        checkShopOwnerOrAdmin(shop.getOwnerId(), "Bạn không có quyền chỉnh sửa thông tin shop này");
 
         Update update = new Update().set("updatedAt", new Date());
         boolean hasChange = false;
@@ -175,7 +176,8 @@ public class ShopServiceImpl implements ShopService {
     @Override
     public ActionResponse deleteShop(String shopId) {
         // Xóa mềm để vẫn giữ lại lịch sử đơn hàng và doanh thu.
-        getShopOrThrow(shopId);
+        Shop shop = getShopOrThrow(shopId);
+        checkShopOwnerOrAdmin(shop.getOwnerId(), "Bạn không có quyền xóa shop này");
         Update update = new Update().set("status", "DELETED").set("updatedAt", new Date());
         atomicUpdateShop(shopId, update);
 
@@ -562,7 +564,8 @@ public class ShopServiceImpl implements ShopService {
     /** Lưu object key logo shop sau khi upload file lên MinIO - atomic $set. */
     @Override
     public ShopResponse updateShopAvatar(String shopId, String logoKey) {
-        getShopOrThrow(shopId);
+        Shop shop = getShopOrThrow(shopId);
+        checkShopOwnerOrAdmin(shop.getOwnerId(), "Bạn không có quyền thay đổi ảnh đại diện shop này");
         String key = requireText(logoKey, "logoKey không được để trống");
 
         Update update = new Update().set("logo", key).set("updatedAt", new Date());
@@ -573,7 +576,8 @@ public class ShopServiceImpl implements ShopService {
     /** Lưu object key ảnh bìa shop sau khi upload file lên MinIO - atomic $set. */
     @Override
     public ShopResponse updateShopBanner(String shopId, String coverKey) {
-        getShopOrThrow(shopId);
+        Shop shop = getShopOrThrow(shopId);
+        checkShopOwnerOrAdmin(shop.getOwnerId(), "Bạn không có quyền thay đổi ảnh bìa shop này");
         String key = requireText(coverKey, "coverKey không được để trống");
 
         Update update = new Update().set("coverImage", key).set("updatedAt", new Date());
@@ -635,5 +639,20 @@ public class ShopServiceImpl implements ShopService {
             throw new RuntimeException(message);
         }
         return result;
+    }
+
+    private void checkShopOwnerOrAdmin(String ownerId, String message) {
+        if (SecurityUtils.isAdmin()) {
+            return;
+        }
+        String currentUserId = null;
+        try {
+            currentUserId = SecurityUtils.getCurrentUserId();
+        } catch (Exception ignored) {}
+
+        if (currentUserId != null && ownerId != null && ownerId.equals(currentUserId)) {
+            return;
+        }
+        throw new ForbiddenException(message);
     }
 }

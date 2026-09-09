@@ -72,11 +72,12 @@ export default function SellerPage() {
   const [loading, setLoading] = useState(true);
   const [checkingShop, setCheckingShop] = useState(true);
   const [toastMessage, setToastMessage] = useState("");
-  const [activeTab, setActiveTab] = useState("dashboard"); // "dashboard" | "products" | "orders" | "coupons" | "chat" | "settings"
+  const [activeTab, setActiveTab] = useState("dashboard"); // "dashboard" | "products" | "categories" | "orders" | "coupons" | "chat" | "settings"
   const [unreadShopChatCount, setUnreadShopChatCount] = useState(0);
   const [orderStatusFilter, setOrderStatusFilter] = useState("ALL"); // "ALL" | "PENDING" | "PROCESSING" | "SHIPPING" | "DELIVERED" | "CANCELLED"
   const [stats, setStats] = useState(null);
   const [products, setProducts] = useState([]);
+  const [shopCategories, setShopCategories] = useState([]);
   const [orders, setOrders] = useState([]);
   const [coupons, setCoupons] = useState([]);
 
@@ -118,12 +119,23 @@ export default function SellerPage() {
   const [productForm, setProductForm] = useState({
     name: "",
     categoryId: "dien-thoai",
+    shopCategoryId: "",
     basePrice: "",
     originalPrice: "",
     stock: 50,
     description: "",
     imageUrl: "",
     variants: [],
+  });
+
+  // Shop Category Add/Edit Modal
+  const [shopCategoryModalOpen, setShopCategoryModalOpen] = useState(false);
+  const [editingShopCategory, setEditingShopCategory] = useState(null);
+  const [shopCategoryForm, setShopCategoryForm] = useState({
+    name: "",
+    description: "",
+    sortOrder: 0,
+    active: true,
   });
 
   // Coupon Modal
@@ -175,18 +187,20 @@ export default function SellerPage() {
       if (userShop && userShop.id) {
         setShop(userShop);
         setLoading(true);
-        const [sData, pData, oData, cData, aData] = await Promise.all([
+        const [sData, pData, oData, cData, aData, scData] = await Promise.all([
           sellerService.getDashboardStats(userShop.id),
           sellerService.getProducts(userShop.id),
           sellerService.getOrders(userShop.id),
           sellerService.getCoupons(userShop.id),
           sellerService.getAnalyticsOverview(userShop.id, { days: analyticsDays }),
+          sellerService.getShopCategories(userShop.id),
         ]);
         setStats(sData);
         setProducts(pData || []);
         setOrders(oData || []);
         setCoupons(cData || []);
         setAnalyticsData(aData);
+        setShopCategories(scData || []);
       } else {
         setShop(null);
       }
@@ -196,6 +210,16 @@ export default function SellerPage() {
     } finally {
       setCheckingShop(false);
       setLoading(false);
+    }
+  };
+
+  const loadShopCategories = async () => {
+    if (!shop?.id) return;
+    try {
+      const data = await sellerService.getShopCategories(shop.id);
+      setShopCategories(data || []);
+    } catch (err) {
+      console.error("Load shop categories failed:", err);
     }
   };
 
@@ -372,6 +396,7 @@ export default function SellerPage() {
     setProductForm({
       name: "",
       categoryId: "dien-thoai",
+      shopCategoryId: "",
       basePrice: "",
       originalPrice: "",
       stock: 50,
@@ -389,6 +414,7 @@ export default function SellerPage() {
     setProductForm({
       name: p.name || "",
       categoryId: p.categoryId || "dien-thoai",
+      shopCategoryId: p.shopCategoryId || "",
       basePrice: p.basePrice ?? "",
       originalPrice: p.originalPrice || p.basePrice || "",
       stock: totalStock,
@@ -530,6 +556,7 @@ export default function SellerPage() {
     const payload = {
       name: productForm.name.trim(),
       categoryId: productForm.categoryId || "dien-thoai",
+      shopCategoryId: productForm.shopCategoryId || null,
       basePrice: basePriceNum,
       originalPrice: Number(productForm.originalPrice) || basePriceNum,
       description: productForm.description || "",
@@ -565,6 +592,69 @@ export default function SellerPage() {
       await sellerService.deleteProduct(shop.id, id);
       showToast("Đã xóa sản phẩm thành công!");
       await loadShopAndData();
+    }
+  };
+
+  // Shop Category Handlers
+  const handleOpenCreateShopCategory = () => {
+    setEditingShopCategory(null);
+    setShopCategoryForm({
+      name: "",
+      description: "",
+      sortOrder: shopCategories.length,
+      active: true,
+    });
+    setShopCategoryModalOpen(true);
+  };
+
+  const handleOpenEditShopCategory = (cat) => {
+    setEditingShopCategory(cat);
+    setShopCategoryForm({
+      name: cat.name || "",
+      description: cat.description || "",
+      sortOrder: cat.sortOrder ?? 0,
+      active: cat.active !== false,
+    });
+    setShopCategoryModalOpen(true);
+  };
+
+  const handleSaveShopCategory = async (e) => {
+    e.preventDefault();
+    if (!shopCategoryForm.name?.trim() || !shop?.id) {
+      showToast("Vui lòng nhập tên danh mục!");
+      return;
+    }
+    try {
+      const payload = {
+        name: shopCategoryForm.name.trim(),
+        description: shopCategoryForm.description || "",
+        sortOrder: Number(shopCategoryForm.sortOrder) || 0,
+        active: shopCategoryForm.active,
+      };
+      if (editingShopCategory) {
+        await sellerService.updateShopCategory(shop.id, editingShopCategory.id, payload);
+        showToast("Đã cập nhật danh mục shop thành công!");
+      } else {
+        await sellerService.createShopCategory(shop.id, payload);
+        showToast("Đã tạo danh mục shop mới thành công!");
+      }
+      setShopCategoryModalOpen(false);
+      setEditingShopCategory(null);
+      await loadShopAndData();
+    } catch (err) {
+      showToast(err.message || "Có lỗi xảy ra khi lưu danh mục!");
+    }
+  };
+
+  const handleDeleteShopCategory = async (catId) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa danh mục này? Các sản phẩm trong danh mục sẽ được gỡ phân loại mà không bị xóa.")) {
+      try {
+        await sellerService.deleteShopCategory(shop.id, catId);
+        showToast("Đã xóa danh mục shop thành công!");
+        await loadShopAndData();
+      } catch (err) {
+        showToast(err.message || "Không thể xóa danh mục!");
+      }
     }
   };
 
@@ -934,6 +1024,7 @@ export default function SellerPage() {
                 {[
                   { id: "dashboard", label: "📊 Tổng Quan", icon: TrendingUp },
                   { id: "products", label: `📦 Sản Phẩm (${products.length})`, icon: Package },
+                  { id: "categories", label: `📑 Danh Mục Shop (${shopCategories.length})`, icon: Layers },
                   { id: "orders", label: `📑 Đơn Hàng (${orders.length})`, icon: ShoppingBag },
                   { id: "coupons", label: `🎟️ Mã Giảm Giá (${coupons.length})`, icon: Ticket },
                   {
@@ -2168,8 +2259,22 @@ export default function SellerPage() {
                                   />
                                   <div>
                                     <strong style={{ color: "var(--text)" }}>{p.name}</strong>
-                                    <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                                      Mã: {p.id}
+                                    <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "6px", marginTop: "2px", flexWrap: "wrap" }}>
+                                      <span>Mã: {p.id}</span>
+                                      {p.shopCategoryId && (
+                                        <span
+                                          style={{
+                                            backgroundColor: "var(--primary-light)",
+                                            color: "var(--primary)",
+                                            padding: "1px 6px",
+                                            borderRadius: "3px",
+                                            fontSize: "10px",
+                                            fontWeight: "600",
+                                          }}
+                                        >
+                                          🏷️ {shopCategories.find((c) => c.id === p.shopCategoryId)?.name || "Danh mục shop"}
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -2219,6 +2324,166 @@ export default function SellerPage() {
                                     onClick={() => handleDeleteProduct(p.id)}
                                     style={{ padding: "6px", color: "var(--error)" }}
                                     title="Xóa"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB: SHOP CATEGORIES MANAGER */}
+              {activeTab === "categories" && (
+                <div
+                  className="card"
+                  style={{
+                    backgroundColor: "var(--surface)",
+                    borderRadius: "var(--r-lg)",
+                    border: "1px solid var(--border-light)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "18px 20px",
+                      borderBottom: "1px solid var(--border-light)",
+                      flexWrap: "wrap",
+                      gap: "12px",
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: "16px" }}>Danh Mục Riêng Của Shop ({shopCategories.length})</strong>
+                      <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "4px 0 0 0" }}>
+                        Tự tạo và quản lý các nhóm sản phẩm riêng cho cửa hàng của bạn (VD: Hàng Mới Về, Bán Chạy, Bộ Sưu Tập Hè...).
+                      </p>
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={Plus}
+                      onClick={handleOpenCreateShopCategory}
+                    >
+                      Thêm Danh Mục Mới
+                    </Button>
+                  </div>
+
+                  {shopCategories.length === 0 ? (
+                    <EmptyState
+                      title="Shop chưa có danh mục riêng nào"
+                      description="Tạo danh mục riêng để gom nhóm sản phẩm và giúp khách hàng dễ tìm kiếm trên trang Shop của bạn!"
+                    />
+                  ) : (
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                        <thead>
+                          <tr style={{ backgroundColor: "var(--surface-muted)", textAlign: "left" }}>
+                            <th style={{ padding: "12px 16px" }}>Tên danh mục</th>
+                            <th style={{ padding: "12px 16px" }}>Mô tả</th>
+                            <th style={{ padding: "12px 16px", textAlign: "center" }}>Thứ tự hiển thị</th>
+                            <th style={{ padding: "12px 16px", textAlign: "center" }}>Số sản phẩm</th>
+                            <th style={{ padding: "12px 16px" }}>Trạng thái</th>
+                            <th style={{ padding: "12px 16px", textAlign: "right" }}>Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {shopCategories.map((cat) => (
+                            <tr key={cat.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+                              <td style={{ padding: "12px 16px" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <div
+                                    style={{
+                                      width: "32px",
+                                      height: "32px",
+                                      borderRadius: "6px",
+                                      backgroundColor: "var(--primary-light)",
+                                      color: "var(--primary)",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      fontWeight: "800",
+                                      fontSize: "14px",
+                                    }}
+                                  >
+                                    📁
+                                  </div>
+                                  <div>
+                                    <strong style={{ color: "var(--text)" }}>{cat.name}</strong>
+                                    <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                                      Mã: {cat.id}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td style={{ padding: "12px 16px", color: "var(--text-secondary)", maxWidth: "260px" }}>
+                                {cat.description || "—"}
+                              </td>
+                              <td style={{ padding: "12px 16px", textAlign: "center", fontWeight: "600" }}>
+                                {cat.sortOrder ?? 0}
+                              </td>
+                              <td style={{ padding: "12px 16px", textAlign: "center" }}>
+                                <span
+                                  style={{
+                                    backgroundColor: "var(--surface-muted)",
+                                    padding: "3px 10px",
+                                    borderRadius: "12px",
+                                    fontWeight: "700",
+                                    fontSize: "12px",
+                                  }}
+                                >
+                                  {cat.productCount ?? 0} sản phẩm
+                                </span>
+                              </td>
+                              <td style={{ padding: "12px 16px" }}>
+                                {cat.active ? (
+                                  <span
+                                    style={{
+                                      backgroundColor: "#d1fae5",
+                                      color: "#065f46",
+                                      padding: "2px 8px",
+                                      borderRadius: "4px",
+                                      fontSize: "11px",
+                                      fontWeight: "700",
+                                    }}
+                                  >
+                                    Đang hiển thị
+                                  </span>
+                                ) : (
+                                  <span
+                                    style={{
+                                      backgroundColor: "#fee2e2",
+                                      color: "#991b1b",
+                                      padding: "2px 8px",
+                                      borderRadius: "4px",
+                                      fontSize: "11px",
+                                      fontWeight: "700",
+                                    }}
+                                  >
+                                    Đang ẩn
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                                  <button
+                                    onClick={() => handleOpenEditShopCategory(cat)}
+                                    style={{ padding: "6px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer" }}
+                                    title="Chỉnh sửa danh mục"
+                                  >
+                                    <Edit2 size={15} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteShopCategory(cat.id)}
+                                    style={{ padding: "6px", color: "var(--error)", background: "none", border: "none", cursor: "pointer" }}
+                                    title="Xóa danh mục"
                                   >
                                     <Trash2 size={15} />
                                   </button>
@@ -2931,7 +3196,7 @@ export default function SellerPage() {
       >
         <form onSubmit={handleSaveProduct} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           {/* Thông tin cơ bản */}
-          <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: "12px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr 1fr", gap: "12px" }}>
             <div>
               <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
                 Tên Sản Phẩm: <span style={{ color: "var(--error)" }}>*</span>
@@ -2947,7 +3212,7 @@ export default function SellerPage() {
             </div>
             <div>
               <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-                Ngành Hàng / Danh Mục:
+                Ngành Hàng Hệ Thống: <span style={{ color: "var(--error)" }}>*</span>
               </label>
               <select
                 value={productForm.categoryId || "dien-thoai"}
@@ -2957,6 +3222,23 @@ export default function SellerPage() {
                 {CATEGORY_OPTIONS.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                Danh Mục Của Shop:
+              </label>
+              <select
+                value={productForm.shopCategoryId || ""}
+                onChange={(e) => setProductForm({ ...productForm, shopCategoryId: e.target.value })}
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px", backgroundColor: "var(--surface)" }}
+              >
+                <option value="">-- Không chọn --</option>
+                {shopCategories.map((sc) => (
+                  <option key={sc.id} value={sc.id}>
+                    {sc.name}
                   </option>
                 ))}
               </select>
@@ -3271,6 +3553,79 @@ export default function SellerPage() {
 
           <Button variant="primary" type="submit" block style={{ marginTop: "8px", padding: "10px" }}>
             {editingProduct ? "Lưu Thay Đổi Sản Phẩm & Phân Loại" : "Đăng Sản Phẩm Mới"}
+          </Button>
+        </form>
+      </Modal>
+
+      {/* Modal Add / Edit Shop Category */}
+      <Modal
+        isOpen={shopCategoryModalOpen}
+        onClose={() => setShopCategoryModalOpen(false)}
+        title={editingShopCategory ? "Chỉnh Sửa Danh Mục Shop" : "Thêm Danh Mục Shop Mới"}
+      >
+        <form onSubmit={handleSaveShopCategory} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Tên Danh Mục: <span style={{ color: "var(--error)" }}>*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="VD: Hàng Mới Về, Áo Thun Cao Cấp..."
+              value={shopCategoryForm.name}
+              onChange={(e) => setShopCategoryForm({ ...shopCategoryForm, name: e.target.value })}
+              style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}
+              required
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Mô Tả Danh Mục:
+            </label>
+            <textarea
+              rows={3}
+              placeholder="Nhập mô tả ngắn về nhóm sản phẩm này (tùy chọn)..."
+              value={shopCategoryForm.description}
+              onChange={(e) => setShopCategoryForm({ ...shopCategoryForm, description: e.target.value })}
+              style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                Thứ Tự Hiển Thị:
+              </label>
+              <input
+                type="number"
+                placeholder="0"
+                value={shopCategoryForm.sortOrder}
+                onChange={(e) => setShopCategoryForm({ ...shopCategoryForm, sortOrder: e.target.value })}
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}
+                min={0}
+              />
+              <span style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px", display: "block" }}>
+                Số nhỏ hơn sẽ hiển thị trước
+              </span>
+            </div>
+
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+                Trạng Thái:
+              </label>
+              <select
+                value={shopCategoryForm.active ? "true" : "false"}
+                onChange={(e) => setShopCategoryForm({ ...shopCategoryForm, active: e.target.value === "true" })}
+                style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px", backgroundColor: "var(--surface)" }}
+              >
+                <option value="true">Đang hiển thị</option>
+                <option value="false">Tạm ẩn</option>
+              </select>
+            </div>
+          </div>
+
+          <Button variant="primary" type="submit" block style={{ marginTop: "6px", padding: "10px" }}>
+            {editingShopCategory ? "Lưu Thay Đổi Danh Mục" : "Tạo Danh Mục Mới"}
           </Button>
         </form>
       </Modal>

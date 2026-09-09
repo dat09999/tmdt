@@ -39,6 +39,9 @@ public interface OrderService {
 // hoàn lại tồn kho đã giữ chỗ. Trả về số lượng đơn đã hủy (để log).
     int cancelExpiredPendingOrders(int minutesThreshold);
 
+    // Người mua xác nhận đã nhận được hàng
+    Order confirmReceived(String orderId, String userId);
+
     // Admin lấy danh sách đơn hàng toàn hệ thống có lọc và phân trang
     org.springframework.data.domain.Page<Order> getAllOrders(
             String orderStatus,

@@ -35,4 +35,14 @@ public interface ProductService {
     void deleteProduct(String productId);
 
     ProductResponse incrementViewCount(String productId);
+
+    // Admin kiểm duyệt và quản trị sản phẩm toàn sàn
+    org.springframework.data.domain.Page<ProductResponse> getAllProductsForAdmin(
+            String keyword, String status, String shopId, String categoryId, org.springframework.data.domain.Pageable pageable);
+
+    ProductResponse updateProductStatus(String productId, String status);
+
+    ProductResponse approveProduct(String productId);
+
+    ProductResponse banProduct(String productId, String reason);
 }

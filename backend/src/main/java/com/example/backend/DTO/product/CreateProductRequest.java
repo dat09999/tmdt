@@ -18,6 +18,9 @@ public class CreateProductRequest {
     @NotBlank(message = "categoryId không được để trống")
     private String categoryId;
 
+    /** Danh mục riêng của Shop (tùy chọn) */
+    private String shopCategoryId;
+
     @NotBlank(message = "name không được để trống")
     private String name;
 

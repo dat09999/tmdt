@@ -148,6 +148,34 @@ public class OrderController {
         return ResponseEntity.ok(order);
     }
 
+    /**
+     * Người mua xác nhận đã nhận được hàng.
+     * PATCH /api/orders/{orderId}/confirm-received
+     */
+    @PatchMapping("/{orderId}/confirm-received")
+    public ResponseEntity<Order> confirmReceived(
+            @PathVariable String orderId,
+            @RequestBody(required = false) ConfirmReceivedRequest request) {
+
+        String userId = null;
+        if (request != null && request.userId() != null && !request.userId().isBlank()) {
+            userId = request.userId();
+        } else {
+            try {
+                userId = com.example.backend.sercurity.SecurityUtils.getCurrentUserId();
+            } catch (Exception ignored) {
+            }
+        }
+
+        Order order = orderService.confirmReceived(orderId, userId);
+        return ResponseEntity.ok(order);
+    }
+
+    public record ConfirmReceivedRequest(
+            String userId
+    ) {
+    }
+
     public record UpdateOrderStatusRequest(
             String status,
             String updatedBy,

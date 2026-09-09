@@ -11,6 +11,7 @@ import java.util.List;
 @Builder
 public class ReviewResponse {
     private String id;
+    private String shopId;
     private String productId;
     private String variantSku;
 
@@ -30,6 +31,7 @@ public class ReviewResponse {
     public static ReviewResponse fromEntity(Review review) {
         return ReviewResponse.builder()
                 .id(review.getId())
+                .shopId(review.getShopId())
                 .productId(review.getProductId())
                 .variantSku(review.getVariantSku())
                 .userId(review.getUserId())

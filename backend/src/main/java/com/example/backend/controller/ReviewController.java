@@ -61,6 +61,28 @@ public class ReviewController {
         return ResponseEntity.ok(reviewService.getRatingSummary(productId));
     }
 
+    // Danh sách review của toàn bộ shop — public
+    @GetMapping("/shop/{shopId}")
+    public ResponseEntity<Page<ReviewResponse>> getReviewsByShop(
+            @PathVariable String shopId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(reviewService.getReviewsByShop(shopId, page, size));
+    }
+
+    // Điểm trung bình + breakdown theo sao của Shop — public
+    @GetMapping("/shop/{shopId}/summary")
+    public ResponseEntity<RatingSummary> getShopRatingSummary(@PathVariable String shopId) {
+        return ResponseEntity.ok(reviewService.getShopRatingSummary(shopId));
+    }
+
+    // Đồng bộ / tính lại điểm rating cho Shop — public hoặc khi cần làm mới
+    @PostMapping("/shop/{shopId}/recalculate")
+    public ResponseEntity<RatingSummary> recalculateShopRating(@PathVariable String shopId) {
+        reviewService.recalculateShopRating(shopId);
+        return ResponseEntity.ok(reviewService.getShopRatingSummary(shopId));
+    }
+
     // Bấm "hữu ích" — bắt buộc đăng nhập (chặn spam ẩn danh)
     @PostMapping("/{reviewId}/helpful")
     public ResponseEntity<?> markHelpful(Authentication authentication,
