@@ -4,15 +4,29 @@ Tài liệu này dành cho Frontend Developer để xây dựng giao diện Dash
 
 ---
 
-## 🚀 TỔNG QUAN CÁC API MỚI
+## 🚀 TỔNG QUAN CÁC API
 
 | STT | Endpoint | Method | Chức năng | Dùng cho UI component |
 |:---:|:---|:---:|:---|:---|
 | 1 | `/shops/{shopId}/analytics/overview` | `GET` | **Tất cả trong 1 (Khuyên dùng)**: Lấy toàn bộ số liệu tổng quan + biểu đồ | Toàn bộ Dashboard |
-| 2 | `/shops/{shopId}/analytics/revenue` | `GET` | Biểu đồ doanh thu và số đơn theo từng ngày | Line Chart / Bar Chart |
+| 2 | `/shops/{shopId}/analytics/revenue` | `GET` | Biểu đồ doanh thu và số đơn theo ngày (chọn khoảng ngày hoặc số ngày) | Line Chart / Bar Chart |
 | 3 | `/shops/{shopId}/analytics/order-status` | `GET` | Phân bố tỷ lệ các trạng thái đơn hàng | Pie Chart / Donut Chart |
 | 4 | `/shops/{shopId}/analytics/top-products` | `GET` | Top 5 sản phẩm bán chạy nhất | Leaderboard / Top Table |
 | 5 | `/shops/{shopId}/analytics/low-stock` | `GET` | Cảnh báo biến thể sản phẩm sắp hết hàng | Alert Badge / Warning Table |
+
+---
+
+## 🗓️ CƠ CHẾ LỌC THỜI GIAN LINH HOẠT (DATE RANGE PICKER)
+
+Ở cả 2 API **`/analytics/overview`** và **`/analytics/revenue`**, Frontend có thể truyền tham số theo 2 cách:
+
+### Cách 1: Chọn khoảng ngày bất kỳ qua Date Picker (Ví dụ 10 ngày)
+* **URL**: `GET /shops/{shopId}/analytics/overview?startDate=2026-08-01&endDate=2026-08-10`
+* **Kết quả**: Backend sẽ trả về mảng đúng 10 ngày (từ 01/08/2026 đến 10/08/2026). Ngày nào không có đơn hàng sẽ tự động điền `revenue: 0` và `orderCount: 0`.
+
+### Cách 2: Chọn nhanh số ngày gần nhất (Nút bấm 10 ngày, 30 ngày)
+* **URL**: `GET /shops/{shopId}/analytics/overview?days=10`
+* **Kết quả**: Tự động tính lùi 10 ngày gần nhất tính từ ngày hôm nay.
 
 ---
 
@@ -21,9 +35,9 @@ Tài liệu này dành cho Frontend Developer để xây dựng giao diện Dash
 ### 1. API TỔNG HỢP: Toàn bộ Dashboard trong 1 Request
 > 💡 **Khuyên dùng**: Frontend chỉ cần gọi API này 1 lần khi load trang Dashboard là có đủ dữ liệu cho tất cả biểu đồ và thẻ thống kê.
 
-* **URL**: `GET /shops/{shopId}/analytics/overview?days=7`
-* **Query Params**:
-  * `days` *(optional, mặc định `7`)*: Số ngày thống kê (ví dụ `7` hoặc `30`).
+* **URL**: 
+  * `GET /shops/{shopId}/analytics/overview?startDate=2026-08-01&endDate=2026-08-10`
+  * Hoặc: `GET /shops/{shopId}/analytics/overview?days=10`
 * **Headers**: `Authorization: Bearer <accessToken>`
 
 #### Dữ liệu trả về (Response 200 OK):
@@ -38,13 +52,16 @@ Tài liệu này dành cho Frontend Developer để xây dựng giao diện Dash
     "revenue": 52400000
   },
   "revenueChart": [
-    { "date": "2026-08-29", "revenue": 3500000, "orderCount": 12 },
-    { "date": "2026-08-30", "revenue": 7200000, "orderCount": 21 },
-    { "date": "2026-08-31", "revenue": 4100000, "orderCount": 15 },
-    { "date": "2026-09-01", "revenue": 8900000, "orderCount": 28 },
-    { "date": "2026-09-02", "revenue": 6300000, "orderCount": 19 },
-    { "date": "2026-09-03", "revenue": 10500000, "orderCount": 33 },
-    { "date": "2026-09-04", "revenue": 11900000, "orderCount": 30 }
+    { "date": "2026-08-01", "revenue": 1500000, "orderCount": 4 },
+    { "date": "2026-08-02", "revenue": 2200000, "orderCount": 7 },
+    { "date": "2026-08-03", "revenue": 800000,  "orderCount": 3 },
+    { "date": "2026-08-04", "revenue": 0,       "orderCount": 0 },
+    { "date": "2026-08-05", "revenue": 3400000, "orderCount": 9 },
+    { "date": "2026-08-06", "revenue": 1900000, "orderCount": 6 },
+    { "date": "2026-08-07", "revenue": 2700000, "orderCount": 8 },
+    { "date": "2026-08-08", "revenue": 4500000, "orderCount": 14 },
+    { "date": "2026-08-09", "revenue": 3800000, "orderCount": 11 },
+    { "date": "2026-08-10", "revenue": 5100000, "orderCount": 15 }
   ],
   "orderStatusDistribution": {
     "statusCounts": {
@@ -99,18 +116,10 @@ Tài liệu này dành cho Frontend Developer để xây dựng giao diện Dash
 ---
 
 ### 2. API Biểu đồ Doanh thu (Line/Bar Chart)
-* **URL**: `GET /shops/{shopId}/analytics/revenue?days=7`
-* **Query Params**: `days` (ví dụ `7` ngày hoặc `30` ngày).
-* **Mô tả**: Tự động lấp đầy các ngày có doanh thu = 0 để trục thời gian của biểu đồ không bị gãy hoặc khuyết ngày.
-* **Dữ liệu trả về**:
-```json
-[
-  { "date": "2026-08-29", "revenue": 3500000, "orderCount": 12 },
-  { "date": "2026-08-30", "revenue": 7200000, "orderCount": 21 },
-  { "date": "2026-08-31", "revenue": 0,       "orderCount": 0 },
-  { "date": "2026-09-01", "revenue": 8900000, "orderCount": 28 }
-]
-```
+* **URL**: 
+  * `GET /shops/{shopId}/analytics/revenue?startDate=2026-08-01&endDate=2026-08-10`
+  * Hoặc: `GET /shops/{shopId}/analytics/revenue?days=10`
+* **Dữ liệu trả về**: Mảng các ngày với doanh thu (`revenue`) và số đơn hoàn thành (`orderCount`).
 
 ---
 
@@ -136,79 +145,78 @@ Tài liệu này dành cho Frontend Developer để xây dựng giao diện Dash
 ### 4. API Top Sản phẩm Bán chạy
 * **URL**: `GET /shops/{shopId}/analytics/top-products?limit=5`
 * **Query Params**: `limit` *(mặc định 5, tối đa 50)*.
-* **Dữ liệu trả về**: Mảng các sản phẩm xếp hạng theo số lượng bán (`soldCount`) giảm dần.
 
 ---
 
 ### 5. API Cảnh báo Tồn kho Sắp hết (Low Stock Alerts)
 * **URL**: `GET /shops/{shopId}/analytics/low-stock?threshold=5`
 * **Query Params**: `threshold` *(mặc định 5)*: Lấy những biến thể có `stock <= threshold`.
-* **Dữ liệu trả về**: Mảng các SKU biến thể cần người bán bổ sung hàng gấp.
 
 ---
 
-## 🎨 HƯỚNG DẪN VẼ BIỂU ĐỒ Ở FRONTEND (React / Recharts)
+## 🎨 HƯỚNG DẪN CODE GIAO DIỆN REACT + RECHARTS
 
-### 1. Cài đặt thư viện:
-```bash
-npm install recharts lucide-react
-```
-
-### 2. Code mẫu vẽ Biểu đồ Doanh thu (Revenue Line Chart):
+### Code mẫu Bộ chọn khoảng ngày (Date Range Picker) + Biểu đồ:
 ```jsx
+import React, { useState, useEffect } from 'react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
-function RevenueChart({ data }) {
-  // data lấy từ response.revenueChart
+export function RevenueAnalyticsCard({ shopId }) {
+  const [startDate, setStartDate] = useState('2026-08-01');
+  const [endDate, setEndDate] = useState('2026-08-10');
+  const [chartData, setChartData] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchRevenue = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/shops/${shopId}/analytics/revenue?startDate=${startDate}&endDate=${endDate}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await res.json();
+      setChartData(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRevenue();
+  }, [startDate, endDate]);
+
   return (
     <div className="bg-white p-6 rounded-2xl shadow-sm">
-      <h3 className="text-lg font-semibold mb-4">Biểu đồ doanh thu</h3>
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={data}>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        <h3 className="text-lg font-semibold text-gray-800">Biểu đồ doanh thu</h3>
+        
+        {/* Bộ chọn khoảng ngày */}
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="border rounded-lg px-3 py-1.5 text-sm"
+          />
+          <span className="text-gray-400">-</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="border rounded-lg px-3 py-1.5 text-sm"
+          />
+        </div>
+      </div>
+
+      <ResponsiveContainer width="100%" height={320}>
+        <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey="date" />
           <YAxis tickFormatter={(val) => `${(val / 1000000).toFixed(1)}Tr`} />
           <Tooltip formatter={(value) => `${Number(value).toLocaleString('vi-VN')} đ`} />
           <Line type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} />
         </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-```
-
-### 3. Code mẫu vẽ Biểu đồ Tròn Trạng thái Đơn (Donut Chart):
-```jsx
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
-
-const STATUS_COLORS = {
-  PENDING: '#f59e0b',
-  PROCESSING: '#3b82f6',
-  SHIPPING: '#8b5cf6',
-  COMPLETED: '#10b981',
-  CANCELED: '#ef4444',
-  REFUNDED: '#6b7280'
-};
-
-function OrderPieChart({ statusCounts }) {
-  const data = Object.entries(statusCounts).map(([status, count]) => ({
-    name: status,
-    value: count
-  }));
-
-  return (
-    <div className="bg-white p-6 rounded-2xl shadow-sm">
-      <h3 className="text-lg font-semibold mb-4">Tỷ lệ đơn hàng</h3>
-      <ResponsiveContainer width="100%" height={260}>
-        <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" innerRadius={60} outerRadius={80} paddingAngle={5}>
-            {data.map((entry) => (
-              <Cell key={entry.name} fill={STATUS_COLORS[entry.name] || '#8884d8'} />
-            ))}
-          </Pie>
-          <Tooltip />
-          <Legend />
-        </PieChart>
       </ResponsiveContainer>
     </div>
   );
