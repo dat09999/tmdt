@@ -23,6 +23,9 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 
 import java.text.SimpleDateFormat;
@@ -121,12 +124,14 @@ public class ShopServiceImpl implements ShopService {
 
     /** Lấy chi tiết shop theo id. */
     @Override
+    @Cacheable(value = "shops", key = "#shopId", unless = "#result == null")
     public ShopResponse getShopById(String shopId) {
         return toResponse(getShopOrThrow(shopId));
     }
 
     /** Lấy shop đầu tiên của owner; hỗ trợ dữ liệu cũ đang bị trùng ownerId. */
     @Override
+    @Cacheable(value = "shops_owner", key = "#ownerId", unless = "#result == null")
     public ShopResponse getShopByOwnerId(String ownerId) {
         Shop shop = shopRepository.findByOwnerId(ownerId)
                 .orElseThrow(() -> new RuntimeException("User chưa có shop"));
@@ -136,6 +141,10 @@ public class ShopServiceImpl implements ShopService {
 
     /** Chỉ cập nhật các trường request có gửi lên - đổi sang atomic $set. */
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "shops", key = "#shopId"),
+            @CacheEvict(value = "shops_owner", allEntries = true)
+    })
     public ShopResponse updateShop(String shopId, CreateShopRequest request) {
         Shop shop = getShopOrThrow(shopId);
         checkShopOwnerOrAdmin(shop.getOwnerId(), "Bạn không có quyền chỉnh sửa thông tin shop này");
@@ -174,6 +183,10 @@ public class ShopServiceImpl implements ShopService {
 
     /** Chuyển trạng thái shop sang DELETED thay vì xóa document - atomic $set. */
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "shops", key = "#shopId"),
+            @CacheEvict(value = "shops_owner", allEntries = true)
+    })
     public ActionResponse deleteShop(String shopId) {
         // Xóa mềm để vẫn giữ lại lịch sử đơn hàng và doanh thu.
         Shop shop = getShopOrThrow(shopId);
@@ -193,6 +206,10 @@ public class ShopServiceImpl implements ShopService {
 
     /** Cập nhật trạng thái của shop theo giá trị truyền vào - phân biệt quyền ADMIN và SELLER. */
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "shops", key = "#shopId"),
+            @CacheEvict(value = "shops_owner", allEntries = true)
+    })
     public ShopResponse updateStatus(String shopId, String status) {
         Shop shop = getShopOrThrow(shopId);
         String newStatus = requireText(status, "status không được để trống").toUpperCase();

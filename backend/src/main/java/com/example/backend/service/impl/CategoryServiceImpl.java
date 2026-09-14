@@ -10,6 +10,9 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -38,6 +41,10 @@ public class CategoryServiceImpl implements CategoryService {
     private final MongoTemplate mongoTemplate;
 
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "categories", allEntries = true),
+            @CacheEvict(value = "categories_children", allEntries = true)
+    })
     public Category createCategory(CreateCategoryRequest request) {
         String parentId = normalize(request.getParentId());
         if (parentId != null && !parentId.isBlank()) {
@@ -59,23 +66,30 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
+    @Cacheable(value = "categories", key = "'all_active'", unless = "#result == null || #result.isEmpty()")
     public List<Category> getAllActiveCategories() {
         return categoryRepository.findByActiveTrue();
     }
 
     @Override
+    @Cacheable(value = "categories", key = "#categoryId", unless = "#result == null")
     public Category getCategoryById(String categoryId) {
         return categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy category"));
     }
 
     @Override
+    @Cacheable(value = "categories_children", key = "#parentId", unless = "#result == null")
     public List<Category> getChildren(String parentId) {
         return categoryRepository.findByParentId(parentId);
     }
 
     /** FIX #25: chỉ atomic $set các field request có gửi lên, không ghi đè cả document. */
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "categories", allEntries = true),
+            @CacheEvict(value = "categories_children", allEntries = true)
+    })
     public Category updateCategory(String categoryId, CreateCategoryRequest request) {
         getCategoryById(categoryId); // vẫn giữ để báo 404 sớm nếu categoryId không tồn tại
 
@@ -112,6 +126,10 @@ public class CategoryServiceImpl implements CategoryService {
 
     /** FIX #25: atomic $set field "active", không ghi đè cả document. */
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "categories", allEntries = true),
+            @CacheEvict(value = "categories_children", allEntries = true)
+    })
     public void deleteCategory(String categoryId) {
         getCategoryById(categoryId);
         Update update = new Update().set("active", false);

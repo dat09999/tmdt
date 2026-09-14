@@ -16,6 +16,9 @@ import com.example.backend.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -169,12 +172,14 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Cacheable(value = "products", key = "#productId", unless = "#result == null")
     public ProductResponse getProductById(String productId) {
         Product product = productRepository.findById(productId).orElseThrow(()->new RuntimeException("ko thay"));
         return toProductResponse(product);
     }
 
     @Override
+    @Cacheable(value = "products_slug", key = "#slug", unless = "#result == null")
     public ProductResponse getProductBySlug(String slug) {
         Product product = productRepository.findBySlug(slug)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy product với slug: " + slug));
@@ -262,6 +267,10 @@ public class ProductServiceImpl implements ProductService {
      * thực sự cần sửa tay số lượng tồn kho, dùng API setStock() riêng bên dưới.
      */
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "products", key = "#productId"),
+            @CacheEvict(value = "products_slug", allEntries = true)
+    })
     public ProductResponse updateProduct(String productId, CreateProductRequest request) {
         Product product = getProductEntityById(productId);
         checkShopOwnershipOrAdmin(product.getShopId(), "Bạn không có quyền sửa sản phẩm của shop này");
@@ -383,6 +392,10 @@ public class ProductServiceImpl implements ProductService {
      * API riêng để seller/admin chỉnh tay số lượng tồn kho, atomic, tách biệt hoàn toàn
      * khỏi luồng update thông tin sản phẩm để không bao giờ gây lost update lẫn nhau.
      */
+    @Caching(evict = {
+            @CacheEvict(value = "products", key = "#productId"),
+            @CacheEvict(value = "products_slug", allEntries = true)
+    })
     public void setStock(String productId, String sku, int newStock) {
         if (newStock < 0) {
             throw new RuntimeException("stock phải >= 0");
@@ -396,6 +409,10 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "products", key = "#productId"),
+            @CacheEvict(value = "products_slug", allEntries = true)
+    })
     public void deleteProduct(String productId) {
         Product product = getProductEntityById(productId);
         checkShopOwnershipOrAdmin(product.getShopId(), "Bạn không có quyền xóa sản phẩm của shop này");
@@ -682,6 +699,10 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "products", key = "#productId"),
+            @CacheEvict(value = "products_slug", allEntries = true)
+    })
     public ProductResponse updateProductStatus(String productId, String status) {
         Product product = getProductEntityById(productId);
         product.setStatus(status.trim().toUpperCase());
@@ -695,6 +716,10 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "products", key = "#productId"),
+            @CacheEvict(value = "products_slug", allEntries = true)
+    })
     public ProductResponse banProduct(String productId, String reason) {
         Product product = getProductEntityById(productId);
         product.setStatus("BANNED");

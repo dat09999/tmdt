@@ -1,4 +1,4 @@
-﻿name: CI Pipeline
+name: CI Pipeline
 
 on:
   push:
@@ -19,6 +19,10 @@ jobs:
         image: mongo:6.0
         ports:
           - 27017:27017
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
     defaults:
       run:
         working-directory: backend
@@ -61,6 +65,8 @@ jobs:
           server.port=8080
           app.frontend-url=http://localhost:5173
           gogoduk.api-key=dummy_test_key
+          spring.data.redis.host=localhost
+          spring.data.redis.port=6379
           EOF
 
       - name: Compile Backend
