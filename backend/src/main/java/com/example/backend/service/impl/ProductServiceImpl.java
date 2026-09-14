@@ -34,6 +34,11 @@ import org.springframework.stereotype.Service;
 import com.example.backend.Exception.ForbiddenException;
 import com.example.backend.sercurity.SecurityUtils;
 
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
 import java.util.*;
 
 /**
@@ -67,6 +72,7 @@ public class ProductServiceImpl implements ProductService {
     private final MongoTemplate mongoTemplate;
     private final ShopFollowRepository shopFollowRepository;
     private final NotificationService notificationService;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     // ĐÃ THÊM: khi shop đăng sản phẩm mới, thông báo cho toàn bộ follower của shop.
     // TODO: cần thêm method findByShopId(String shopId) vào ShopFollowRepository nếu
@@ -427,17 +433,58 @@ public class ProductServiceImpl implements ProductService {
      */
     @Override
     public ProductResponse incrementViewCount(String productId) {
-        Query query = Query.query(Criteria.where("id").is(productId));
-        Update update = new Update().inc("viewCount", 1).set("updatedAt", new Date());
-        var updateResult = mongoTemplate.updateFirst(query, update, Product.class);
-
-        if (updateResult.getMatchedCount() == 0) {
-            throw new RuntimeException("ko thay");
+        if (productId == null || productId.isBlank()) {
+            return null;
         }
 
-        Product saved = productRepository.findById(productId)
-                .orElseThrow(() -> new RuntimeException("ko thay"));
-        return toProductResponse(saved);
+        try {
+            // Lấy danh tính người xem: user ID nếu đã đăng nhập, hoặc client IP nếu là khách
+            String viewerId = resolveViewerId();
+            String viewKey = "viewed:product:" + productId + ":" + viewerId;
+
+            // Lựa chọn 1: Mỗi tài khoản chỉ tính 1 view duy nhất vĩnh viễn
+            // setIfAbsent (SETNX): Trả về true nếu là lần đầu tiên xem, false nếu đã từng xem trước đó
+            Boolean isFirstView = redisTemplate.opsForValue().setIfAbsent(viewKey, "1");
+
+            // Nếu đã từng xem rồi => Kết thúc ngay lập tức, không tăng view và không query MongoDB (tiết kiệm ~350ms)
+            if (!Boolean.TRUE.equals(isFirstView)) {
+                return null;
+            }
+        } catch (Exception e) {
+            log.warn("Không thể kiểm tra view qua Redis, fallback: {}", e.getMessage());
+        }
+
+        // Chỉ tăng view trong MongoDB khi là lần đầu tiên tài khoản này xem
+        Query query = Query.query(Criteria.where("id").is(productId));
+        Update update = new Update().inc("viewCount", 1);
+        mongoTemplate.updateFirst(query, update, Product.class);
+
+        return null;
+    }
+
+    private String resolveViewerId() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof UserPrincipal principal) {
+                return "user:" + principal.getId();
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attrs != null) {
+                HttpServletRequest req = attrs.getRequest();
+                String xForwardedFor = req.getHeader("X-Forwarded-For");
+                if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+                    return "ip:" + xForwardedFor.split(",")[0].trim();
+                }
+                return "ip:" + req.getRemoteAddr();
+            }
+        } catch (Exception ignored) {
+        }
+
+        return "guest:" + UUID.randomUUID();
     }
 
     // ================== RESPONSE MAPPER ==================
