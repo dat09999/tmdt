@@ -1,7 +1,6 @@
 package com.example.backend.Exception;
 
 import com.example.backend.DTO.common.ErrorResponse;
-import com.example.backend.domain.refund.RefundOrderStateConflictException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -92,9 +91,5 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<?> handleUnauthorized(UnauthorizedException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", ex.getMessage()));
-    }
-    @ExceptionHandler(RefundOrderStateConflictException.class)
-    public ResponseEntity<?> handleUnauthorized(RefundOrderStateConflictException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", ex.getMessage()));
     }
 }
