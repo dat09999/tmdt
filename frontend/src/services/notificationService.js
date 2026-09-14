@@ -108,7 +108,44 @@ export const notificationService = {
     }, null);
   },
 
-  // Realtime subscription / polling mechanism
+  // Nhận thông báo Realtime đẩy từ WebSocket
+  handleIncomingRealtime(n) {
+    if (!n) return;
+    const normalized = {
+      id: n.id || `notif-${Date.now()}`,
+      title: n.title || "Thông báo hệ thống",
+      content: n.content || n.message || n.body || "",
+      time: n.createdAt || n.time || new Date().toISOString(),
+      read: false,
+      type: (n.type || "SYSTEM").toUpperCase(),
+      link: n.link || n.url || (n.referenceId ? `/orders/${n.referenceId}` : "/notifications"),
+      image: n.image || n.icon || null,
+    };
+
+    // Tránh trùng lặp id
+    const exists = cachedNotifications.some((item) => item.id === normalized.id);
+    if (!exists) {
+      cachedNotifications = [normalized, ...cachedNotifications];
+      cachedUnreadCount += 1;
+      lastKnownNotifIds.add(normalized.id);
+
+      notifyListeners({
+        notifications: cachedNotifications,
+        unreadCount: cachedUnreadCount,
+      });
+
+      // Bật Toast alert nổi trên màn hình ngay tức khắc
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("DOMIX_NEW_NOTIFICATION", {
+            detail: normalized,
+          })
+        );
+      }
+    }
+  },
+
+  // Realtime subscription
   subscribe(callback) {
     listeners.add(callback);
 
@@ -118,62 +155,18 @@ export const notificationService = {
       unreadCount: cachedUnreadCount,
     });
 
-    // Start background polling if not already running
-    if (!pollingTimer) {
-      this.startPolling();
+    // Nếu chưa có dữ liệu, tải lần đầu tiên
+    if (cachedNotifications.length === 0 && getCurrentUser()?.userId) {
+      this.getNotifications(0, 15).then((notifs) => {
+        notifyListeners({
+          notifications: notifs,
+          unreadCount: notifs.filter((n) => !n.read).length,
+        });
+      });
     }
 
     return () => {
       listeners.delete(callback);
-      if (listeners.size === 0 && pollingTimer) {
-        clearInterval(pollingTimer);
-        pollingTimer = null;
-      }
     };
-  },
-
-  startPolling(intervalMs = 300000) { // 5 phút / 1 lần
-    if (pollingTimer) clearInterval(pollingTimer);
-
-    const checkUpdates = async () => {
-      // Bỏ qua nếu tab đang ẩn/thu nhỏ để tiết kiệm request
-      if (typeof document !== "undefined" && document.hidden) {
-        return;
-      }
-      try {
-        const notifs = await this.getNotifications(0, 15);
-        const unread = notifs.filter((n) => !n.read).length;
-
-        // Check if there are newly arrived notifications
-        const currentIds = new Set(notifs.map((n) => n.id));
-        const newUnread = notifs.filter((n) => !n.read && !lastKnownNotifIds.has(n.id));
-
-        if (lastKnownNotifIds.size > 0 && newUnread.length > 0) {
-          // Trigger browser notification event / toast alert
-          window.dispatchEvent(
-            new CustomEvent("DOMIX_NEW_NOTIFICATION", {
-              detail: newUnread[0],
-            })
-          );
-        }
-
-        lastKnownNotifIds = currentIds;
-        cachedNotifications = notifs;
-        cachedUnreadCount = unread;
-
-        notifyListeners({
-          notifications: notifs,
-          unreadCount: unread,
-        });
-      } catch (err) {
-        // Silent background polling error
-      }
-    };
-
-    // Run first check immediately
-    checkUpdates();
-
-    // Poll định kỳ 5 phút 1 lần
-    pollingTimer = setInterval(checkUpdates, intervalMs);
   },
 };

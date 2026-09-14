@@ -14,6 +14,7 @@ import {
 import { chatService } from "../../services/chatService";
 import { useAuth } from "../../pages/Authcontext";
 import { toFullImageUrl } from "../../utils/auth";
+import { websocketService } from "../../services/websocketService";
 
 // Error Boundary bảo vệ: Không bao giờ bị màn hình trắng kể cả khi dữ liệu có lỗi
 class SellerChatCenterErrorBoundary extends Component {
@@ -257,7 +258,7 @@ function SellerChatCenterInner({ shop, initialSelectedConvId = null }) {
     }
   }, []);
 
-  // Polling định kỳ tin nhắn của hội thoại hiện tại
+  // Lắng nghe tin nhắn Realtime qua WebSocket
   useEffect(() => {
     if (!activeConv?.id) return;
     setHasNewUnseenMessage(false);
@@ -265,10 +266,36 @@ function SellerChatCenterInner({ shop, initialSelectedConvId = null }) {
     isNearBottomRef.current = true;
 
     loadMessages(activeConv.id, false);
-    const interval = setInterval(() => {
-      loadMessages(activeConv.id, true);
-    }, 3000);
-    return () => clearInterval(interval);
+
+    const unsubscribe = websocketService.subscribeConversation(
+      activeConv.id,
+      (newMsg) => {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === newMsg.id)) return prev;
+          isNewMessageReceivedRef.current = true;
+          if (!isNearBottomRef.current) {
+            setHasNewUnseenMessage(true);
+          }
+          return [...prev, newMsg];
+        });
+      },
+      () => {
+        setMessages((prev) => prev.map((m) => ({ ...m, isRead: true })));
+      },
+      (deletedMsgId) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === deletedMsgId
+              ? { ...m, isDeleted: true, content: "[Tin nhắn đã bị thu hồi]" }
+              : m
+          )
+        );
+      }
+    );
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [activeConv?.id, loadMessages]);
 
   // Kiểm soát cuộn: Lắng nghe sự kiện scroll của khung chat

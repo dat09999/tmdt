@@ -15,6 +15,7 @@ import {
 import { chatService, openChatWithShop } from "../../services/chatService";
 import { useAuth } from "../../pages/Authcontext";
 import { toFullImageUrl } from "../../utils/auth";
+import { websocketService } from "../../services/websocketService";
 
 export { openChatWithShop };
 
@@ -98,14 +99,40 @@ export default function ChatWidget() {
     loadConversations();
   };
 
-  // Real-time polling when active conversation is open
+  // Real-time WebSocket subscription when active conversation is open
   useEffect(() => {
-    if (!isOpen || !activeConv) return;
-    const interval = setInterval(() => {
-      loadMessages(activeConv.id, true);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [isOpen, activeConv]);
+    if (!isOpen || !activeConv?.id) return;
+
+    // Tải tin nhắn lần đầu khi mở khung chat
+    loadMessages(activeConv.id, false);
+
+    // Lắng nghe tin nhắn mới Realtime qua WebSocket (0.1 giây)
+    const unsubscribe = websocketService.subscribeConversation(
+      activeConv.id,
+      (newMsg) => {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === newMsg.id)) return prev;
+          return [...prev, newMsg];
+        });
+      },
+      () => {
+        setMessages((prev) => prev.map((m) => ({ ...m, isRead: true })));
+      },
+      (deletedMsgId) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === deletedMsgId
+              ? { ...m, isDeleted: true, content: "[Tin nhắn đã bị thu hồi]" }
+              : m
+          )
+        );
+      }
+    );
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [isOpen, activeConv?.id]);
 
   // Scroll to bottom on new messages
   useEffect(() => {

@@ -27,9 +27,21 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 //hello
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // 1. Native WebSocket cho client @stomp/stompjs
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns(
                         "http://localhost:5173",
+                        "http://localhost:3000",
+                        "https://tmdt-lovat.vercel.app",
+                        "https://tmdt-*.vercel.app",
+                        "https://tmdt-production-0219.up.railway.app"
+                );
+
+        // 2. SockJS fallback
+        registry.addEndpoint("/ws")
+                .setAllowedOriginPatterns(
+                        "http://localhost:5173",
+                        "http://localhost:3000",
                         "https://tmdt-lovat.vercel.app",
                         "https://tmdt-*.vercel.app",
                         "https://tmdt-production-0219.up.railway.app"

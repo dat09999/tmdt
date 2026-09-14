@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/register";
 import OAuth2SuccessPage from "./pages/OAuth2SuccessPage";
@@ -18,6 +18,7 @@ import AdminPage from "./pages/AdminPage";
 import VnpayResultPage from "./pages/VnpayResultPage";
 import ChatWidget from "./components/chat/ChatWidget";
 import { useAuth } from "./pages/Authcontext";
+import { websocketService } from "./services/websocketService";
 
 function resolvePage(path, isAuthenticated, user) {
   if (path === "/admin" || path.startsWith("/admin/")) {
@@ -75,6 +76,14 @@ function resolvePage(path, isAuthenticated, user) {
 export default function App() {
   const path = window.location.pathname;
   const { user, isAuthenticated, loading } = useAuth();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      websocketService.connect();
+    } else {
+      websocketService.disconnect();
+    }
+  }, [isAuthenticated]);
 
   if (path === "/oauth2/success") {
     return <OAuth2SuccessPage />;
