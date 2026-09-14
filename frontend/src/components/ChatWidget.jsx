@@ -36,11 +36,14 @@ export default function ChatWidget() {
     }
   };
 
-  // Poll nhẹ để cập nhật badge tin chưa đọc kể cả khi đang đóng widget
+  // Poll nhẹ để cập nhật badge tin chưa đọc kể cả khi đang đóng widget (5 phút / 1 lần)
   useEffect(() => {
     if (!currentUserId) return;
     (async () => { setConvLoading(true); await loadConversations(); setConvLoading(false); })();
-    const interval = setInterval(loadConversations, 15000);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      loadConversations();
+    }, 300000);
     return () => clearInterval(interval);
   }, [currentUserId]);
 

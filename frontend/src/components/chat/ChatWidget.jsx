@@ -53,11 +53,14 @@ export default function ChatWidget() {
     }
   };
 
-  // Poll conversations every 15s for unread count
+  // Poll conversations định kỳ 5 phút / 1 lần để cập nhật số tin nhắn chưa đọc
   useEffect(() => {
     if (!currentUserId) return;
     loadConversations();
-    const interval = setInterval(loadConversations, 15000);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      loadConversations();
+    }, 300000); // 5 phút
     return () => clearInterval(interval);
   }, [currentUserId]);
 

@@ -238,7 +238,10 @@ export default function SellerPage() {
       } catch {}
     };
     fetchChatUnread();
-    const interval = setInterval(fetchChatUnread, 8000);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      fetchChatUnread();
+    }, 300000); // 5 phút / 1 lần
 
     // Lắng nghe sự kiện khi một hội thoại được đọc
     const handleChatRead = () => {

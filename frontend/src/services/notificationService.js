@@ -132,10 +132,14 @@ export const notificationService = {
     };
   },
 
-  startPolling(intervalMs = 4000) {
+  startPolling(intervalMs = 300000) { // 5 phút / 1 lần
     if (pollingTimer) clearInterval(pollingTimer);
 
     const checkUpdates = async () => {
+      // Bỏ qua nếu tab đang ẩn/thu nhỏ để tiết kiệm request
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
       try {
         const notifs = await this.getNotifications(0, 15);
         const unread = notifs.filter((n) => !n.read).length;
@@ -169,7 +173,7 @@ export const notificationService = {
     // Run first check immediately
     checkUpdates();
 
-    // Poll every 4 seconds
+    // Poll định kỳ 5 phút 1 lần
     pollingTimer = setInterval(checkUpdates, intervalMs);
   },
 };
