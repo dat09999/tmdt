@@ -22,6 +22,8 @@ import org.springframework.util.StringUtils;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Cấu hình Redis Cache:
@@ -96,8 +98,14 @@ public class RedisConfig implements CachingConfigurer {
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory,
                                           RedisCacheConfiguration cacheConfiguration) {
+        Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();
+        // Cache danh sách theo từng trang với TTL ngắn (2 phút) để tối ưu RAM và tự động làm mới
+        cacheConfigurations.put("products_page", cacheConfiguration.entryTtl(Duration.ofMinutes(2)));
+        cacheConfigurations.put("products_category_page", cacheConfiguration.entryTtl(Duration.ofMinutes(2)));
+
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(cacheConfiguration)
+                .withInitialCacheConfigurations(cacheConfigurations)
                 .build();
     }
 

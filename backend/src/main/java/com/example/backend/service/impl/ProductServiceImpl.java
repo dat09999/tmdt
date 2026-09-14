@@ -34,6 +34,7 @@ import org.springframework.stereotype.Service;
 import com.example.backend.Exception.ForbiddenException;
 import com.example.backend.sercurity.SecurityUtils;
 
+import com.example.backend.DTO.common.RestPage;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -91,6 +92,10 @@ public class ProductServiceImpl implements ProductService {
     private String videoBucket;
 
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "products_page", allEntries = true),
+            @CacheEvict(value = "products_category_page", allEntries = true)
+    })
     public ProductResponse createProduct(CreateProductRequest request) {
         Shop shop = shopRepository.findById(request.getShopId())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy shop"));
@@ -172,9 +177,11 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Cacheable(value = "products_page", key = "'all:page:' + #page + ':size:' + #size", unless = "#result == null || #result.isEmpty()")
     public Page<ProductResponse> getAllProducts(int page, int size) {
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("createdAt").descending());
-        return productRepository.findByStatus("ACTIVE", pageable).map(this::toProductResponse);
+        Page<ProductResponse> paged = productRepository.findByStatus("ACTIVE", pageable).map(this::toProductResponse);
+        return new RestPage<>(paged);
     }
 
     @Override
@@ -216,9 +223,11 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Cacheable(value = "products_category_page", key = "'cat:' + #categoryId + ':page:' + #page + ':size:' + #size", unless = "#result == null || #result.isEmpty()")
     public Page<ProductResponse> getProductsByCategory(String categoryId, int page, int size) {
         Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("createdAt").descending());
-        return productRepository.findByCategoryId(categoryId, pageable).map(this::toProductResponse);
+        Page<ProductResponse> paged = productRepository.findByCategoryIdAndStatus(categoryId, "ACTIVE", pageable).map(this::toProductResponse);
+        return new RestPage<>(paged);
     }
 
     @Override
@@ -275,7 +284,9 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Caching(evict = {
             @CacheEvict(value = "products", key = "#productId"),
-            @CacheEvict(value = "products_slug", allEntries = true)
+            @CacheEvict(value = "products_slug", allEntries = true),
+            @CacheEvict(value = "products_page", allEntries = true),
+            @CacheEvict(value = "products_category_page", allEntries = true)
     })
     public ProductResponse updateProduct(String productId, CreateProductRequest request) {
         Product product = getProductEntityById(productId);
@@ -417,7 +428,9 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Caching(evict = {
             @CacheEvict(value = "products", key = "#productId"),
-            @CacheEvict(value = "products_slug", allEntries = true)
+            @CacheEvict(value = "products_slug", allEntries = true),
+            @CacheEvict(value = "products_page", allEntries = true),
+            @CacheEvict(value = "products_category_page", allEntries = true)
     })
     public void deleteProduct(String productId) {
         Product product = getProductEntityById(productId);
@@ -748,7 +761,9 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Caching(evict = {
             @CacheEvict(value = "products", key = "#productId"),
-            @CacheEvict(value = "products_slug", allEntries = true)
+            @CacheEvict(value = "products_slug", allEntries = true),
+            @CacheEvict(value = "products_page", allEntries = true),
+            @CacheEvict(value = "products_category_page", allEntries = true)
     })
     public ProductResponse updateProductStatus(String productId, String status) {
         Product product = getProductEntityById(productId);
@@ -765,7 +780,9 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Caching(evict = {
             @CacheEvict(value = "products", key = "#productId"),
-            @CacheEvict(value = "products_slug", allEntries = true)
+            @CacheEvict(value = "products_slug", allEntries = true),
+            @CacheEvict(value = "products_page", allEntries = true),
+            @CacheEvict(value = "products_category_page", allEntries = true)
     })
     public ProductResponse banProduct(String productId, String reason) {
         Product product = getProductEntityById(productId);
