@@ -14,6 +14,11 @@ jobs:
   backend-ci:
     name: Backend (Java 17 / Spring Boot)
     runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
     defaults:
       run:
         working-directory: backend
@@ -31,6 +36,32 @@ jobs:
 
       - name: Grant Execute Permission to Maven Wrapper
         run: chmod +x mvnw
+
+      - name: Generate CI application.properties
+        run: |
+          cat << 'EOF' > src/main/resources/application.properties
+          spring.application.name=backend
+          jwt.secret=VGhpc0lzQVNlY3JldEtleUZvckpXVFRoaXNJc0FTZWNyZXRLZXlGb3JKV1Q=
+          jwt.expiration=900000
+          jwt.refresh-expiration=604800000
+          spring.data.mongodb.uri=mongodb://localhost:27017/ecommerce
+          spring.data.mongodb.auto-index-creation=true
+          minio.url=http://localhost:9000
+          minio.access-key=minioadmin
+          minio.secret-key=minioadmin
+          minio.bucket-name=product-images
+          minio.bucket-video=product-video
+          minio.bucket-user=user-images
+          spring.servlet.multipart.max-file-size=150MB
+          spring.servlet.multipart.max-request-size=300MB
+          vnpay.tmn-code=DKUIV5V2
+          vnpay.hash-secret=FSHEZV8321H4PZGD84EGAS6OK4CMUISF
+          vnpay.pay-url=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+          vnpay.return-url=https://tmdt-lovat.vercel.app/payment/vnpay-result
+          server.port=8080
+          app.frontend-url=http://localhost:5173
+          gogoduk.api-key=dummy_test_key
+          EOF
 
       - name: Compile Backend
         run: ./mvnw compile --batch-mode
