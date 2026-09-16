@@ -15,6 +15,8 @@ public class ShopCategoryResponse {
     private String shopId;
     private String name;
     private String description;
+    private String parentCategoryId;
+    private String parentCategoryName;
     private Integer sortOrder;
     private Boolean active;
     private Long productCount;

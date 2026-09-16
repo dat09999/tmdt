@@ -16,6 +16,8 @@ public class ProductResponse {
     private String id;
 
     private String shopId;
+    private String shopName;
+    private String shopLogo;
     private String categoryId;
     private String shopCategoryId;
 

@@ -507,9 +507,23 @@ public class ProductServiceImpl implements ProductService {
             return null;
         }
 
+        String shopName = null;
+        String shopLogo = null;
+        if (product.getShopId() != null && !product.getShopId().isBlank()) {
+            try {
+                Shop shop = shopRepository.findById(product.getShopId()).orElse(null);
+                if (shop != null) {
+                    shopName = shop.getShopName();
+                    shopLogo = shop.getLogo();
+                }
+            } catch (Exception ignored) {}
+        }
+
         return ProductResponse.builder()
                 .id(product.getId())
                 .shopId(product.getShopId())
+                .shopName(shopName)
+                .shopLogo(shopLogo)
                 .categoryId(product.getCategoryId())
                 .shopCategoryId(product.getShopCategoryId())
                 .name(product.getName())
@@ -547,14 +561,13 @@ public class ProductServiceImpl implements ProductService {
         String displayUrl = null;
 
         if (key != null && !key.isBlank()) {
-            if (key.startsWith("https://")) {
+            if (key.startsWith("https://") || key.startsWith("http://") || key.startsWith("data:") || key.startsWith("blob:")) {
                 displayUrl = key;
             } else {
-                if(image.getImageVideo().equals(IMAGE_VIDEO.IMAGE)) {
-                    displayUrl = objectStorageService.getPublicUrlOrSignedUrl(imageBucket, key);
-                }
-                else{
+                if (image.getImageVideo() != null && image.getImageVideo().equals(IMAGE_VIDEO.VIDEO)) {
                     displayUrl = objectStorageService.getPublicUrlOrSignedUrl(videoBucket, key);
+                } else {
+                    displayUrl = objectStorageService.getPublicUrlOrSignedUrl(imageBucket, key);
                 }
             }
         }

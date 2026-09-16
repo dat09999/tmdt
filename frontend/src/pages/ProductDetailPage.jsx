@@ -15,6 +15,7 @@ import { wishlistService } from "../services/wishlistService";
 import { sellerService } from "../services/sellerService";
 import { openChatWithShop } from "../services/chatService";
 import { useAuth } from "./Authcontext";
+import { toFullImageUrl, DEFAULT_SHOP_LOGO, DEFAULT_PRODUCT_IMAGE } from "../utils/auth";
 import { formatCurrency, formatSoldCount } from "../utils/formatters";
 import {
   ShoppingCart,
@@ -69,14 +70,15 @@ export default function ProductDetailPage() {
         if (data?.shopId) {
           try {
             const shopData = await sellerService.getShopById(data.shopId);
+            const shopLogoUrl = shopData?.logo || shopData?.avatar || data.shopLogo;
             if (shopData) {
               data.shop = {
                 id: shopData.id,
                 ownerId: shopData.ownerId,
-                name: shopData.shopName || shopData.name || "Gian Hàng DoMix",
-                shopName: shopData.shopName || shopData.name || "Gian Hàng DoMix",
-                avatar: shopData.logo || shopData.coverImage || "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=100&auto=format&fit=crop&q=60",
-                logo: shopData.logo,
+                name: shopData.shopName || shopData.name || data.shopName || "Gian Hàng DoMix",
+                shopName: shopData.shopName || shopData.name || data.shopName || "Gian Hàng DoMix",
+                avatar: toFullImageUrl(shopLogoUrl, DEFAULT_SHOP_LOGO),
+                logo: shopLogoUrl,
                 rating: Number(shopData.rating) > 0 ? Number(shopData.rating).toFixed(1) : "5.0",
                 totalReviews: shopData.totalReviews || 0,
                 totalSales: shopData.totalSales || 0,
@@ -88,7 +90,35 @@ export default function ProductDetailPage() {
             }
           } catch (shopErr) {
             console.warn("Could not fetch shop details:", shopErr);
+            const shopLogoUrl = data.shopLogo;
+            data.shop = {
+              id: data.shopId,
+              name: data.shopName || "Gian Hàng DoMix",
+              shopName: data.shopName || "Gian Hàng DoMix",
+              avatar: toFullImageUrl(shopLogoUrl, DEFAULT_SHOP_LOGO),
+              logo: shopLogoUrl,
+              rating: "5.0",
+              totalReviews: 0,
+              totalSales: 0,
+              productsCount: 1,
+              responseTime: "trong vài phút",
+              responseRate: "100%",
+            };
           }
+        } else if (data?.shopName || data?.shopLogo) {
+          const shopLogoUrl = data.shopLogo;
+          data.shop = {
+            name: data.shopName || "Gian Hàng DoMix",
+            shopName: data.shopName || "Gian Hàng DoMix",
+            avatar: toFullImageUrl(shopLogoUrl, DEFAULT_SHOP_LOGO),
+            logo: shopLogoUrl,
+            rating: "5.0",
+            totalReviews: 0,
+            totalSales: 0,
+            productsCount: 1,
+            responseTime: "trong vài phút",
+            responseRate: "100%",
+          };
         }
 
         if (data?.variants?.length > 0) {
@@ -538,11 +568,11 @@ export default function ProductDetailPage() {
             {/* Shop Avatar & Name */}
             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
               <img
-                src={product.shop?.avatar || product.shop?.logo || "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=100&auto=format&fit=crop&q=60"}
+                src={toFullImageUrl(product.shop?.avatar || product.shop?.logo, DEFAULT_SHOP_LOGO)}
                 alt={product.shop?.name || product.shop?.shopName || "Shop"}
                 onError={(e) => {
                   e.currentTarget.onerror = null;
-                  e.currentTarget.src = "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=100&auto=format&fit=crop&q=60";
+                  e.currentTarget.src = DEFAULT_SHOP_LOGO;
                 }}
                 style={{
                   width: "64px",
@@ -588,7 +618,7 @@ export default function ProductDetailPage() {
                     variant="ghost"
                     size="sm"
                     icon={Store}
-                    onClick={() => (window.location.href = `/products?shopId=${product.shopId || product.shop?.id || ""}`)}
+                    onClick={() => (window.location.href = `/shop/${product.shopId || product.shop?.id || ""}`)}
                   >
                     Xem Shop
                   </Button>

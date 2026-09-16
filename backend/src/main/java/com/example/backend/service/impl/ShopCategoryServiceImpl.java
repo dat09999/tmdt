@@ -6,6 +6,7 @@ import com.example.backend.Exception.ForbiddenException;
 import com.example.backend.module.Product;
 import com.example.backend.module.Shop;
 import com.example.backend.module.ShopCategory;
+import com.example.backend.repository.CategoryRepository;
 import com.example.backend.repository.ProductRepository;
 import com.example.backend.repository.ShopCategoryRepository;
 import com.example.backend.repository.ShopRepository;
@@ -28,6 +29,7 @@ public class ShopCategoryServiceImpl implements ShopCategoryService {
     private final ShopCategoryRepository shopCategoryRepository;
     private final ShopRepository shopRepository;
     private final ProductRepository productRepository;
+    private final CategoryRepository categoryRepository;
     private final MongoTemplate mongoTemplate;
 
     @Override
@@ -54,10 +56,23 @@ public class ShopCategoryServiceImpl implements ShopCategoryService {
     public ShopCategoryResponse createShopCategory(String shopId, CreateShopCategoryRequest request) {
         verifyShopOwnership(shopId);
 
+        String parentCatId = request.getParentCategoryId() != null && !request.getParentCategoryId().isBlank()
+                ? request.getParentCategoryId().trim() : null;
+        String parentCatName = request.getParentCategoryName() != null && !request.getParentCategoryName().isBlank()
+                ? request.getParentCategoryName().trim() : null;
+
+        if (parentCatId != null && (parentCatName == null || parentCatName.isBlank())) {
+            parentCatName = categoryRepository.findById(parentCatId)
+                    .map(com.example.backend.module.Category::getName)
+                    .orElse(null);
+        }
+
         ShopCategory category = ShopCategory.builder()
                 .shopId(shopId)
                 .name(request.getName().trim())
                 .description(request.getDescription() != null ? request.getDescription().trim() : "")
+                .parentCategoryId(parentCatId)
+                .parentCategoryName(parentCatName)
                 .sortOrder(request.getSortOrder() != null ? request.getSortOrder() : 0)
                 .active(request.getActive() != null ? request.getActive() : true)
                 .createdAt(new Date())
@@ -80,6 +95,18 @@ public class ShopCategoryServiceImpl implements ShopCategoryService {
         }
         if (request.getDescription() != null) {
             category.setDescription(request.getDescription().trim());
+        }
+        if (request.getParentCategoryId() != null) {
+            String pId = request.getParentCategoryId().trim();
+            category.setParentCategoryId(pId.isEmpty() ? null : pId);
+            if (!pId.isEmpty()) {
+                String pName = request.getParentCategoryName() != null && !request.getParentCategoryName().isBlank()
+                        ? request.getParentCategoryName().trim()
+                        : categoryRepository.findById(pId).map(com.example.backend.module.Category::getName).orElse(null);
+                category.setParentCategoryName(pName);
+            } else {
+                category.setParentCategoryName(null);
+            }
         }
         if (request.getSortOrder() != null) {
             category.setSortOrder(request.getSortOrder());
@@ -132,6 +159,8 @@ public class ShopCategoryServiceImpl implements ShopCategoryService {
                 .shopId(category.getShopId())
                 .name(category.getName())
                 .description(category.getDescription())
+                .parentCategoryId(category.getParentCategoryId())
+                .parentCategoryName(category.getParentCategoryName())
                 .sortOrder(category.getSortOrder())
                 .active(category.getActive())
                 .productCount(productCount)

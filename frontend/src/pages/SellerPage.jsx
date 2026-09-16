@@ -10,8 +10,11 @@ import AddressAutocomplete from "../components/common/AddressAutocomplete";
 import SellerChatCenter from "../components/chat/SellerChatCenter";
 import { sellerService } from "../services/sellerService";
 import { chatService } from "../services/chatService";
+import { productService } from "../services/productService";
 import { useAuth } from "./Authcontext";
 import { formatCurrency, formatDate } from "../utils/formatters";
+import { toFullImageUrl, DEFAULT_SHOP_LOGO, DEFAULT_PRODUCT_IMAGE } from "../utils/auth";
+import "./SellerPage.css";
 import {
   Store,
   Package,
@@ -44,6 +47,12 @@ import {
   MessageCircle,
   Layers,
   Camera,
+  ExternalLink,
+  ChevronRight,
+  Filter,
+  LayoutDashboard,
+  Tag,
+  Image as ImageIcon,
 } from "lucide-react";
 
 const CATEGORY_OPTIONS = [
@@ -78,8 +87,11 @@ export default function SellerPage() {
   const [stats, setStats] = useState(null);
   const [products, setProducts] = useState([]);
   const [shopCategories, setShopCategories] = useState([]);
+  const [platformCategories, setPlatformCategories] = useState([]);
   const [orders, setOrders] = useState([]);
   const [coupons, setCoupons] = useState([]);
+  const [productSearchTerm, setProductSearchTerm] = useState("");
+  const [productCatFilter, setProductCatFilter] = useState("ALL");
 
   // Filter state for Analytics Overview
   const [dateFilterMode, setDateFilterMode] = useState("PRESET"); // "PRESET" | "CUSTOM"
@@ -134,6 +146,8 @@ export default function SellerPage() {
   const [shopCategoryForm, setShopCategoryForm] = useState({
     name: "",
     description: "",
+    parentCategoryId: "",
+    parentCategoryName: "",
     sortOrder: 0,
     active: true,
   });
@@ -187,13 +201,14 @@ export default function SellerPage() {
       if (userShop && userShop.id) {
         setShop(userShop);
         setLoading(true);
-        const [sData, pData, oData, cData, aData, scData] = await Promise.all([
+        const [sData, pData, oData, cData, aData, scData, platCats] = await Promise.all([
           sellerService.getDashboardStats(userShop.id),
           sellerService.getProducts(userShop.id),
           sellerService.getOrders(userShop.id),
           sellerService.getCoupons(userShop.id),
           sellerService.getAnalyticsOverview(userShop.id, { days: analyticsDays }),
           sellerService.getShopCategories(userShop.id),
+          productService.getCategories().catch(() => []),
         ]);
         setStats(sData);
         setProducts(pData || []);
@@ -201,6 +216,9 @@ export default function SellerPage() {
         setCoupons(cData || []);
         setAnalyticsData(aData);
         setShopCategories(scData || []);
+        if (Array.isArray(platCats) && platCats.length > 0) {
+          setPlatformCategories(platCats);
+        }
       } else {
         setShop(null);
       }
@@ -599,11 +617,14 @@ export default function SellerPage() {
   };
 
   // Shop Category Handlers
-  const handleOpenCreateShopCategory = () => {
+  const handleOpenCreateShopCategory = (defaultParentId = "") => {
     setEditingShopCategory(null);
+    const parentCat = platformCategories.find((c) => c.id === defaultParentId);
     setShopCategoryForm({
       name: "",
       description: "",
+      parentCategoryId: defaultParentId || "",
+      parentCategoryName: parentCat ? parentCat.name : "",
       sortOrder: shopCategories.length,
       active: true,
     });
@@ -615,6 +636,8 @@ export default function SellerPage() {
     setShopCategoryForm({
       name: cat.name || "",
       description: cat.description || "",
+      parentCategoryId: cat.parentCategoryId || "",
+      parentCategoryName: cat.parentCategoryName || "",
       sortOrder: cat.sortOrder ?? 0,
       active: cat.active !== false,
     });
@@ -631,15 +654,22 @@ export default function SellerPage() {
       const payload = {
         name: shopCategoryForm.name.trim(),
         description: shopCategoryForm.description || "",
+        parentCategoryId: shopCategoryForm.parentCategoryId || null,
+        parentCategoryName: shopCategoryForm.parentCategoryName || null,
         sortOrder: Number(shopCategoryForm.sortOrder) || 0,
         active: shopCategoryForm.active,
       };
+      let savedCat;
       if (editingShopCategory) {
-        await sellerService.updateShopCategory(shop.id, editingShopCategory.id, payload);
+        savedCat = await sellerService.updateShopCategory(shop.id, editingShopCategory.id, payload);
         showToast("Đã cập nhật danh mục shop thành công!");
       } else {
-        await sellerService.createShopCategory(shop.id, payload);
+        savedCat = await sellerService.createShopCategory(shop.id, payload);
         showToast("Đã tạo danh mục shop mới thành công!");
+        // Nếu đang mở form sản phẩm, tự động chọn danh mục vừa tạo
+        if (productModalOpen && savedCat?.id) {
+          setProductForm((prev) => ({ ...prev, shopCategoryId: savedCat.id }));
+        }
       }
       setShopCategoryModalOpen(false);
       setEditingShopCategory(null);
@@ -965,120 +995,275 @@ export default function SellerPage() {
           ) : (
             /* STATE 4: USER HAS A SHOP -> FULL SELLER CENTER DASHBOARD */
             <>
-              {/* Seller Center Header */}
+              {/* Modern Seller Center Header Card */}
               <div
-                className="card"
                 style={{
-                  padding: "20px 24px",
-                  backgroundColor: "var(--surface)",
-                  borderRadius: "var(--r-lg)",
-                  border: "1px solid var(--border-light)",
+                  background: "linear-gradient(135deg, #ffffff 0%, #fffbf9 100%)",
+                  borderRadius: "var(--seller-radius-lg, 16px)",
+                  border: "1px solid var(--seller-border, #e2e8f0)",
+                  padding: "24px 28px",
                   marginBottom: "20px",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.05), 0 6px 16px rgba(238, 77, 45, 0.04)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
                   flexWrap: "wrap",
-                  gap: "16px",
+                  gap: "18px",
+                  position: "relative",
+                  overflow: "hidden",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                  <img
-                    src={shop.logo || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100"}
-                    alt={shop.name}
-                    style={{
-                      width: "56px",
-                      height: "56px",
-                      borderRadius: "50%",
-                      objectFit: "cover",
-                      border: "2px solid var(--primary-light)",
-                    }}
-                  />
+                <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                  <div style={{ position: "relative" }}>
+                    <img
+                      src={toFullImageUrl(shop.logo || shop.avatar, DEFAULT_SHOP_LOGO)}
+                      alt={shop.name}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = DEFAULT_SHOP_LOGO;
+                      }}
+                      style={{
+                        width: "64px",
+                        height: "64px",
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                        border: "3px solid #ffffff",
+                        boxShadow: "0 4px 14px rgba(238, 77, 45, 0.25)",
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: "0px",
+                        right: "0px",
+                        width: "16px",
+                        height: "16px",
+                        borderRadius: "50%",
+                        backgroundColor: "#10b981",
+                        border: "2.5px solid #ffffff",
+                      }}
+                      title="Gian hàng đang hoạt động"
+                    />
+                  </div>
                   <div>
-                    <h1 style={{ fontSize: "20px", fontWeight: "800", color: "var(--text)" }}>
-                      {shop.name}
-                    </h1>
-                    <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "2px" }}>
-                      Mã Shop: <strong>{shop.id}</strong> | Đánh giá: ⭐ {shop.rating || stats?.rating || 5.0}/5.0
-                    </p>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <h1 style={{ fontSize: "21px", fontWeight: "800", color: "var(--seller-text, #0f172a)", margin: 0, letterSpacing: "-0.3px" }}>
+                        {shop.name}
+                      </h1>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: "700",
+                          backgroundColor: "#d1fae5",
+                          color: "#065f46",
+                          padding: "2px 8px",
+                          borderRadius: "9999px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        <ShieldCheck size={12} /> Gian Hàng Chính Thức
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "13px", color: "var(--seller-text-muted, #64748b)", marginTop: "4px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <span>Mã Shop: <strong style={{ fontFamily: "monospace", color: "var(--seller-text, #0f172a)" }}>{shop.id}</strong></span>
+                      <span>•</span>
+                      <span style={{ color: "#d97706", fontWeight: "700" }}>⭐ {Number(shop.rating || stats?.rating || 5.0).toFixed(1)} / 5.0</span>
+                      <span>•</span>
+                      <span>{products.length} sản phẩm</span>
+                    </div>
                   </div>
                 </div>
 
-                <Button
-                  variant="primary"
-                  icon={Plus}
-                  onClick={handleOpenCreateProduct}
-                >
-                  Thêm Sản Phẩm Mới
-                </Button>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => window.open(`/shop/${shop.id}`, "_blank")}
+                    title="Xem gian hàng của bạn từ góc nhìn khách hàng"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "9px 16px",
+                      borderRadius: "var(--seller-radius-sm, 8px)",
+                      fontSize: "13px",
+                      fontWeight: "600",
+                      backgroundColor: "#ffffff",
+                      border: "1px solid var(--seller-border, #e2e8f0)",
+                      color: "var(--seller-text, #0f172a)",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = "var(--seller-primary, #ee4d2d)";
+                      e.currentTarget.style.color = "var(--seller-primary, #ee4d2d)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = "var(--seller-border, #e2e8f0)";
+                      e.currentTarget.style.color = "var(--seller-text, #0f172a)";
+                    }}
+                  >
+                    <ExternalLink size={15} />
+                    <span>Xem Shop</span>
+                  </button>
+
+                  <button
+                    onClick={handleOpenCreateShopCategory}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "9px 16px",
+                      borderRadius: "var(--seller-radius-sm, 8px)",
+                      fontSize: "13px",
+                      fontWeight: "700",
+                      backgroundColor: "var(--seller-primary-light, #fff5f1)",
+                      border: "1px solid var(--seller-primary-border, #ffd8cc)",
+                      color: "var(--seller-primary, #ee4d2d)",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = "var(--seller-primary, #ee4d2d)";
+                      e.currentTarget.style.color = "#ffffff";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = "var(--seller-primary-light, #fff5f1)";
+                      e.currentTarget.style.color = "var(--seller-primary, #ee4d2d)";
+                    }}
+                  >
+                    <Layers size={15} />
+                    <span>+ Tạo Danh Mục Shop</span>
+                  </button>
+
+                  <button
+                    onClick={handleOpenCreateProduct}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "9px 18px",
+                      borderRadius: "var(--seller-radius-sm, 8px)",
+                      fontSize: "13px",
+                      fontWeight: "700",
+                      background: "linear-gradient(135deg, #ee4d2d 0%, #ff5722 100%)",
+                      border: "none",
+                      color: "#ffffff",
+                      cursor: "pointer",
+                      boxShadow: "0 3px 10px rgba(238, 77, 45, 0.3)",
+                      transition: "all 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                      e.currentTarget.style.boxShadow = "0 5px 14px rgba(238, 77, 45, 0.4)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateY(0)";
+                      e.currentTarget.style.boxShadow = "0 3px 10px rgba(238, 77, 45, 0.3)";
+                    }}
+                  >
+                    <Plus size={16} />
+                    <span>Thêm Sản Phẩm Mới</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Navigation Tabs */}
+              {/* Modern Segmented Navigation Tabs */}
               <div
-                className="card"
                 style={{
                   display: "flex",
-                  backgroundColor: "var(--surface)",
-                  borderRadius: "var(--r-md)",
-                  border: "1px solid var(--border-light)",
-                  marginBottom: "20px",
+                  alignItems: "center",
+                  backgroundColor: "#ffffff",
+                  borderRadius: "var(--seller-radius-md, 12px)",
+                  border: "1px solid var(--seller-border, #e2e8f0)",
+                  padding: "6px",
+                  marginBottom: "24px",
+                  boxShadow: "var(--seller-shadow-sm, 0 1px 2px 0 rgba(0,0,0,0.05))",
                   overflowX: "auto",
+                  gap: "4px",
                 }}
               >
                 {[
-                  { id: "dashboard", label: "📊 Tổng Quan", icon: TrendingUp },
-                  { id: "products", label: `📦 Sản Phẩm (${products.length})`, icon: Package },
-                  { id: "categories", label: `📑 Danh Mục Shop (${shopCategories.length})`, icon: Layers },
-                  { id: "orders", label: `📑 Đơn Hàng (${orders.length})`, icon: ShoppingBag },
-                  { id: "coupons", label: `🎟️ Mã Giảm Giá (${coupons.length})`, icon: Ticket },
-                  {
-                    id: "chat",
-                    label: (
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                        <span>💬 Chat Khách Hàng</span>
-                        {unreadShopChatCount > 0 && (
-                          <span
-                            style={{
-                              backgroundColor: "var(--primary)",
-                              color: "#ffffff",
-                              fontSize: "10px",
-                              fontWeight: "800",
-                              padding: "1px 6px",
-                              borderRadius: "10px",
-                            }}
-                          >
-                            {unreadShopChatCount}
-                          </span>
-                        )}
-                      </div>
-                    ),
-                    icon: MessageCircle,
-                  },
-                  { id: "settings", label: "⚙️ Cài Đặt Shop", icon: Settings },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    style={{
-                      flex: 1,
-                      padding: "14px 16px",
-                      border: "none",
-                      borderBottom: activeTab === tab.id ? "3px solid var(--primary)" : "3px solid transparent",
-                      backgroundColor: "transparent",
-                      color: activeTab === tab.id ? "var(--primary)" : "var(--text)",
-                      fontWeight: activeTab === tab.id ? "700" : "500",
-                      fontSize: "14px",
-                      cursor: "pointer",
-                      whiteSpace: "nowrap",
-                      transition: "all 0.15s",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "6px",
-                    }}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+                  { id: "dashboard", label: "Tổng Quan", icon: TrendingUp },
+                  { id: "products", label: "Sản Phẩm", count: products.length, icon: Package },
+                  { id: "categories", label: "Danh Mục Shop", count: shopCategories.length, icon: Layers },
+                  { id: "orders", label: "Đơn Hàng", count: orders.length, alertBadge: countPending, icon: ShoppingBag },
+                  { id: "coupons", label: "Mã Giảm Giá", count: coupons.length, icon: Ticket },
+                  { id: "chat", label: "Chat Khách Hàng", alertBadge: unreadShopChatCount, icon: MessageCircle },
+                  { id: "settings", label: "Cài Đặt Shop", icon: Settings },
+                ].map((tab) => {
+                  const Icon = tab.icon;
+                  const active = activeTab === tab.id;
+
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      style={{
+                        flex: 1,
+                        padding: "10px 16px",
+                        borderRadius: "8px",
+                        border: "none",
+                        backgroundColor: active ? "var(--seller-primary-light, #fff5f1)" : "transparent",
+                        color: active ? "var(--seller-primary, #ee4d2d)" : "var(--seller-text-muted, #64748b)",
+                        fontWeight: active ? "700" : "600",
+                        fontSize: "13.5px",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                        transition: "all 0.15s ease",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "8px",
+                        boxShadow: active ? "inset 0 0 0 1.5px var(--seller-primary-border, #ffd8cc)" : "none",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!active) {
+                          e.currentTarget.style.backgroundColor = "var(--seller-surface-hover, #f8fafc)";
+                          e.currentTarget.style.color = "var(--seller-text, #0f172a)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!active) {
+                          e.currentTarget.style.backgroundColor = "transparent";
+                          e.currentTarget.style.color = "var(--seller-text-muted, #64748b)";
+                        }
+                      }}
+                    >
+                      <Icon size={16} color={active ? "var(--seller-primary, #ee4d2d)" : "currentColor"} />
+                      <span>{tab.label}</span>
+                      {typeof tab.count === "number" && (
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: "800",
+                            backgroundColor: active ? "var(--seller-primary, #ee4d2d)" : "#e2e8f0",
+                            color: active ? "#ffffff" : "#475569",
+                            padding: "1px 7px",
+                            borderRadius: "9999px",
+                          }}
+                        >
+                          {tab.count}
+                        </span>
+                      )}
+                      {tab.alertBadge > 0 && (
+                        <span
+                          style={{
+                            fontSize: "10.5px",
+                            fontWeight: "800",
+                            backgroundColor: "#ef4444",
+                            color: "#ffffff",
+                            padding: "1px 6px",
+                            borderRadius: "9999px",
+                            boxShadow: "0 2px 5px rgba(239, 68, 68, 0.4)",
+                          }}
+                        >
+                          {tab.alertBadge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* TAB 1: DASHBOARD & ANALYTICS */}
@@ -1287,232 +1472,168 @@ export default function SellerPage() {
                     </form>
                   )}
 
-                  {/* Summary Metric Cards */}
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                      gap: "16px",
-                    }}
-                  >
+                  {/* Summary KPI Metric Cards */}
+                  <div className="seller-kpi-grid">
                     {/* Revenue Card */}
-                    <div
-                      className="card"
-                      style={{
-                        padding: "20px",
-                        backgroundColor: "#fff",
-                        borderRadius: "var(--r-lg)",
-                        borderLeft: "4px solid var(--primary)",
-                      }}
-                    >
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textTransform: "uppercase" }}>
-                        Tổng Doanh Thu
+                    <div className="seller-kpi-card revenue">
+                      <div className="seller-kpi-top">
+                        <span className="seller-kpi-label">Tổng Doanh Thu</span>
+                        <div className="seller-kpi-icon-wrap">
+                          <TrendingUp size={20} />
+                        </div>
                       </div>
-                      <div style={{ fontSize: "22px", fontWeight: "900", color: "var(--primary)", marginTop: "6px" }}>
+                      <div className="seller-kpi-value">
                         {formatCurrency(analyticsData?.summary?.revenue ?? stats?.totalRevenue ?? 0)}
                       </div>
-                      <div style={{ fontSize: "11px", color: "#059669", marginTop: "4px", display: "flex", alignItems: "center", gap: "3px" }}>
-                        <TrendingUp size={12} />
+                      <div className="seller-kpi-footer" style={{ color: "#059669" }}>
+                        <TrendingUp size={13} />
                         <span>{dateFilterMode === "CUSTOM" ? `Từ ${customStartDate} đến ${customEndDate}` : `Trong ${analyticsDays} ngày qua`}</span>
                       </div>
                     </div>
 
                     {/* Order Count Card */}
-                    <div
-                      className="card"
-                      style={{
-                        padding: "20px",
-                        backgroundColor: "#fff",
-                        borderRadius: "var(--r-lg)",
-                        borderLeft: "4px solid #0284c7",
-                      }}
-                    >
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textTransform: "uppercase" }}>
-                        Tổng Số Đơn Hàng
+                    <div className="seller-kpi-card orders">
+                      <div className="seller-kpi-top">
+                        <span className="seller-kpi-label">Tổng Số Đơn Hàng</span>
+                        <div className="seller-kpi-icon-wrap">
+                          <ShoppingBag size={20} />
+                        </div>
                       </div>
-                      <div style={{ fontSize: "22px", fontWeight: "900", color: "#0284c7", marginTop: "6px" }}>
-                        {analyticsData?.summary?.orderCount ?? orders.length} đơn
+                      <div className="seller-kpi-value">
+                        {analyticsData?.summary?.orderCount ?? orders.length} <span style={{ fontSize: "16px", fontWeight: "600" }}>đơn</span>
                       </div>
-                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
-                        {countPending} đơn đang chờ duyệt
+                      <div className="seller-kpi-footer">
+                        <span>{countPending} đơn đang chờ duyệt</span>
                       </div>
                     </div>
 
                     {/* Total Sales Units Card */}
-                    <div
-                      className="card"
-                      style={{
-                        padding: "20px",
-                        backgroundColor: "#fff",
-                        borderRadius: "var(--r-lg)",
-                        borderLeft: "4px solid #8b5cf6",
-                      }}
-                    >
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textTransform: "uppercase" }}>
-                        Sản Phẩm Đã Bán
+                    <div className="seller-kpi-card sales">
+                      <div className="seller-kpi-top">
+                        <span className="seller-kpi-label">Sản Phẩm Đã Bán</span>
+                        <div className="seller-kpi-icon-wrap">
+                          <Package size={20} />
+                        </div>
                       </div>
-                      <div style={{ fontSize: "22px", fontWeight: "900", color: "#8b5cf6", marginTop: "6px" }}>
-                        {analyticsData?.summary?.totalSales ?? 0} sản phẩm
+                      <div className="seller-kpi-value">
+                        {analyticsData?.summary?.totalSales ?? 0} <span style={{ fontSize: "16px", fontWeight: "600" }}>mặt hàng</span>
                       </div>
-                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
-                        Đã giao thành công
+                      <div className="seller-kpi-footer">
+                        <span>Đã giao thành công</span>
                       </div>
                     </div>
 
                     {/* Shop Rating Card */}
-                    <div
-                      className="card"
-                      style={{
-                        padding: "20px",
-                        backgroundColor: "#fff",
-                        borderRadius: "var(--r-lg)",
-                        borderLeft: "4px solid #f59e0b",
-                      }}
-                    >
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textTransform: "uppercase" }}>
-                        Đánh Giá Shop
+                    <div className="seller-kpi-card rating">
+                      <div className="seller-kpi-top">
+                        <span className="seller-kpi-label">Đánh Giá Gian Hàng</span>
+                        <div className="seller-kpi-icon-wrap">
+                          <Award size={20} />
+                        </div>
                       </div>
-                      <div style={{ fontSize: "22px", fontWeight: "900", color: "#f59e0b", marginTop: "6px" }}>
-                        ⭐ {Number(analyticsData?.summary?.averageRating ?? stats?.rating ?? 5.0).toFixed(1)} / 5.0
+                      <div className="seller-kpi-value">
+                        ⭐ {Number(analyticsData?.summary?.averageRating ?? stats?.rating ?? 5.0).toFixed(1)} <span style={{ fontSize: "14px", fontWeight: "600", color: "var(--seller-text-muted, #64748b)" }}>/ 5.0</span>
                       </div>
-                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
-                        Tỉ lệ phản hồi chat: {stats?.responseRate || "100%"}
+                      <div className="seller-kpi-footer">
+                        <span>Phản hồi chat: {stats?.responseRate || "100%"}</span>
                       </div>
                     </div>
 
                     {/* Active Products Card */}
-                    <div
-                      className="card"
-                      style={{
-                        padding: "20px",
-                        backgroundColor: "#fff",
-                        borderRadius: "var(--r-lg)",
-                        borderLeft: "4px solid #10b981",
-                      }}
-                    >
-                      <div style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: "600", textTransform: "uppercase" }}>
-                        Sản Phẩm Đang Bán
+                    <div className="seller-kpi-card products">
+                      <div className="seller-kpi-top">
+                        <span className="seller-kpi-label">Mặt Hàng Đang Bán</span>
+                        <div className="seller-kpi-icon-wrap">
+                          <Layers size={20} />
+                        </div>
                       </div>
-                      <div style={{ fontSize: "22px", fontWeight: "900", color: "#10b981", marginTop: "6px" }}>
-                        {analyticsData?.summary?.productCount ?? products.length} mặt hàng
+                      <div className="seller-kpi-value">
+                        {analyticsData?.summary?.productCount ?? products.length} <span style={{ fontSize: "16px", fontWeight: "600" }}>sản phẩm</span>
                       </div>
-                      <div style={{ fontSize: "11px", color: "var(--text-tertiary)", marginTop: "4px" }}>
-                        {analyticsData?.lowStockAlerts?.length || 0} biến thể sắp hết kho
+                      <div className="seller-kpi-footer" style={{ color: analyticsData?.lowStockAlerts?.length > 0 ? "#ea580c" : "inherit" }}>
+                        <span>{analyticsData?.lowStockAlerts?.length || 0} biến thể sắp hết kho</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* To-Do List Checklist */}
-                  <div
-                    className="card"
-                    style={{
-                      padding: "20px 24px",
-                      backgroundColor: "var(--surface)",
-                      borderRadius: "var(--r-lg)",
-                      border: "1px solid var(--border-light)",
-                    }}
-                  >
-                    <h3 style={{ fontSize: "15px", fontWeight: "800", marginBottom: "14px", color: "var(--text)" }}>
-                      Danh Sách Việc Cần Làm (Bấm để xử lý ngay)
-                    </h3>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
-                        gap: "12px",
-                      }}
-                    >
+                  {/* To-Do Quick Action Checklist */}
+                  <div className="seller-card-modern">
+                    <div className="seller-card-header">
+                      <div className="seller-card-title">
+                        <div className="seller-card-title-icon primary">
+                          <CheckCircle size={18} />
+                        </div>
+                        <div>
+                          <h3>Việc Cần Xử Lý Ngay</h3>
+                          <span>Bấm vào từng mục để chuyển nhanh đến giao diện xử lý</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="seller-todo-grid">
                       <div
+                        className="seller-todo-item"
+                        style={{ borderLeft: "4px solid #f59e0b" }}
                         onClick={() => {
                           setOrderStatusFilter("PENDING");
                           setActiveTab("orders");
                         }}
-                        style={{
-                          padding: "14px",
-                          backgroundColor: "var(--primary-light)",
-                          borderRadius: "8px",
-                          border: "1px solid var(--border-primary)",
-                          textAlign: "center",
-                          cursor: "pointer",
-                          transition: "transform 0.15s",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.02)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                       >
-                        <strong style={{ fontSize: "22px", color: "var(--primary)", display: "block" }}>
+                        <div className="count" style={{ color: "#d97706" }}>
                           {countPending}
-                        </strong>
-                        <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Chờ Xác Nhận</span>
-                        <div style={{ fontSize: "11px", color: "var(--primary)", marginTop: "2px" }}>Bấm để duyệt đơn →</div>
+                        </div>
+                        <div className="title">Chờ Xác Nhận</div>
+                        <div className="action" style={{ color: "#d97706" }}>
+                          Duyệt đơn ngay <ArrowRight size={13} />
+                        </div>
                       </div>
 
                       <div
+                        className="seller-todo-item"
+                        style={{ borderLeft: "4px solid #0284c7" }}
                         onClick={() => {
                           setOrderStatusFilter("PROCESSING");
                           setActiveTab("orders");
                         }}
-                        style={{
-                          padding: "14px",
-                          backgroundColor: "var(--surface-muted)",
-                          borderRadius: "8px",
-                          border: "1px solid var(--border)",
-                          textAlign: "center",
-                          cursor: "pointer",
-                          transition: "transform 0.15s",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.02)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                       >
-                        <strong style={{ fontSize: "22px", color: "var(--info)", display: "block" }}>
+                        <div className="count" style={{ color: "#0284c7" }}>
                           {countProcessing}
-                        </strong>
-                        <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Đang Chuẩn Bị</span>
-                        <div style={{ fontSize: "11px", color: "var(--info)", marginTop: "2px" }}>Bàn giao shipper →</div>
+                        </div>
+                        <div className="title">Đang Chuẩn Bị</div>
+                        <div className="action" style={{ color: "#0284c7" }}>
+                          Giao cho shipper <ArrowRight size={13} />
+                        </div>
                       </div>
 
                       <div
+                        className="seller-todo-item"
+                        style={{ borderLeft: "4px solid #059669" }}
                         onClick={() => {
                           setOrderStatusFilter("SHIPPING");
                           setActiveTab("orders");
                         }}
-                        style={{
-                          padding: "14px",
-                          backgroundColor: "#ecfdf5",
-                          borderRadius: "8px",
-                          border: "1px solid #a7f3d0",
-                          textAlign: "center",
-                          cursor: "pointer",
-                          transition: "transform 0.15s",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.02)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                       >
-                        <strong style={{ fontSize: "22px", color: "#059669", display: "block" }}>
+                        <div className="count" style={{ color: "#059669" }}>
                           {countShipping}
-                        </strong>
-                        <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Đang Giao Hàng</span>
-                        <div style={{ fontSize: "11px", color: "#059669", marginTop: "2px" }}>Theo dõi lộ trình →</div>
+                        </div>
+                        <div className="title">Đang Giao Hàng</div>
+                        <div className="action" style={{ color: "#059669" }}>
+                          Theo dõi lộ trình <ArrowRight size={13} />
+                        </div>
                       </div>
 
                       <div
+                        className="seller-todo-item"
+                        style={{ borderLeft: "4px solid #ea580c" }}
                         onClick={() => (window.location.href = "/refunds")}
-                        style={{
-                          padding: "14px",
-                          backgroundColor: "#fff7ed",
-                          borderRadius: "8px",
-                          border: "1px solid #fed7aa",
-                          textAlign: "center",
-                          cursor: "pointer",
-                          transition: "transform 0.15s",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.02)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                       >
-                        <strong style={{ fontSize: "22px", color: "#ea580c", display: "block" }}>
+                        <div className="count" style={{ color: "#ea580c" }}>
                           {analyticsData?.orderStatusDistribution?.statusCounts?.REFUNDED || 0}
-                        </strong>
-                        <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>Yêu Cầu Hoàn Tiền</span>
-                        <div style={{ fontSize: "11px", color: "#ea580c", marginTop: "2px" }}>Xử lý khiếu nại →</div>
+                        </div>
+                        <div className="title">Yêu Cầu Hoàn Tiền</div>
+                        <div className="action" style={{ color: "#ea580c" }}>
+                          Xử lý khiếu nại <ArrowRight size={13} />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2202,170 +2323,276 @@ export default function SellerPage() {
               )}
 
               {/* TAB 2: PRODUCTS MANAGER */}
-              {activeTab === "products" && (
-                <div
-                  className="card"
-                  style={{
-                    backgroundColor: "var(--surface)",
-                    borderRadius: "var(--r-lg)",
-                    border: "1px solid var(--border-light)",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "18px 20px",
-                      borderBottom: "1px solid var(--border-light)",
-                    }}
-                  >
-                    <strong style={{ fontSize: "16px" }}>Danh Sách Sản Phẩm ({products.length})</strong>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      icon={Plus}
-                      onClick={handleOpenCreateProduct}
-                    >
-                      Thêm Sản Phẩm
-                    </Button>
-                  </div>
+              {activeTab === "products" && (() => {
+                const filteredProducts = products.filter((p) => {
+                  const matchKeyword = !productSearchTerm.trim() || 
+                    (p.name || "").toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                    (p.id || "").toLowerCase().includes(productSearchTerm.toLowerCase());
+                  const matchCat = productCatFilter === "ALL" || 
+                    p.shopCategoryId === productCatFilter || 
+                    p.categoryId === productCatFilter;
+                  return matchKeyword && matchCat;
+                });
 
-                  {products.length === 0 ? (
-                    <EmptyState
-                      title="Shop chưa có sản phẩm nào"
-                      description="Hãy bấm 'Thêm Sản Phẩm' để đăng bán mặt hàng đầu tiên của bạn!"
-                    />
-                  ) : (
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-                        <thead>
-                          <tr style={{ backgroundColor: "var(--surface-muted)", textAlign: "left" }}>
-                            <th style={{ padding: "12px 16px" }}>Sản phẩm</th>
-                            <th style={{ padding: "12px 16px" }}>Giá bán</th>
-                            <th style={{ padding: "12px 16px" }}>Tồn kho</th>
-                            <th style={{ padding: "12px 16px" }}>Đã bán</th>
-                            <th style={{ padding: "12px 16px" }}>Trạng thái</th>
-                            <th style={{ padding: "12px 16px", textAlign: "right" }}>Thao tác</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {products.map((p) => (
-                            <tr key={p.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-                              <td style={{ padding: "12px 16px" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                  <img
-                                    src={p.images?.[0]?.url || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100"}
-                                    alt={p.name}
-                                    style={{ width: "42px", height: "42px", borderRadius: "4px", objectFit: "cover" }}
-                                  />
-                                  <div>
-                                    <strong style={{ color: "var(--text)" }}>{p.name}</strong>
-                                    <div style={{ fontSize: "11px", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "6px", marginTop: "2px", flexWrap: "wrap" }}>
-                                      <span>Mã: {p.id}</span>
-                                      {p.shopCategoryId && (
-                                        <span
-                                          style={{
-                                            backgroundColor: "var(--primary-light)",
-                                            color: "var(--primary)",
-                                            padding: "1px 6px",
-                                            borderRadius: "3px",
-                                            fontSize: "10px",
-                                            fontWeight: "600",
-                                          }}
-                                        >
-                                          🏷️ {shopCategories.find((c) => c.id === p.shopCategoryId)?.name || "Danh mục shop"}
-                                        </span>
+                return (
+                  <div className="seller-card-modern" style={{ padding: 0, overflow: "hidden" }}>
+                    <div
+                      style={{
+                        padding: "18px 22px",
+                        borderBottom: "1px solid var(--seller-border-light, #f1f5f9)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: "14px",
+                        backgroundColor: "#ffffff",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: "280px", flexWrap: "wrap" }}>
+                        <div style={{ position: "relative", flex: 1, minWidth: "200px", maxWidth: "340px" }}>
+                          <Search
+                            size={16}
+                            color="#94a3b8"
+                            style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Tìm sản phẩm theo tên, mã..."
+                            value={productSearchTerm}
+                            onChange={(e) => setProductSearchTerm(e.target.value)}
+                            style={{
+                              width: "100%",
+                              padding: "9px 12px 9px 36px",
+                              borderRadius: "var(--seller-radius-sm, 8px)",
+                              border: "1px solid var(--seller-border, #e2e8f0)",
+                              fontSize: "13px",
+                              outline: "none",
+                              backgroundColor: "var(--seller-surface-hover, #f8fafc)",
+                            }}
+                          />
+                        </div>
+
+                        <select
+                          value={productCatFilter}
+                          onChange={(e) => setProductCatFilter(e.target.value)}
+                          style={{
+                            padding: "9px 12px",
+                            borderRadius: "var(--seller-radius-sm, 8px)",
+                            border: "1px solid var(--seller-border, #e2e8f0)",
+                            fontSize: "13px",
+                            backgroundColor: "#ffffff",
+                            color: "var(--seller-text, #0f172a)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <option value="ALL">Tất cả danh mục shop ({shopCategories.length})</option>
+                          {shopCategories.map((sc) => (
+                            <option key={sc.id} value={sc.id}>📁 {sc.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                        <button
+                          onClick={handleOpenCreateShopCategory}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            padding: "8px 14px",
+                            borderRadius: "var(--seller-radius-sm, 8px)",
+                            fontSize: "13px",
+                            fontWeight: "600",
+                            backgroundColor: "#ffffff",
+                            border: "1px solid var(--seller-border, #e2e8f0)",
+                            color: "var(--seller-text, #0f172a)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <Layers size={15} />
+                          <span>+ Danh Mục Shop</span>
+                        </button>
+
+                        <button
+                          onClick={handleOpenCreateProduct}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            padding: "8px 16px",
+                            borderRadius: "var(--seller-radius-sm, 8px)",
+                            fontSize: "13px",
+                            fontWeight: "700",
+                            backgroundColor: "var(--seller-primary, #ee4d2d)",
+                            border: "none",
+                            color: "#ffffff",
+                            cursor: "pointer",
+                            boxShadow: "0 2px 8px rgba(238, 77, 45, 0.3)",
+                          }}
+                        >
+                          <Plus size={16} />
+                          <span>Thêm Sản Phẩm Mới</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {filteredProducts.length === 0 ? (
+                      <EmptyState
+                        title={productSearchTerm ? "Không tìm thấy sản phẩm phù hợp" : "Shop chưa có sản phẩm nào"}
+                        description={productSearchTerm ? "Thử tìm kiếm với từ khóa khác hoặc xóa bộ lọc." : "Hãy bấm 'Thêm Sản Phẩm' để đăng bán mặt hàng đầu tiên của bạn!"}
+                      />
+                    ) : (
+                      <div className="seller-table-wrap" style={{ border: "none", borderRadius: 0 }}>
+                        <table className="seller-table">
+                          <thead>
+                            <tr>
+                              <th>Sản phẩm</th>
+                              <th>Giá bán</th>
+                              <th>Tồn kho</th>
+                              <th>Đã bán</th>
+                              <th>Trạng thái</th>
+                              <th style={{ textAlign: "right" }}>Thao tác</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredProducts.map((p) => {
+                              const rawImg = p.images?.[0]?.url || p.imageUrl;
+                              const totalStock = p.variants && p.variants.length > 0
+                                ? p.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+                                : (p.stock || 0);
+                              const isOut = totalStock === 0;
+                              const isLow = totalStock > 0 && totalStock <= 10;
+
+                              return (
+                                <tr key={p.id}>
+                                  <td>
+                                    <div className="seller-prod-cell">
+                                      <img
+                                        src={toFullImageUrl(rawImg, DEFAULT_PRODUCT_IMAGE)}
+                                        alt={p.name}
+                                        onError={(e) => {
+                                          e.currentTarget.onerror = null;
+                                          e.currentTarget.src = DEFAULT_PRODUCT_IMAGE;
+                                        }}
+                                        className="seller-prod-thumb"
+                                      />
+                                      <div>
+                                        <div className="seller-prod-name" title={p.name}>
+                                          {p.name}
+                                        </div>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "2px" }}>
+                                          <span className="seller-prod-sku">ID: {p.id}</span>
+                                          {p.shopCategoryId && (
+                                            <span
+                                              style={{
+                                                backgroundColor: "var(--seller-primary-light, #fff5f1)",
+                                                color: "var(--seller-primary, #ee4d2d)",
+                                                padding: "1px 6px",
+                                                borderRadius: "4px",
+                                                fontSize: "11px",
+                                                fontWeight: "600",
+                                              }}
+                                            >
+                                              🏷️ {shopCategories.find((c) => c.id === p.shopCategoryId)?.name || "Danh mục shop"}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <strong style={{ color: "var(--seller-primary, #ee4d2d)", fontSize: "14px", fontWeight: "800" }}>
+                                      {formatCurrency(p.basePrice)}
+                                    </strong>
+                                  </td>
+                                  <td>
+                                    <div>
+                                      <span className={`seller-pill ${isOut ? "danger" : isLow ? "warning" : "success"}`}>
+                                        {isOut ? "Hết hàng" : isLow ? `Sắp hết: ${totalStock}` : `Còn ${totalStock}`}
+                                      </span>
+                                      {p.variants && p.variants.length > 1 && (
+                                        <div style={{ fontSize: "11.5px", color: "var(--seller-text-muted, #64748b)", marginTop: "3px" }}>
+                                          {p.variants.length} phân loại
+                                        </div>
                                       )}
                                     </div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td style={{ padding: "12px 16px", fontWeight: "700", color: "var(--primary)" }}>
-                                {formatCurrency(p.basePrice)}
-                              </td>
-                              <td style={{ padding: "12px 16px" }}>
-                                <div>
-                                  <strong>
-                                    {p.variants && p.variants.length > 0
-                                      ? p.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
-                                      : (p.stock || 50)}
-                                  </strong>
-                                  {p.variants && p.variants.length > 1 && (
-                                    <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
-                                      ({p.variants.length} phân loại)
+                                  </td>
+                                  <td>
+                                    <strong style={{ color: "var(--seller-text, #0f172a)" }}>
+                                      {p.soldCount || 0}
+                                    </strong>
+                                  </td>
+                                  <td>
+                                    <span className="seller-pill success">
+                                      Đang bán
+                                    </span>
+                                  </td>
+                                  <td style={{ textAlign: "right" }}>
+                                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "6px" }}>
+                                      <button
+                                        onClick={() => window.open(`/product/${p.id}`, "_blank")}
+                                        style={{
+                                          padding: "7px",
+                                          borderRadius: "6px",
+                                          border: "1px solid var(--seller-border, #e2e8f0)",
+                                          backgroundColor: "#ffffff",
+                                          color: "var(--seller-text-muted, #64748b)",
+                                          cursor: "pointer",
+                                        }}
+                                        title="Xem sản phẩm trên sàn"
+                                      >
+                                        <ExternalLink size={14} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleOpenEditProduct(p)}
+                                        style={{
+                                          padding: "7px",
+                                          borderRadius: "6px",
+                                          border: "1px solid var(--seller-border, #e2e8f0)",
+                                          backgroundColor: "#ffffff",
+                                          color: "var(--seller-text, #0f172a)",
+                                          cursor: "pointer",
+                                        }}
+                                        title="Chỉnh sửa sản phẩm"
+                                      >
+                                        <Edit2 size={14} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteProduct(p.id)}
+                                        style={{
+                                          padding: "7px",
+                                          borderRadius: "6px",
+                                          border: "1px solid #fee2e2",
+                                          backgroundColor: "#fff5f5",
+                                          color: "#dc2626",
+                                          cursor: "pointer",
+                                        }}
+                                        title="Xóa sản phẩm"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
                                     </div>
-                                  )}
-                                </div>
-                              </td>
-                              <td style={{ padding: "12px 16px" }}>{p.soldCount || 0}</td>
-                              <td style={{ padding: "12px 16px" }}>
-                                <span
-                                  style={{
-                                    backgroundColor: "#d1fae5",
-                                    color: "#065f46",
-                                    padding: "2px 8px",
-                                    borderRadius: "4px",
-                                    fontSize: "11px",
-                                    fontWeight: "700",
-                                  }}
-                                >
-                                  Đang bán
-                                </span>
-                              </td>
-                              <td style={{ padding: "12px 16px", textAlign: "right" }}>
-                                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-                                  <button
-                                    onClick={() => handleOpenEditProduct(p)}
-                                    style={{ padding: "6px", color: "var(--text-secondary)" }}
-                                    title="Chỉnh sửa"
-                                  >
-                                    <Edit2 size={15} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteProduct(p.id)}
-                                    style={{ padding: "6px", color: "var(--error)" }}
-                                    title="Xóa"
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* TAB: SHOP CATEGORIES MANAGER */}
               {activeTab === "categories" && (
-                <div
-                  className="card"
-                  style={{
-                    backgroundColor: "var(--surface)",
-                    borderRadius: "var(--r-lg)",
-                    border: "1px solid var(--border-light)",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "18px 20px",
-                      borderBottom: "1px solid var(--border-light)",
-                      flexWrap: "wrap",
-                      gap: "12px",
-                    }}
-                  >
+                <div className="seller-card-modern">
+                  <div className="seller-card-header">
                     <div>
-                      <strong style={{ fontSize: "16px" }}>Danh Mục Riêng Của Shop ({shopCategories.length})</strong>
-                      <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "4px 0 0 0" }}>
+                      <h3 style={{ fontSize: "16px", fontWeight: "800", margin: 0, color: "var(--seller-text, #0f172a)" }}>
+                        Danh Mục Riêng Của Shop ({shopCategories.length})
+                      </h3>
+                      <p style={{ fontSize: "13px", color: "var(--seller-text-muted, #64748b)", margin: "4px 0 0" }}>
                         Tự tạo và quản lý các nhóm sản phẩm riêng cho cửa hàng của bạn (VD: Hàng Mới Về, Bán Chạy, Bộ Sưu Tập Hè...).
                       </p>
                     </div>
@@ -2380,115 +2607,118 @@ export default function SellerPage() {
                   </div>
 
                   {shopCategories.length === 0 ? (
-                    <EmptyState
-                      title="Shop chưa có danh mục riêng nào"
-                      description="Tạo danh mục riêng để gom nhóm sản phẩm và giúp khách hàng dễ tìm kiếm trên trang Shop của bạn!"
-                    />
+                    <div style={{ padding: "48px 24px" }}>
+                      <EmptyState
+                        title="Shop chưa có danh mục riêng nào"
+                        description="Tạo danh mục riêng để gom nhóm sản phẩm và giúp khách hàng dễ tìm kiếm trên trang Shop của bạn!"
+                      />
+                    </div>
                   ) : (
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                    <div className="seller-table-wrap">
+                      <table className="seller-table">
                         <thead>
-                          <tr style={{ backgroundColor: "var(--surface-muted)", textAlign: "left" }}>
-                            <th style={{ padding: "12px 16px" }}>Tên danh mục</th>
-                            <th style={{ padding: "12px 16px" }}>Mô tả</th>
-                            <th style={{ padding: "12px 16px", textAlign: "center" }}>Thứ tự hiển thị</th>
-                            <th style={{ padding: "12px 16px", textAlign: "center" }}>Số sản phẩm</th>
-                            <th style={{ padding: "12px 16px" }}>Trạng thái</th>
-                            <th style={{ padding: "12px 16px", textAlign: "right" }}>Thao tác</th>
+                          <tr>
+                            <th>Tên danh mục shop</th>
+                            <th>Nhánh danh mục sàn</th>
+                            <th>Mô tả</th>
+                            <th style={{ textAlign: "center" }}>Thứ tự</th>
+                            <th style={{ textAlign: "center" }}>Số sản phẩm</th>
+                            <th>Trạng thái</th>
+                            <th style={{ textAlign: "right" }}>Thao tác</th>
                           </tr>
                         </thead>
                         <tbody>
                           {shopCategories.map((cat) => (
-                            <tr key={cat.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-                              <td style={{ padding: "12px 16px" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <tr key={cat.id}>
+                              <td>
+                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                                   <div
                                     style={{
-                                      width: "32px",
-                                      height: "32px",
-                                      borderRadius: "6px",
-                                      backgroundColor: "var(--primary-light)",
-                                      color: "var(--primary)",
+                                      width: "36px",
+                                      height: "36px",
+                                      borderRadius: "8px",
+                                      backgroundColor: "var(--seller-primary-light, #fff1ed)",
+                                      color: "var(--seller-primary, #ee4d2d)",
                                       display: "flex",
                                       alignItems: "center",
                                       justifyContent: "center",
-                                      fontWeight: "800",
-                                      fontSize: "14px",
+                                      flexShrink: 0,
                                     }}
                                   >
-                                    📁
+                                    <Layers size={18} />
                                   </div>
                                   <div>
-                                    <strong style={{ color: "var(--text)" }}>{cat.name}</strong>
-                                    <div style={{ fontSize: "11px", color: "var(--text-secondary)" }}>
+                                    <div style={{ fontWeight: "700", color: "var(--seller-text, #0f172a)", fontSize: "13.5px" }}>
+                                      {cat.name}
+                                    </div>
+                                    <div style={{ fontSize: "11px", color: "var(--seller-text-light, #94a3b8)", fontFamily: "monospace" }}>
                                       Mã: {cat.id}
                                     </div>
                                   </div>
                                 </div>
                               </td>
-                              <td style={{ padding: "12px 16px", color: "var(--text-secondary)", maxWidth: "260px" }}>
+                              <td>
+                                {cat.parentCategoryName || cat.parentCategoryId ? (
+                                  <span className="seller-pill info" style={{ fontSize: "11.5px" }}>
+                                    <Layers size={12} /> {cat.parentCategoryName || cat.parentCategoryId}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: "var(--seller-text-muted, #64748b)", fontSize: "12px" }}>
+                                    Toàn shop (Chung)
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ color: "var(--seller-text-muted, #64748b)", maxWidth: "240px", fontSize: "13px" }}>
                                 {cat.description || "—"}
                               </td>
-                              <td style={{ padding: "12px 16px", textAlign: "center", fontWeight: "600" }}>
+                              <td style={{ textAlign: "center", fontWeight: "700", color: "var(--seller-text, #0f172a)" }}>
                                 {cat.sortOrder ?? 0}
                               </td>
-                              <td style={{ padding: "12px 16px", textAlign: "center" }}>
-                                <span
-                                  style={{
-                                    backgroundColor: "var(--surface-muted)",
-                                    padding: "3px 10px",
-                                    borderRadius: "12px",
-                                    fontWeight: "700",
-                                    fontSize: "12px",
-                                  }}
-                                >
+                              <td style={{ textAlign: "center" }}>
+                                <span className="seller-badge-count accent">
                                   {cat.productCount ?? 0} sản phẩm
                                 </span>
                               </td>
-                              <td style={{ padding: "12px 16px" }}>
+                              <td>
                                 {cat.active ? (
-                                  <span
-                                    style={{
-                                      backgroundColor: "#d1fae5",
-                                      color: "#065f46",
-                                      padding: "2px 8px",
-                                      borderRadius: "4px",
-                                      fontSize: "11px",
-                                      fontWeight: "700",
-                                    }}
-                                  >
-                                    Đang hiển thị
+                                  <span className="seller-pill success">
+                                    ✓ Đang hiển thị
                                   </span>
                                 ) : (
-                                  <span
-                                    style={{
-                                      backgroundColor: "#fee2e2",
-                                      color: "#991b1b",
-                                      padding: "2px 8px",
-                                      borderRadius: "4px",
-                                      fontSize: "11px",
-                                      fontWeight: "700",
-                                    }}
-                                  >
+                                  <span className="seller-pill neutral">
                                     Đang ẩn
                                   </span>
                                 )}
                               </td>
-                              <td style={{ padding: "12px 16px", textAlign: "right" }}>
-                                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                              <td style={{ textAlign: "right" }}>
+                                <div style={{ display: "flex", justifyContent: "flex-end", gap: "6px" }}>
                                   <button
                                     onClick={() => handleOpenEditShopCategory(cat)}
-                                    style={{ padding: "6px", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer" }}
+                                    style={{
+                                      padding: "7px",
+                                      borderRadius: "6px",
+                                      border: "1px solid var(--seller-border, #e2e8f0)",
+                                      backgroundColor: "#ffffff",
+                                      color: "var(--seller-text, #0f172a)",
+                                      cursor: "pointer",
+                                    }}
                                     title="Chỉnh sửa danh mục"
                                   >
-                                    <Edit2 size={15} />
+                                    <Edit2 size={14} />
                                   </button>
                                   <button
                                     onClick={() => handleDeleteShopCategory(cat.id)}
-                                    style={{ padding: "6px", color: "var(--error)", background: "none", border: "none", cursor: "pointer" }}
+                                    style={{
+                                      padding: "7px",
+                                      borderRadius: "6px",
+                                      border: "1px solid #fee2e2",
+                                      backgroundColor: "#fff5f5",
+                                      color: "#dc2626",
+                                      cursor: "pointer",
+                                    }}
                                     title="Xóa danh mục"
                                   >
-                                    <Trash2 size={15} />
+                                    <Trash2 size={14} />
                                   </button>
                                 </div>
                               </td>
@@ -2503,52 +2733,44 @@ export default function SellerPage() {
 
               {/* TAB 3: ORDERS MANAGER */}
               {activeTab === "orders" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                  {/* Order Status Sub-Tabs Filter */}
-                  <div
-                    className="card"
-                    style={{
-                      display: "flex",
-                      backgroundColor: "var(--surface)",
-                      borderRadius: "var(--r-md)",
-                      border: "1px solid var(--border-light)",
-                      overflowX: "auto",
-                    }}
-                  >
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                  {/* Modern Order Status Tabs */}
+                  <div className="seller-status-tabs">
                     {[
-                      { id: "ALL", label: `Tất Cả (${orders.length})` },
-                      { id: "PENDING", label: `Chờ Xác Nhận (${countPending})` },
-                      { id: "PROCESSING", label: `Đang Chuẩn Bị (${countProcessing})` },
-                      { id: "SHIPPING", label: `Đang Giao (${countShipping})` },
-                      { id: "DELIVERED", label: `Đã Giao (${countDelivered})` },
-                      { id: "CANCELLED", label: `Đã Hủy (${countCancelled})` },
-                    ].map((st) => (
-                      <button
-                        key={st.id}
-                        onClick={() => setOrderStatusFilter(st.id)}
-                        style={{
-                          flex: 1,
-                          padding: "12px 14px",
-                          border: "none",
-                          borderBottom: orderStatusFilter === st.id ? "2.5px solid var(--primary)" : "2.5px solid transparent",
-                          backgroundColor: "transparent",
-                          color: orderStatusFilter === st.id ? "var(--primary)" : "var(--text)",
-                          fontWeight: orderStatusFilter === st.id ? "800" : "500",
-                          fontSize: "13px",
-                          cursor: "pointer",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {st.label}
-                      </button>
-                    ))}
+                      { id: "ALL", label: "Tất Cả", count: orders.length },
+                      { id: "PENDING", label: "Chờ Xác Nhận", count: countPending },
+                      { id: "PROCESSING", label: "Đang Chuẩn Bị", count: countProcessing },
+                      { id: "SHIPPING", label: "Đang Giao", count: countShipping },
+                      { id: "DELIVERED", label: "Đã Giao", count: countDelivered },
+                      { id: "CANCELLED", label: "Đã Hủy", count: countCancelled },
+                    ].map((st) => {
+                      const active = orderStatusFilter === st.id;
+                      return (
+                        <button
+                          key={st.id}
+                          className={`seller-status-tab ${active ? "active" : ""}`}
+                          onClick={() => setOrderStatusFilter(st.id)}
+                        >
+                          <span>{st.label}</span>
+                          <span
+                            className={`seller-badge-count ${
+                              st.id === "PENDING" && st.count > 0 ? "accent" : ""
+                            }`}
+                          >
+                            {st.count}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {filteredOrders.length === 0 ? (
-                    <EmptyState
-                      title="Không có đơn hàng nào trong mục này"
-                      description="Các đơn hàng mới của shop sẽ xuất hiện tại đây."
-                    />
+                    <div className="seller-card-modern" style={{ padding: "48px 24px" }}>
+                      <EmptyState
+                        title="Không có đơn hàng nào trong mục này"
+                        description="Các đơn hàng mới của shop sẽ xuất hiện tại đây khi khách đặt mua."
+                      />
+                    </div>
                   ) : (
                     filteredOrders.map((o) => {
                       const status = (o.orderStatus || "PENDING").toUpperCase();
@@ -2558,122 +2780,96 @@ export default function SellerPage() {
                       const total = o.totalAmount || o.subtotal || 0;
 
                       return (
-                        <div
-                          key={o.id}
-                          className="card"
-                          style={{
-                            padding: "20px",
-                            backgroundColor: "var(--surface)",
-                            borderRadius: "var(--r-lg)",
-                            border: "1px solid var(--border-light)",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              paddingBottom: "12px",
-                              borderBottom: "1px solid var(--border-light)",
-                              marginBottom: "12px",
-                              flexWrap: "wrap",
-                              gap: "8px",
-                            }}
-                          >
+                        <div key={o.id} className="seller-order-card-modern">
+                          <div className="seller-order-header">
                             <div>
-                              <strong style={{ fontSize: "15px", color: "var(--text)" }}>
-                                Đơn #{o.orderCode || o.id}
-                              </strong>
-                              <span style={{ fontSize: "12px", color: "var(--text-secondary)", marginLeft: "10px" }}>
-                                Khách: <strong>{buyerName}</strong> ({buyerPhone})
+                              <span className="seller-order-code">
+                                ĐƠN #{o.orderCode || o.id}
+                              </span>
+                              <span className="seller-order-date">
+                                <Clock size={12} style={{ display: "inline", verticalAlign: "-1px", marginRight: "3px" }} />
+                                {formatDate(o.createdAt || new Date())}
                               </span>
                             </div>
 
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                              <span
-                                style={{
-                                  padding: "3px 10px",
-                                  borderRadius: "99px",
-                                  fontSize: "12px",
-                                  fontWeight: "700",
-                                  backgroundColor:
-                                    status === "PENDING"
-                                      ? "var(--primary-light)"
-                                      : status === "PROCESSING"
-                                      ? "#e0f2fe"
-                                      : status === "SHIPPING"
-                                      ? "#ecfdf5"
-                                      : status === "DELIVERED"
-                                      ? "#dcfce7"
-                                      : "#fee2e2",
-                                  color:
-                                    status === "PENDING"
-                                      ? "var(--primary)"
-                                      : status === "PROCESSING"
-                                      ? "#0284c7"
-                                      : status === "SHIPPING"
-                                      ? "#059669"
-                                      : status === "DELIVERED"
-                                      ? "#16a34a"
-                                      : "#dc2626",
-                                }}
-                              >
-                                {status === "PENDING"
-                                  ? "⏳ Chờ xác nhận"
+                            <span
+                              className={`seller-pill ${
+                                status === "PENDING"
+                                  ? "warning"
                                   : status === "PROCESSING"
-                                  ? "📦 Đang chuẩn bị"
+                                  ? "info"
                                   : status === "SHIPPING"
-                                  ? "🚚 Đang giao hàng"
+                                  ? "info"
                                   : status === "DELIVERED"
-                                  ? "✓ Giao thành công"
-                                  : "✕ Đã hủy"}
-                              </span>
-                            </div>
+                                  ? "success"
+                                  : "danger"
+                              }`}
+                            >
+                              {status === "PENDING"
+                                ? "⏳ Chờ xác nhận"
+                                : status === "PROCESSING"
+                                ? "📦 Đang chuẩn bị"
+                                : status === "SHIPPING"
+                                ? "🚚 Đang giao hàng"
+                                : status === "DELIVERED"
+                                ? "✓ Giao thành công"
+                                : "✕ Đã hủy"}
+                            </span>
                           </div>
 
-                          {/* Items */}
-                          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "14px" }}>
-                            {(o.items || []).map((it, idx) => (
-                              <div
-                                key={idx}
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  fontSize: "13px",
-                                  alignItems: "center",
-                                }}
-                              >
-                                <span>
-                                  • {it.productName || it.productId} (x{it.quantity || 1})
-                                </span>
-                                <strong>{formatCurrency((it.unitPrice || it.price || 0) * (it.quantity || 1))}</strong>
+                          <div className="seller-order-body">
+                            {/* Items List */}
+                            <div className="seller-order-items">
+                              {(o.items || []).map((it, idx) => (
+                                <div key={idx} className="seller-order-item-row">
+                                  <img
+                                    src={toFullImageUrl(it.productImage || it.imageUrl, DEFAULT_PRODUCT_IMAGE)}
+                                    alt={it.productName}
+                                    onError={(e) => {
+                                      e.currentTarget.onerror = null;
+                                      e.currentTarget.src = DEFAULT_PRODUCT_IMAGE;
+                                    }}
+                                    className="seller-order-item-img"
+                                  />
+                                  <div className="seller-order-item-info">
+                                    <div className="seller-order-item-name" title={it.productName}>
+                                      {it.productName || it.productId}
+                                    </div>
+                                    <div className="seller-order-item-variant">
+                                      Số lượng: <strong>x{it.quantity || 1}</strong>
+                                      {it.color && <span> | Màu: {it.color}</span>}
+                                      {it.size && <span> | Size: {it.size}</span>}
+                                    </div>
+                                  </div>
+                                  <div style={{ fontWeight: "700", color: "var(--seller-text, #0f172a)", fontSize: "13.5px" }}>
+                                    {formatCurrency((it.unitPrice || it.price || 0) * (it.quantity || 1))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Recipient Box */}
+                            <div className="seller-order-recipient">
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px", color: "var(--seller-primary, #ee4d2d)", fontWeight: "700", fontSize: "12.5px" }}>
+                                <Truck size={14} />
+                                <span>Thông Tin Nhận Hàng</span>
                               </div>
-                            ))}
+                              <div className="seller-order-recipient-name">
+                                {buyerName} <span style={{ color: "var(--seller-text-muted, #64748b)", fontWeight: "normal", fontSize: "12px" }}>({buyerPhone})</span>
+                              </div>
+                              <div className="seller-order-recipient-detail">
+                                📍 {buyerAddress}
+                              </div>
+                            </div>
                           </div>
 
                           {/* Footer Actions */}
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              paddingTop: "12px",
-                              borderTop: "1px solid var(--border-light)",
-                              flexWrap: "wrap",
-                              gap: "12px",
-                            }}
-                          >
-                            <div style={{ fontSize: "13px" }}>
-                              <div>
-                                Địa chỉ giao: <span style={{ color: "var(--text-secondary)" }}>{buyerAddress}</span>
-                              </div>
-                              <div style={{ marginTop: "2px" }}>
-                                Tổng tiền: <strong style={{ color: "var(--primary)", fontSize: "14px" }}>{formatCurrency(total)}</strong>
-                              </div>
+                          <div className="seller-order-footer">
+                            <div className="seller-order-total">
+                              Tổng thanh toán: <strong>{formatCurrency(total)}</strong>
                             </div>
 
-                            {/* Dynamic Action Buttons based on status */}
-                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                            <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
                               {(status === "PENDING" || status === "UNPAID") && (
                                 <>
                                   <Button
@@ -2689,12 +2885,12 @@ export default function SellerPage() {
                                     icon={Check}
                                     onClick={() => handleUpdateOrderStatus(o.id, "PROCESSING")}
                                   >
-                                    Xác Nhận Đơn Hàng
+                                    Xác Nhận Chuẩn Bị Hàng
                                   </Button>
                                 </>
                               )}
 
-                              {(status === "PROCESSING" || status === "CONFIRMED") && (
+                              {status === "PROCESSING" && (
                                 <>
                                   <Button
                                     variant="outline"
@@ -2709,7 +2905,7 @@ export default function SellerPage() {
                                     icon={Truck}
                                     onClick={() => handleUpdateOrderStatus(o.id, "SHIPPING")}
                                   >
-                                    Giao Cho Shipper
+                                    Bàn Giao Shipper
                                   </Button>
                                 </>
                               )}
@@ -2721,19 +2917,19 @@ export default function SellerPage() {
                                   icon={CheckCircle}
                                   onClick={() => handleUpdateOrderStatus(o.id, "DELIVERED")}
                                 >
-                                  Hoàn Tất Giao Hàng
+                                  Xác Nhận Đã Giao Thành Công
                                 </Button>
                               )}
 
                               {status === "DELIVERED" && (
-                                <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "700" }}>
+                                <span style={{ fontSize: "12.5px", color: "#16a34a", fontWeight: "700" }}>
                                   ✓ Đơn hàng đã hoàn tất
                                 </span>
                               )}
 
                               {status === "CANCELLED" && (
-                                <span style={{ fontSize: "12px", color: "var(--error)", fontWeight: "700" }}>
-                                  Đơn đã bị hủy
+                                <span style={{ fontSize: "12.5px", color: "var(--error, #dc2626)", fontWeight: "700" }}>
+                                  ✕ Đơn đã bị hủy
                                 </span>
                               )}
                             </div>
@@ -2747,57 +2943,70 @@ export default function SellerPage() {
 
               {/* TAB 4: COUPONS */}
               {activeTab === "coupons" && (
-                <div
-                  className="card"
-                  style={{
-                    padding: "20px",
-                    backgroundColor: "var(--surface)",
-                    borderRadius: "var(--r-lg)",
-                    border: "1px solid var(--border-light)",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      marginBottom: "16px",
-                      paddingBottom: "12px",
-                      borderBottom: "1px solid var(--border-light)",
-                    }}
-                  >
-                    <strong style={{ fontSize: "16px" }}>Mã Giảm Giá Của Shop ({coupons.length})</strong>
+                <div className="seller-card-modern">
+                  <div className="seller-card-header">
+                    <div>
+                      <h3 style={{ fontSize: "16px", fontWeight: "800", margin: 0, color: "var(--seller-text, #0f172a)" }}>
+                        Mã Giảm Giá Của Shop ({coupons.length})
+                      </h3>
+                      <p style={{ fontSize: "13px", color: "var(--seller-text-muted, #64748b)", margin: "4px 0 0" }}>
+                        Tạo voucher độc quyền để kích thích mua sắm, tăng tỷ lệ chốt đơn và doanh số cho shop.
+                      </p>
+                    </div>
                     <Button variant="primary" size="sm" icon={Plus} onClick={() => setCouponModalOpen(true)}>
                       Tạo Voucher Mới
                     </Button>
                   </div>
 
                   {coupons.length === 0 ? (
-                    <EmptyState
-                      title="Shop chưa tạo voucher khuyến mãi nào"
-                      description="Tạo voucher để kích cầu mua sắm và tăng doanh số cho shop!"
-                    />
+                    <div style={{ padding: "48px 24px" }}>
+                      <EmptyState
+                        title="Shop chưa tạo voucher khuyến mãi nào"
+                        description="Tạo voucher để kích cầu mua sắm và tăng doanh số cho shop!"
+                      />
+                    </div>
                   ) : (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "16px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px" }}>
                       {coupons.map((c) => (
-                        <div
-                          key={c.id}
-                          style={{
-                            border: "1px dashed var(--primary)",
-                            backgroundColor: "var(--primary-light)",
-                            borderRadius: "var(--r-md)",
-                            padding: "16px",
-                          }}
-                        >
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <strong style={{ fontSize: "16px", color: "var(--primary)" }}>{c.code}</strong>
-                            <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>HSD: {c.expiry}</span>
+                        <div key={c.id} className="seller-coupon-card">
+                          <div className="seller-coupon-left">
+                            <Tag size={22} color="var(--seller-primary, #ee4d2d)" style={{ marginBottom: "6px" }} />
+                            <div style={{ fontSize: "18px", fontWeight: "900", color: "var(--seller-primary, #ee4d2d)" }}>
+                              {c.discountType === "PERCENT" || c.discountPercent
+                                ? `${c.discountPercent}%`
+                                : formatCurrency(c.discountValue || c.discount || 0)}
+                            </div>
+                            <div style={{ fontSize: "11px", fontWeight: "700", color: "var(--seller-primary, #ee4d2d)", marginTop: "2px", letterSpacing: "0.5px" }}>
+                              GIẢM GIÁ
+                            </div>
                           </div>
-                          <div style={{ fontSize: "13px", fontWeight: "600", marginTop: "6px" }}>
-                            Giảm {formatCurrency(c.discountValue || c.discount)}
-                          </div>
-                          <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "2px" }}>
-                            Đơn tối thiểu: {formatCurrency(c.minOrderValue || c.minOrder || 0)}
+                          <div className="seller-coupon-right">
+                            <div>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                                <span style={{
+                                  fontFamily: "monospace",
+                                  fontWeight: "800",
+                                  fontSize: "14px",
+                                  backgroundColor: "#f1f5f9",
+                                  padding: "3px 8px",
+                                  borderRadius: "4px",
+                                  color: "var(--seller-text, #0f172a)",
+                                  letterSpacing: "0.5px"
+                                }}>
+                                  {c.code}
+                                </span>
+                                <span className="seller-pill success" style={{ fontSize: "11px" }}>
+                                  Khả dụng
+                                </span>
+                              </div>
+                              <div style={{ fontSize: "12.5px", color: "var(--seller-text-muted, #64748b)" }}>
+                                Đơn tối thiểu: <strong style={{ color: "var(--seller-text, #0f172a)" }}>{formatCurrency(c.minOrderValue || c.minOrder || 0)}</strong>
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "12px", paddingTop: "8px", borderTop: "1px dashed var(--seller-border, #e2e8f0)", fontSize: "11.5px", color: "var(--seller-text-light, #94a3b8)" }}>
+                              <span>HSD: {c.expiry || "Vô thời hạn"}</span>
+                              <span style={{ color: "var(--seller-primary, #ee4d2d)", fontWeight: "600" }}>SL: {c.usageLimit || c.quantity || "Không giới hạn"}</span>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -2818,33 +3027,27 @@ export default function SellerPage() {
                   }}
                 >
                   {/* Shop Branding Card (Cover & Logo) */}
-                  <div
-                    className="card"
-                    style={{
-                      backgroundColor: "var(--surface)",
-                      borderRadius: "var(--r-xl)",
-                      border: "1px solid var(--border-light)",
-                      overflow: "hidden",
-                      boxShadow: "var(--shadow-sm)",
-                    }}
-                  >
-                    <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border-light)" }}>
-                      <h3 style={{ fontSize: "18px", fontWeight: "800", color: "var(--text)" }}>
-                        🖼️ Hình Ảnh & Nhận Diện Thương Hiệu
-                      </h3>
-                      <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>
-                        Cập nhật Logo và Ảnh bìa (Banner) để gian hàng trông chuyên nghiệp và thu hút khách mua hơn.
-                      </p>
+                  <div className="seller-card-modern">
+                    <div className="seller-card-header">
+                      <div>
+                        <h3 style={{ fontSize: "16px", fontWeight: "800", margin: 0, color: "var(--seller-text, #0f172a)", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <ImageIcon size={18} color="var(--seller-primary, #ee4d2d)" />
+                          Hình Ảnh & Nhận Diện Thương Hiệu
+                        </h3>
+                        <p style={{ fontSize: "13px", color: "var(--seller-text-muted, #64748b)", margin: "4px 0 0" }}>
+                          Cập nhật Logo và Ảnh bìa (Banner) để gian hàng trông chuyên nghiệp và thu hút khách mua hơn.
+                        </p>
+                      </div>
                     </div>
 
-                    <div style={{ padding: "24px" }}>
+                    <div>
                       {/* Banner / Cover Image Box */}
                       <div style={{ marginBottom: "28px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                          <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>
+                          <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--seller-text, #0f172a)" }}>
                             Ảnh Bìa Gian Hàng (Banner)
                           </label>
-                          <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                          <span style={{ fontSize: "12px", color: "var(--seller-text-light, #94a3b8)" }}>
                             Khuyến nghị tỉ lệ 16:5 (VD: 1200x380 px, tối đa 8MB)
                           </span>
                         </div>
@@ -2854,10 +3057,10 @@ export default function SellerPage() {
                             position: "relative",
                             width: "100%",
                             height: "200px",
-                            borderRadius: "var(--r-lg)",
+                            borderRadius: "var(--seller-radius-md, 10px)",
                             overflow: "hidden",
-                            backgroundColor: "var(--surface-hover)",
-                            border: "1px solid var(--border)",
+                            backgroundColor: "var(--seller-surface-hover, #f8fafc)",
+                            border: "1px solid var(--seller-border, #e2e8f0)",
                             backgroundImage: `url(${shopSettingsForm.coverImage || "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1200"})`,
                             backgroundSize: "cover",
                             backgroundPosition: "center",
@@ -2884,7 +3087,7 @@ export default function SellerPage() {
                                 padding: "8px 16px",
                                 backgroundColor: "#ffffff",
                                 color: "#1e293b",
-                                borderRadius: "var(--r-full)",
+                                borderRadius: "9999px",
                                 fontSize: "13px",
                                 fontWeight: "600",
                                 cursor: "pointer",
@@ -2912,9 +3115,9 @@ export default function SellerPage() {
                             onChange={(e) => setShopSettingsForm({ ...shopSettingsForm, coverImage: e.target.value })}
                             style={{
                               width: "100%",
-                              padding: "8px 12px",
-                              border: "1px solid var(--border)",
-                              borderRadius: "var(--r-md)",
+                              padding: "9px 13px",
+                              border: "1px solid var(--seller-border, #e2e8f0)",
+                              borderRadius: "var(--seller-radius-sm, 6px)",
                               fontSize: "13px",
                             }}
                           />
@@ -2924,10 +3127,10 @@ export default function SellerPage() {
                       {/* Logo / Avatar Box */}
                       <div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                          <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--text)" }}>
+                          <label style={{ fontSize: "13px", fontWeight: "700", color: "var(--seller-text, #0f172a)" }}>
                             Logo Đại Diện Gian Hàng
                           </label>
-                          <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                          <span style={{ fontSize: "12px", color: "var(--seller-text-light, #94a3b8)" }}>
                             Khuyến nghị hình vuông (VD: 500x500 px, tối đa 5MB)
                           </span>
                         </div>
@@ -2940,14 +3143,18 @@ export default function SellerPage() {
                               height: "88px",
                               borderRadius: "50%",
                               overflow: "hidden",
-                              border: "3px solid var(--primary)",
-                              boxShadow: "var(--shadow-md)",
+                              border: "3px solid var(--seller-primary, #ee4d2d)",
+                              boxShadow: "var(--seller-shadow-sm)",
                               flexShrink: 0,
                             }}
                           >
                             <img
-                              src={shopSettingsForm.logo || "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200"}
+                              src={toFullImageUrl(shopSettingsForm.logo, DEFAULT_SHOP_LOGO)}
                               alt="Shop Logo"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = DEFAULT_SHOP_LOGO;
+                              }}
                               style={{ width: "100%", height: "100%", objectFit: "cover" }}
                             />
                           </div>
@@ -2960,13 +3167,13 @@ export default function SellerPage() {
                                   alignItems: "center",
                                   gap: "8px",
                                   padding: "8px 16px",
-                                  backgroundColor: "var(--primary-light)",
-                                  color: "var(--primary)",
-                                  borderRadius: "var(--r-md)",
+                                  backgroundColor: "var(--seller-primary-light, #fff1ed)",
+                                  color: "var(--seller-primary, #ee4d2d)",
+                                  borderRadius: "var(--seller-radius-sm, 6px)",
                                   fontSize: "13px",
                                   fontWeight: "700",
                                   cursor: "pointer",
-                                  border: "1px solid var(--primary)",
+                                  border: "1px solid var(--seller-primary-border, #fed7aa)",
                                 }}
                               >
                                 <Camera size={16} />
@@ -2986,9 +3193,9 @@ export default function SellerPage() {
                               onChange={(e) => setShopSettingsForm({ ...shopSettingsForm, logo: e.target.value })}
                               style={{
                                 width: "100%",
-                                padding: "8px 12px",
-                                border: "1px solid var(--border)",
-                                borderRadius: "var(--r-md)",
+                                padding: "9px 13px",
+                                border: "1px solid var(--seller-border, #e2e8f0)",
+                                borderRadius: "var(--seller-radius-sm, 6px)",
                                 fontSize: "13px",
                               }}
                             />
@@ -2999,24 +3206,18 @@ export default function SellerPage() {
                   </div>
 
                   {/* Shop Details Form Card */}
-                  <div
-                    className="card"
-                    style={{
-                      padding: "24px",
-                      backgroundColor: "var(--surface)",
-                      borderRadius: "var(--r-xl)",
-                      border: "1px solid var(--border-light)",
-                      boxShadow: "var(--shadow-sm)",
-                    }}
-                  >
-                    <h3 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "16px", color: "var(--text)" }}>
-                      📋 Thông Tin Gian Hàng
-                    </h3>
+                  <div className="seller-card-modern">
+                    <div className="seller-card-header">
+                      <h3 style={{ fontSize: "16px", fontWeight: "800", margin: 0, color: "var(--seller-text, #0f172a)", display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Store size={18} color="var(--seller-primary, #ee4d2d)" />
+                        Thông Tin Gian Hàng
+                      </h3>
+                    </div>
 
                     <form onSubmit={handleSaveShopSettings} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                       <div>
-                        <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
-                          Tên Gian Hàng <span style={{ color: "var(--error)" }}>*</span>
+                        <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px", color: "var(--seller-text, #0f172a)" }}>
+                          Tên Gian Hàng <span style={{ color: "var(--error, #dc2626)" }}>*</span>
                         </label>
                         <input
                           type="text"
@@ -3025,8 +3226,8 @@ export default function SellerPage() {
                           style={{
                             width: "100%",
                             padding: "10px 14px",
-                            border: "1px solid var(--border)",
-                            borderRadius: "var(--r-md)",
+                            border: "1px solid var(--seller-border, #e2e8f0)",
+                            borderRadius: "var(--seller-radius-sm, 6px)",
                             fontSize: "14px",
                           }}
                           required
@@ -3035,8 +3236,8 @@ export default function SellerPage() {
 
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                         <div>
-                          <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
-                            Số Điện Thoại Shop <span style={{ color: "var(--error)" }}>*</span>
+                          <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px", color: "var(--seller-text, #0f172a)" }}>
+                            Số Điện Thoại Shop <span style={{ color: "var(--error, #dc2626)" }}>*</span>
                           </label>
                           <input
                             type="tel"
@@ -3045,8 +3246,8 @@ export default function SellerPage() {
                             style={{
                               width: "100%",
                               padding: "10px 14px",
-                              border: "1px solid var(--border)",
-                              borderRadius: "var(--r-md)",
+                              border: "1px solid var(--seller-border, #e2e8f0)",
+                              borderRadius: "var(--seller-radius-sm, 6px)",
                               fontSize: "14px",
                             }}
                             required
@@ -3054,7 +3255,7 @@ export default function SellerPage() {
                         </div>
 
                         <div>
-                          <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
+                          <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px", color: "var(--seller-text, #0f172a)" }}>
                             Email Liên Hệ Shop
                           </label>
                           <input
@@ -3064,8 +3265,8 @@ export default function SellerPage() {
                             style={{
                               width: "100%",
                               padding: "10px 14px",
-                              border: "1px solid var(--border)",
-                              borderRadius: "var(--r-md)",
+                              border: "1px solid var(--seller-border, #e2e8f0)",
+                              borderRadius: "var(--seller-radius-sm, 6px)",
                               fontSize: "14px",
                             }}
                           />
@@ -3073,7 +3274,7 @@ export default function SellerPage() {
                       </div>
 
                       <div>
-                        <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
+                        <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px", color: "var(--seller-text, #0f172a)" }}>
                           Địa Chỉ Kho / Cửa Hàng (Gợi ý bản đồ)
                         </label>
                         <AddressAutocomplete
@@ -3089,7 +3290,7 @@ export default function SellerPage() {
                       </div>
 
                       <div>
-                        <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px" }}>
+                        <label style={{ fontSize: "13px", fontWeight: "700", display: "block", marginBottom: "6px", color: "var(--seller-text, #0f172a)" }}>
                           Mô Tả / Giới Thiệu Gian Hàng
                         </label>
                         <textarea
@@ -3100,8 +3301,8 @@ export default function SellerPage() {
                           style={{
                             width: "100%",
                             padding: "10px 14px",
-                            border: "1px solid var(--border)",
-                            borderRadius: "var(--r-md)",
+                            border: "1px solid var(--seller-border, #e2e8f0)",
+                            borderRadius: "var(--seller-radius-sm, 6px)",
                             fontSize: "14px",
                             resize: "vertical",
                           }}
@@ -3218,32 +3419,54 @@ export default function SellerPage() {
                 Ngành Hàng Hệ Thống: <span style={{ color: "var(--error)" }}>*</span>
               </label>
               <select
-                value={productForm.categoryId || "dien-thoai"}
+                value={productForm.categoryId || (platformCategories[0]?.id || "dien-thoai")}
                 onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
                 style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px", backgroundColor: "var(--surface)" }}
               >
-                {CATEGORY_OPTIONS.map((c) => (
+                {(platformCategories.length > 0 ? platformCategories : CATEGORY_OPTIONS).map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name}
+                    {c.parentId ? `↳ ${c.name}` : `📁 ${c.name}`}
                   </option>
                 ))}
               </select>
             </div>
             <div>
-              <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-                Danh Mục Của Shop:
-              </label>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "700" }}>
+                  Danh Mục Của Shop:
+                </label>
+                <button
+                  type="button"
+                  onClick={() => handleOpenCreateShopCategory(productForm.categoryId)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--primary)",
+                    fontSize: "11px",
+                    fontWeight: "700",
+                    cursor: "pointer",
+                    padding: 0,
+                    textDecoration: "underline",
+                  }}
+                  title="Tạo danh mục riêng của shop thuộc nhánh này"
+                >
+                  + Tạo mới
+                </button>
+              </div>
               <select
                 value={productForm.shopCategoryId || ""}
                 onChange={(e) => setProductForm({ ...productForm, shopCategoryId: e.target.value })}
                 style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px", backgroundColor: "var(--surface)" }}
               >
-                <option value="">-- Không chọn --</option>
-                {shopCategories.map((sc) => (
-                  <option key={sc.id} value={sc.id}>
-                    {sc.name}
-                  </option>
-                ))}
+                <option value="">-- Không chọn (Mặc định) --</option>
+                {shopCategories.map((sc) => {
+                  const isMatching = sc.parentCategoryId && sc.parentCategoryId === productForm.categoryId;
+                  return (
+                    <option key={sc.id} value={sc.id}>
+                      {isMatching ? "⭐ " : ""}{sc.parentCategoryName ? `[${sc.parentCategoryName}] ` : ""}{sc.name}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           </div>
@@ -3569,11 +3792,39 @@ export default function SellerPage() {
         <form onSubmit={handleSaveShopCategory} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
             <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
-              Tên Danh Mục: <span style={{ color: "var(--error)" }}>*</span>
+              🌿 Thuộc Nhánh Danh Mục Sàn: <span style={{ color: "var(--text-secondary)", fontWeight: "normal" }}>(Chọn nhánh danh mục chính)</span>
+            </label>
+            <select
+              value={shopCategoryForm.parentCategoryId || ""}
+              onChange={(e) => {
+                const selectedCat = (platformCategories.length > 0 ? platformCategories : CATEGORY_OPTIONS).find((c) => c.id === e.target.value);
+                setShopCategoryForm({
+                  ...shopCategoryForm,
+                  parentCategoryId: e.target.value,
+                  parentCategoryName: selectedCat ? selectedCat.name : "",
+                });
+              }}
+              style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px", backgroundColor: "var(--surface)" }}
+            >
+              <option value="">-- Danh mục chung của shop (Không thuộc nhánh nào) --</option>
+              {(platformCategories.length > 0 ? platformCategories : CATEGORY_OPTIONS).map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.parentId ? `↳ ${cat.name}` : `📁 ${cat.name}`}
+                </option>
+              ))}
+            </select>
+            <span style={{ fontSize: "11px", color: "var(--text-secondary)", marginTop: "3px", display: "block" }}>
+              Giúp bạn phân loại danh mục shop con dựa trên nhánh danh mục chính của toàn sàn.
+            </span>
+          </div>
+
+          <div>
+            <label style={{ fontSize: "12px", fontWeight: "700", display: "block", marginBottom: "4px" }}>
+              Tên Danh Mục Shop: <span style={{ color: "var(--error)" }}>*</span>
             </label>
             <input
               type="text"
-              placeholder="VD: Hàng Mới Về, Áo Thun Cao Cấp..."
+              placeholder="VD: Hàng Mới Về, Áo Thun Cao Cấp Của Shop..."
               value={shopCategoryForm.name}
               onChange={(e) => setShopCategoryForm({ ...shopCategoryForm, name: e.target.value })}
               style={{ width: "100%", padding: "8px 10px", border: "1px solid var(--border)", borderRadius: "6px" }}

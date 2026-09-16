@@ -15,12 +15,14 @@ export const sellerService = {
     );
   },
 
-  // GET /shops/{shopId}
+  // GET /shops/{shopId} - Công khai cho khách xem chi tiết shop
   async getShopById(shopId) {
     if (!shopId) return null;
     return safeFetch(
       async () => {
-        return await authFetch(`${API_BASE_URL}/shops/${shopId}`);
+        const res = await fetch(`${API_BASE_URL}/shops/${shopId}`);
+        if (!res.ok) throw new Error("Fetch shop failed");
+        return await res.json();
       },
       null
     );

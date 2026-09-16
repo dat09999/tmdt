@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { API_BASE_URL, authFetch } from "../utils/auth";
-import Header from "../components/Header";
+import Header from "../components/layout/Header";
+import SubNav from "../components/layout/SubNav";
+import Footer from "../components/layout/Footer";
+import { openChatWithShop } from "../services/chatService";
 import { useAuth } from "./Authcontext";
 import "./ShopDetailPage.css";
 
@@ -31,6 +34,8 @@ export default function ShopDetailPage() {
   const shopId = decodeURIComponent(window.location.pathname.replace("/shop/", ""));
   const [shop, setShop] = useState(null);
   const [products, setProducts] = useState([]);
+  const [shopCategories, setShopCategories] = useState([]);
+  const [selectedShopCategory, setSelectedShopCategory] = useState("ALL");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -46,14 +51,16 @@ export default function ShopDetailPage() {
     (async () => {
       try {
         setLoading(true);
-        const [shopData, productData] = await Promise.all([
+        const [shopData, productData, catData] = await Promise.all([
           authFetch(`${API_BASE_URL}/shops/${shopId}`),
-          authFetch(`${API_BASE_URL}/products/shop/${shopId}?page=0&size=24`),
+          authFetch(`${API_BASE_URL}/products/shop/${shopId}?page=0&size=100`),
+          authFetch(`${API_BASE_URL}/shops/${shopId}/categories?activeOnly=true`).catch(() => []),
         ]);
         setShop(shopData);
         setProducts(Array.isArray(productData?.content) ? productData.content : (Array.isArray(productData) ? productData : []));
+        setShopCategories(Array.isArray(catData) ? catData : []);
         if (user?.userId) {
-          const followData = await authFetch(`${API_BASE_URL}/shops/${shopId}/follow?userId=${user.userId}`);
+          const followData = await authFetch(`${API_BASE_URL}/shops/${shopId}/follow?userId=${user.userId}`).catch(() => null);
           setFollow(followData);
         }
       } catch (requestError) {
@@ -72,9 +79,13 @@ export default function ShopDetailPage() {
   };
 
   const visibleProducts = useMemo(() => {
+    let list = products;
+    if (selectedShopCategory !== "ALL") {
+      list = list.filter((p) => p.shopCategoryId === selectedShopCategory);
+    }
     const keyword = search.trim().toLocaleLowerCase("vi-VN");
-    return keyword ? products.filter((product) => product.name?.toLocaleLowerCase("vi-VN").includes(keyword)) : products;
-  }, [products, search]);
+    return keyword ? list.filter((product) => product.name?.toLocaleLowerCase("vi-VN").includes(keyword)) : list;
+  }, [products, search, selectedShopCategory]);
 
   const address = [shop?.address?.detail, shop?.address?.ward, shop?.address?.district, shop?.address?.province]
     .filter(Boolean)
@@ -84,6 +95,7 @@ export default function ShopDetailPage() {
   return (
     <div className="shop-page page-shell">
       <Header />
+      <SubNav />
       <main className="shop-page-body">
         <div className="shop-breadcrumb"><a href="/">Trang chủ</a><span>/</span><span>{shop?.shopName || "Shop"}</span></div>
 
@@ -102,8 +114,8 @@ export default function ShopDetailPage() {
                   <p>Tham gia từ {joinedLabel(shop.createdAt)}</p>
                   <div className="shop-actions">
                     <button type="button" className="btn-secondary" onClick={toggleFollow}>{follow?.following ? "Đang theo dõi" : "Theo dõi shop"}{follow ? ` (${follow.followerCount})` : ""}</button>
-                    {shop.phone && <a className="btn-primary" href={`tel:${shop.phone}`}>Liên hệ shop</a>}
-                    {shop.email && <a className="btn-secondary" href={`mailto:${shop.email}`}>Email</a>}
+                    <button type="button" className="btn-primary" onClick={() => openChatWithShop(shopId)}>💬 Chat với Shop</button>
+                    {shop.phone && <a className="btn-secondary" href={`tel:${shop.phone}`}>Hotline</a>}
                   </div>
                 </div>
               </div>
@@ -125,11 +137,55 @@ export default function ShopDetailPage() {
 
               <section className="shop-products">
                 <div className="shop-products-header">
-                  <div><h2>Sản phẩm của shop</h2><p>{products.length} sản phẩm</p></div>
-                  <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm trong shop" aria-label="Tìm sản phẩm trong shop" />
+                  <div><h2>Sản phẩm của shop</h2><p>{visibleProducts.length} sản phẩm</p></div>
+                  <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm trong shop..." aria-label="Tìm sản phẩm trong shop" />
                 </div>
+
+                {/* Danh mục riêng của shop */}
+                {shopCategories.length > 0 && (
+                  <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "12px", marginBottom: "14px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedShopCategory("ALL")}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        border: selectedShopCategory === "ALL" ? "2px solid #ee4d2d" : "1px solid var(--border)",
+                        backgroundColor: selectedShopCategory === "ALL" ? "#fff5f1" : "var(--surface)",
+                        color: selectedShopCategory === "ALL" ? "#ee4d2d" : "var(--text)",
+                        fontWeight: selectedShopCategory === "ALL" ? "700" : "500",
+                        fontSize: "13px",
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Tất cả sản phẩm ({products.length})
+                    </button>
+                    {shopCategories.map((sc) => (
+                      <button
+                        key={sc.id}
+                        type="button"
+                        onClick={() => setSelectedShopCategory(sc.id)}
+                        style={{
+                          padding: "6px 14px",
+                          borderRadius: "20px",
+                          border: selectedShopCategory === sc.id ? "2px solid #ee4d2d" : "1px solid var(--border)",
+                          backgroundColor: selectedShopCategory === sc.id ? "#fff5f1" : "var(--surface)",
+                          color: selectedShopCategory === sc.id ? "#ee4d2d" : "var(--text)",
+                          fontWeight: selectedShopCategory === sc.id ? "700" : "500",
+                          fontSize: "13px",
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {sc.parentCategoryName ? `[${sc.parentCategoryName}] ` : ""}📁 {sc.name} ({sc.productCount || 0})
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {visibleProducts.length === 0 ? (
-                  <div className="shop-no-products card">{search ? "Không tìm thấy sản phẩm phù hợp." : "Shop chưa có sản phẩm nào."}</div>
+                  <div className="shop-no-products card">{search ? "Không tìm thấy sản phẩm phù hợp." : "Shop chưa có sản phẩm nào trong danh mục này."}</div>
                 ) : (
                   <div className="shop-product-grid">
                     {visibleProducts.map((product) => (
@@ -149,6 +205,7 @@ export default function ShopDetailPage() {
           </>
         )}
       </main>
+      <Footer />
     </div>
   );
 }

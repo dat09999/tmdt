@@ -15,6 +15,7 @@ import NotificationsPage from "./pages/NotificationsPage";
 import RefundPage from "./pages/RefundPage";
 import SellerPage from "./pages/SellerPage";
 import AdminPage from "./pages/AdminPage";
+import ShopDetailPage from "./pages/ShopDetailPage";
 import VnpayResultPage from "./pages/VnpayResultPage";
 import ChatWidget from "./components/chat/ChatWidget";
 import { useAuth } from "./pages/Authcontext";
@@ -66,6 +67,7 @@ function resolvePage(path, isAuthenticated, user) {
   if (path === "/orders") return <OrdersPage />;
   
   if (path.startsWith("/product/")) return <ProductDetailPage />;
+  if (path.startsWith("/shop/")) return <ShopDetailPage />;
   if (path === "/products" || path === "/search" || path === "/catalog") return <ProductListPage />;
   if (path === "/seller") return <SellerPage />;
   

@@ -35,6 +35,16 @@ public class ShopCategory {
 
     private String description;
 
+    /**
+     * ID nhánh hoặc danh mục chính của sàn mà danh mục này trực thuộc.
+     */
+    private String parentCategoryId;
+
+    /**
+     * Tên nhánh hoặc danh mục sàn để frontend tiện hiển thị.
+     */
+    private String parentCategoryName;
+
     @Builder.Default
     private Integer sortOrder = 0;
 

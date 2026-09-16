@@ -16,6 +16,12 @@ export default function ProductListPage() {
 
   // Search and Filter states
   const searchParams = new URLSearchParams(window.location.search);
+  const shopIdParam = searchParams.get("shopId");
+  if (shopIdParam) {
+    window.location.href = `/shop/${encodeURIComponent(shopIdParam)}`;
+    return null;
+  }
+
   const initialCategory = searchParams.get("category") || "";
   const initialSearch = searchParams.get("search") || "";
 

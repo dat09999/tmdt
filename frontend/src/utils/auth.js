@@ -3,11 +3,24 @@ export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   "http://localhost:8080";
 
-export function toFullImageUrl(url) {
-  if (!url || typeof url !== "string") return "";
+export const DEFAULT_PRODUCT_IMAGE =
+  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80";
+
+export const DEFAULT_SHOP_LOGO =
+  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200&auto=format&fit=crop&q=80";
+
+export function toFullImageUrl(url, fallback = DEFAULT_PRODUCT_IMAGE) {
+  if (!url || typeof url !== "string") return fallback;
   const trimmed = url.trim();
-  if (!trimmed) return "";
+  if (!trimmed) return fallback;
   if (trimmed.startsWith("data:") || trimmed.startsWith("blob:")) return trimmed;
+
+  // Chuẩn hóa nếu chứa endpoint /api/files/
+  if (trimmed.includes("/api/files/")) {
+    const path = trimmed.substring(trimmed.indexOf("/api/files/"));
+    return `${API_BASE_URL}${path}`;
+  }
+
   // Convert old localhost:9000 presigned urls or any direct MinIO urls
   if (trimmed.includes("/user-images/")) {
     const path = trimmed.split("/user-images/")[1]?.split("?")[0];

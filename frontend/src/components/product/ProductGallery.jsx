@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Play } from "lucide-react";
+import { toFullImageUrl, DEFAULT_PRODUCT_IMAGE } from "../../utils/auth";
 
 const isVideoMedia = (media) => {
   if (!media) return false;
@@ -17,8 +18,9 @@ export default function ProductGallery({ images = [], name = "" }) {
   const mediaList =
     images && images.length > 0
       ? images.map((item, idx) => {
-          const url = typeof item === "string" ? item : item.url;
+          const rawUrl = typeof item === "string" ? item : (item.url || item.key || item.imageUrl);
           const isVideo = isVideoMedia(item);
+          const url = isVideo ? (rawUrl || "") : toFullImageUrl(rawUrl, DEFAULT_PRODUCT_IMAGE);
           return {
             id: item.id || item.key || idx,
             url,
@@ -30,7 +32,7 @@ export default function ProductGallery({ images = [], name = "" }) {
       : [
           {
             id: "default",
-            url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80",
+            url: DEFAULT_PRODUCT_IMAGE,
             isVideo: false,
           },
         ];
@@ -86,7 +88,7 @@ export default function ProductGallery({ images = [], name = "" }) {
             alt={name}
             onError={(e) => {
               e.currentTarget.onerror = null;
-              e.currentTarget.src = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600";
+              e.currentTarget.src = DEFAULT_PRODUCT_IMAGE;
             }}
             style={{
               position: "absolute",
@@ -162,7 +164,7 @@ export default function ProductGallery({ images = [], name = "" }) {
                     alt={`Thumbnail ${idx + 1}`}
                     onError={(e) => {
                       e.currentTarget.onerror = null;
-                      e.currentTarget.src = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100";
+                      e.currentTarget.src = DEFAULT_PRODUCT_IMAGE;
                     }}
                     style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "4px" }}
                   />

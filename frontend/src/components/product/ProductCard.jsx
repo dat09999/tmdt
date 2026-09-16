@@ -2,6 +2,7 @@ import React from "react";
 import { Star, Heart, ShoppingBag } from "lucide-react";
 import { formatCurrency, formatSoldCount } from "../../utils/formatters";
 import { wishlistService } from "../../services/wishlistService";
+import { toFullImageUrl, DEFAULT_PRODUCT_IMAGE } from "../../utils/auth";
 
 export default function ProductCard({ product, onWishlistToggle }) {
   if (!product) return null;
@@ -21,10 +22,12 @@ export default function ProductCard({ product, onWishlistToggle }) {
       : `${formatCurrency(minPrice)} - ${formatCurrency(maxPrice)}`
     : "Liên hệ";
 
-  const mainImage =
+  const rawImage =
     product.images?.find((img) => img.isMain)?.url ||
     product.images?.[0]?.url ||
-    "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&auto=format&fit=crop&q=80";
+    product.imageUrl;
+
+  const mainImage = toFullImageUrl(rawImage, DEFAULT_PRODUCT_IMAGE);
 
   const discountPercent =
     product.discountPercent ||
@@ -70,6 +73,10 @@ export default function ProductCard({ product, onWishlistToggle }) {
           src={mainImage}
           alt={product.name}
           loading="lazy"
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            e.currentTarget.src = DEFAULT_PRODUCT_IMAGE;
+          }}
           style={{
             position: "absolute",
             top: 0,

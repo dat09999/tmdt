@@ -15,6 +15,10 @@ public class CreateShopCategoryRequest {
 
     private String description;
 
+    private String parentCategoryId;
+
+    private String parentCategoryName;
+
     private Integer sortOrder;
 
     private Boolean active;
