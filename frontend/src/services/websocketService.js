@@ -26,35 +26,46 @@ export const websocketService = {
 
     const brokerURL = getWsBrokerUrl();
 
-    stompClient = new Client({
-      brokerURL,
-      connectHeaders: {
-        Authorization: Bearer ,
-      },
-      reconnectDelay: 5000,
-      heartbeatIncoming: 10000,
-      heartbeatOutgoing: 10000,
-      onConnect: () => {
-        // Đăng ký nhận thông báo cá nhân Realtime từ backend
-        // Backend bắn tới: /user/{userId}/queue/notifications -> Client subscribe /user/queue/notifications
-        if (currentSub) {
-          try { currentSub.unsubscribe(); } catch {}
-        }
-        currentSub = stompClient.subscribe("/user/queue/notifications", (message) => {
-          try {
-            const notif = JSON.parse(message.body);
-            notificationService.handleIncomingRealtime(notif);
-          } catch (e) {
-            console.error("Lỗi phân tích thông báo realtime:", e);
+    try {
+      stompClient = new Client({
+        brokerURL,
+        connectHeaders: {
+          Authorization: `Bearer ${token}`,
+        },
+        reconnectDelay: 5000,
+        heartbeatIncoming: 10000,
+        heartbeatOutgoing: 10000,
+        onConnect: () => {
+          // Đăng ký nhận thông báo cá nhân Realtime từ backend
+          // Backend bắn tới: /user/{userId}/queue/notifications -> Client subscribe /user/queue/notifications
+          if (currentSub) {
+            try { currentSub.unsubscribe(); } catch {}
           }
-        });
-      },
-      onStompError: (frame) => {
-        console.warn("Lỗi STOMP WebSocket:", frame.headers?.["message"]);
-      },
-    });
+          try {
+            currentSub = stompClient.subscribe("/user/queue/notifications", (message) => {
+              try {
+                const notif = JSON.parse(message.body);
+                notificationService.handleIncomingRealtime(notif);
+              } catch (e) {
+                console.error("Lỗi phân tích thông báo realtime:", e);
+              }
+            });
+          } catch (e) {
+            console.warn("Lỗi subscribe thông báo:", e);
+          }
+        },
+        onStompError: (frame) => {
+          console.warn("Lỗi STOMP WebSocket:", frame.headers?.["message"]);
+        },
+        onWebSocketError: (event) => {
+          console.warn("Lỗi WebSocket transport:", event);
+        },
+      });
 
-    stompClient.activate();
+      stompClient.activate();
+    } catch (err) {
+      console.warn("Khởi tạo STOMP client thất bại:", err);
+    }
   },
 
   disconnect() {

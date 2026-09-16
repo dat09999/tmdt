@@ -30,8 +30,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // 1. Native WebSocket cho client @stomp/stompjs
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns(
-                        "http://localhost:5173",
-                        "http://localhost:3000",
+                        "http://localhost:*",
+                        "http://127.0.0.1:*",
                         "https://tmdt-lovat.vercel.app",
                         "https://tmdt-*.vercel.app",
                         "https://tmdt-production-0219.up.railway.app"
@@ -40,8 +40,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // 2. SockJS fallback
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns(
-                        "http://localhost:5173",
-                        "http://localhost:3000",
+                        "http://localhost:*",
+                        "http://127.0.0.1:*",
                         "https://tmdt-lovat.vercel.app",
                         "https://tmdt-*.vercel.app",
                         "https://tmdt-production-0219.up.railway.app"
